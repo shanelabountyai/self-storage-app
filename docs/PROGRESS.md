@@ -10603,7 +10603,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Lint and typecheck are clean. Schema drift was checked against local `public` after `migrate deploy`: no difference. Full unit suite: 274 files passed and 1 skipped; 4,610 tests passed and 8 skipped (4,618). No e2e was run: nothing customer-facing changed, and CI owns the sweep. The Neon dev branch is now four migrations behind (`npm run db:migrate:cloud`).
 
-## B-328 — the nightly invoice run never billed a lease past its twelfth period (2026-09-18, `SHA`)
+## B-328 — the nightly invoice run never billed a lease past its twelfth period (2026-09-18, `e787410`)
 
 **What it built.**
 

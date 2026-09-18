@@ -1,12 +1,18 @@
 # Next
 
-**B-327 is done** (`97e1d57`, with the SHA follow-up in the next commit; both pushed). Voiding a rent invoice now releases its period. The void also unwinds the promotion period and referral rewards the invoice consumed, so the nightly re-raise carries the same discount lines. Tests are in `tests/void-rebill-db.test.ts`.
+**B-328 is done** (`e787410`, with the SHA follow-up in the next commit; both pushed). The nightly invoice run now bills the period that contains `through` for a lease of any age, and it back-bills nothing (**D-142**, owner's call). Outage catch-up relies on the scheduler replaying each missed business date. Tests are in `tests/invoices-db.test.ts`.
 
 ## Start here
 
-**B-328**, next in file order and raised by B-327: **the nightly run never bills a lease past its twelfth period** (`generateInvoices` uses `periodStartsBetween`'s default `maxPeriods = 12`, counted from the lease start). Read the row in full. It is a money path, and it asks for a **production count first**: how many live leases are older than twelve periods. That needs `.env.prod-ops`, which is still empty, so the count is an owner action. The code fix and its tests do not depend on it.
+**B-325**, the first open row in file order that is not owner-blocked: `authAccountAccess` is one 62-word sentence doing three jobs. It is low severity and a copy-only change. Read the row in full first; it caps how strongly the fix may be worded.
 
 **Pre-existing e2e failure, not yet owned:** `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish`. See B-321's `PROGRESS.md` entry. Owner call: fix the title or fix the spec.
+
+## Owner actions
+
+- **B-328's missed periods:** any production lease older than twelve periods has unbilled periods that D-142 deliberately does not back-bill. Whether to raise them, with notice to tenants, is your decision. It needs the production count, which needs `.env.prod-ops`.
+- **The Neon dev branch is four migrations behind.** Run `npm run db:migrate:cloud`, then confirm with `npm run db:status`.
+- `.env.prod-ops` is still empty. It blocks B-277's backfill, B-301's dry run, the signed-lease scoping query, and the B-328 count. Full list: the `B-316` section of `docs/PROGRESS.md`.
 
 ## Worth knowing before the next sweep
 
@@ -14,10 +20,6 @@
 - **`npm run db:migrate:test` after any migration or template edit**, and **`npm test -- <paths>`, never bare `npx vitest run`** (it skips every `describeDb` suite silently).
 - **`db:migrate:e2e` reseeds the demo and stales `.next/cache/fetch-cache`.** `rm -rf apps/web/.next/cache/fetch-cache` after any reseed.
 
-## Owner actions
-
-- **The Neon dev branch is now four migrations behind** (B-327 added one). The script is `npm run db:migrate:cloud`, and `npm run db:status` confirms it.
-- `.env.prod-ops` is still empty. It blocks B-277's backfill, B-301's dry run, the signed-lease scoping query, and now B-328's production count. Full list: the `B-316` section of `docs/PROGRESS.md` and `git show 9b0cf73:NEXT.md`.
 
 **Answered 2026-09-14, do not re-ask:** the Spanish recapture line (D-140), the signed-lease disclosure, the business-account members (B-300 ✅, B-301 open).
 
