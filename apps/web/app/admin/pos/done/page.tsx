@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { counterReceipt } from '@/lib/admin/pos'
+import { counterReceipt, PAYMENT_STATUS_LABEL } from '@/lib/admin/pos'
 import { formatCents } from '@/lib/format'
 import { CounterReceiptTable } from '@/components/admin/counter-receipt-table'
 import { FocusedHeading, PrintButton } from '@/components/admin/receipt-controls'
@@ -57,7 +57,7 @@ export default async function CounterReceiptPage({
       {/* A reprint of a check that later bounced must not read as money in hand. */}
       {receipt.status !== 'succeeded' && (
         <p role="note" className="border-input rounded-md border p-3 text-sm text-pretty">
-          This payment was later marked {receipt.status.replace(/_/g, ' ')}.
+          This payment was later marked {PAYMENT_STATUS_LABEL[receipt.status]}.
         </p>
       )}
 

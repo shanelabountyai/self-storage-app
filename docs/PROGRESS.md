@@ -10521,3 +10521,19 @@ The counter form's Method select was uncontrolled under `key={former | account |
 **What it left behind.** Nothing new. Prepayment on an account waits on the owner's D-113 decision, which has no row.
 
 **Verification.** Typecheck and lint are clean (the same six warnings as before, none in files this row touched). `npm test -- tests/i18n.test.ts tests/portal-payment.test.ts`: 49 passed. `e2e/portal-billing-account.spec.ts` on the production build: **16 passed**, including the new test in both languages on both projects. I did not run the full unit or e2e sweep. CI owns those.
+
+## B-323 — two staff-facing strings print internal identifiers at the customer counter (2026-09-18, `PENDING`)
+
+**What it built.**
+
+1. **The no-email task names the message by its subject.** `no_reachable_channel`'s detail now reads *"No email address on file — 'Rent for unit C-7 is due 1 October' could not be sent."* It uses the rendered subject, in the tenant's language, where it used to print the template key. When the render failed there is no subject, and it says *"a message could not be sent."* (`lib/comms/service.ts`)
+2. **`PAYMENT_STATUS_LABEL`** in `lib/admin/pos.ts` replaces `receipt.status.replace(/_/g, ' ')` on `/admin/pos/done`. It is typed `Record<PaymentStatus, string>`, and `CounterReceipt.status` is now `PaymentStatus` rather than `string`. A new enum value therefore fails typecheck, and `tests/counter-card-account-db.test.ts` checks the keys against the enum with no `_` in any label. English only: the admin surface has no Spanish.
+3. **An `Account` row above `Received from`** on the counter receipt, from `CounterReceipt.accountName`. It is emitted by `receiptRows`, so cash and card get it alike, as a `<th scope="row">` like every other row.
+
+**What it decided.**
+
+- **The account is derived from the credited leases, not stored on the payment.** `Payment` has no account column. `counterReceipt` names the account when every credited lease is on the same one, and prints no row otherwise. A single-unit payment for a lease that sits on an account therefore also names the account. That is still the right file for it.
+
+**What it left behind.** Operator finding 12 is recorded on the row: the receipt names units, not invoice numbers, so an AP department cannot apply the payment. It has no row, as the backlog says. The same `.replace(/_/g, ' ')` pattern remains in `app/admin/maintenance/page.tsx` and two refusal strings in `lib/pricing/tenant-rate-increases.ts`. Both are staff-only and outside this row. No row for either.
+
+**Verification.** Typecheck clean; lint clean (the same six warnings). `npm test -- tests/pos-db.test.ts tests/counter-card-account-db.test.ts tests/comms-db.test.ts tests/no-internal-identifiers.test.ts`: 281 passed.

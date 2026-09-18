@@ -59,8 +59,15 @@ vi.mock('../apps/web/lib/payments/stripe', async (importOriginal) => {
   return { ...actual, paymentsEnabled: () => true, stripeClient: () => ({}) as never }
 })
 
-const { chargeableAccount, counterReceipt, receiptRows, recordCounterPayment, startCounterCardPayment } =
-  await import('../apps/web/lib/admin/pos')
+const {
+  chargeableAccount,
+  counterReceipt,
+  PAYMENT_STATUS_LABEL,
+  receiptRows,
+  recordCounterPayment,
+  startCounterCardPayment,
+} = await import('../apps/web/lib/admin/pos')
+const { PaymentStatus } = await import('@prisma/client')
 const { applyStripeEvent } = await import('../apps/web/lib/payments/reconcile')
 
 let facilityId = ''
@@ -289,6 +296,17 @@ describeDb('a business account pays by card at the counter', () => {
       rows.filter((row) => row.label.startsWith('Unit ') || row.label === 'Amount paid')
     expect(shared(receiptRows(card))).toEqual(shared(receiptRows(cashReceipt)))
     expect(receiptRows(card).find((row) => row.label === 'Paid by')?.value).toBe('Card')
+
+    // B-323. The payer's name alone is not filable against the company.
+    expect(receiptRows(cashReceipt)[0]).toEqual({ label: 'Account', value: `Acme Moving ${suffix}` })
+    expect(receiptRows(cashReceipt)[1].label).toBe('Received from')
+  })
+
+  // B-323 / D-15. Every status the enum can hold has a label, and none of them
+  // is a snake_case identifier. Fails when a status is added without one.
+  it('labels every payment status in words', () => {
+    expect(Object.keys(PAYMENT_STATUS_LABEL).sort()).toEqual(Object.values(PaymentStatus).sort())
+    for (const label of Object.values(PAYMENT_STATUS_LABEL)) expect(label).not.toMatch(/_/)
   })
 
   it('still receipts no cash payment the counter did not number', async () => {

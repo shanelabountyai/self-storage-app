@@ -168,6 +168,8 @@ describeDb('counter payments', () => {
         tenderedCents: 5_000,
         changeCents: 3_000,
         takenBy: 'Cal Counter',
+        // B-323: a personal payment names no business account.
+        accountName: null,
       })
       expect(receipt?.credits.map((credit) => credit.unitNumber)).toEqual(['A-1'])
     })

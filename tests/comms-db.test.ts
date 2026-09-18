@@ -234,6 +234,9 @@ describeDb('comms pipeline', () => {
       expect(task.status).toBe('open')
       expect(task.priority).toBe('high')
       expect(task.detail).toContain('message log')
+      // B-323: the subject a person reads, not the template key.
+      expect(task.detail).toContain("'Hello Ada'")
+      expect(task.detail).not.toContain(`welcome_${suffix}`)
     } finally {
       await prisma.tenant.update({
         where: { id: tenantId },

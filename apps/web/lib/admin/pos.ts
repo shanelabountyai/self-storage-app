@@ -1,4 +1,4 @@
-import { prisma, type Prisma } from "@storage/db";
+import { prisma, type PaymentStatus, type Prisma } from "@storage/db";
 import { recordAudit } from "@storage/core/audit";
 import { emitEvent } from "@storage/core/events";
 import {
@@ -1108,8 +1108,12 @@ export type CounterReceipt = {
   timezone: string;
   tenantId: string;
   tenantName: string;
+  /// B-323. The business account every credited unit is on, so a receipt a
+  /// payer files is filable against the company. Null for a personal payment,
+  /// or one spread across units on different accounts.
+  accountName: string | null;
   method: "cash" | "check" | "money_order" | "card";
-  status: string;
+  status: PaymentStatus;
   checkNumber: string | null;
   amountCents: number;
   tenderedCents: number | null;
@@ -1173,12 +1177,18 @@ export async function counterReceipt(
   }
 
   const credits = await paymentCredits(paymentId);
+  const accounts = await prisma.lease.findMany({
+    where: { id: { in: credits.lines.map((line) => line.leaseId) } },
+    select: { billingAccount: { select: { name: true } } },
+  });
+  const accountNames = new Set(accounts.map((lease) => lease.billingAccount?.name ?? null));
   return {
     receiptNumber: payment.receiptNumber,
     facilityName: payment.facility.name,
     timezone: payment.facility.timezone,
     tenantId: payment.tenant.id,
     tenantName: `${payment.tenant.firstName} ${payment.tenant.lastName}`,
+    accountName: accountNames.size === 1 ? [...accountNames][0] : null,
     method: payment.method as CounterReceipt["method"],
     status: payment.status,
     checkNumber: payment.checkNumber,
@@ -1201,6 +1211,19 @@ const METHOD_LABEL = {
   card: "Card",
 } as const;
 
+/// B-323. Mid-sentence on the receipt ("later marked …"): a lookup, never the
+/// enum with its underscores swapped out (B-261's rule for `method`). Typed
+/// over the whole enum, so a new status fails the typecheck until it is named.
+export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  pending: "pending",
+  processing: "processing",
+  succeeded: "paid",
+  failed: "failed",
+  refunded: "refunded",
+  partially_refunded: "partly refunded",
+  returned: "returned",
+};
+
 export type ReceiptRow = { label: string; value: string; strong?: boolean };
 
 /// B-320. The rows of the printed receipt, for cash and card alike — the one
@@ -1218,6 +1241,7 @@ export function receiptRows(receipt: CounterReceipt): ReceiptRow[] {
   }).format(receipt.receivedAt);
   const method = METHOD_LABEL[receipt.method];
   return [
+    ...(receipt.accountName ? [{ label: "Account", value: receipt.accountName }] : []),
     { label: "Received from", value: receipt.tenantName },
     { label: "Date", value: received },
     {

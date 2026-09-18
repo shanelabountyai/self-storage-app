@@ -2017,9 +2017,12 @@ async function noReachableEmail(
       // B-169's one sentence of context: the card otherwise says only that a
       // channel is unreachable, and "has no address on file" and "their
       // address bounced" want different things done about them.
+      //
+      // B-323: named by its rendered subject, never the template key a counter
+      // staffer cannot read (D-15). A render failure has no subject to give.
       detail: rendered
-        ? `No email address on file — ${base.templateKey} could not be sent. Its text is in the message log on their profile, to print and mail.`
-        : `No email address on file — ${base.templateKey} could not be sent.`,
+        ? `No email address on file — '${rendered.subject}' could not be sent. Its text is in the message log on their profile, to print and mail.`
+        : `No email address on file — a message could not be sent.`,
     })
   }
 

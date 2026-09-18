@@ -2752,6 +2752,13 @@ function reviewedOn(locale: Locale): string {
 // the field, and the typed amount is still there. Asserted in both languages
 // in `e2e/portal-billing-account.spec.ts`. No visible line changes;
 // `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-verified 2026-09-18, at B-323. The printed counter receipt `/admin/pos/done`
+// gains an `Account` row for a business-account payment, built from the same
+// `receiptRows` as every other row, so it is a `<th scope="row">` like its
+// neighbours (SC 1.3.1) and prints with them. The "later marked" note and the
+// no-email task detail now read in words rather than identifiers (D-15). No
+// route added; no visible line changes; `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
