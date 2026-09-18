@@ -10643,7 +10643,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Lint and typecheck are clean. There was no schema change. The three affected files pass: the new test, `auth-email-ignore` unchanged, and `billing-account-members-db`. The first full-suite run was killed with 137 before any test ran (zero failures, and no jetsam event for that minute), which is the known sibling-project kill. **Real finding from that kill:** because `afterAll` never ran, it left an orphan `auth-flows-test@example.com` tenant (no password) in `storage_test`. `authenticateWithPassword` looks up by email, so on the next run three `tests/auth-flows.test.ts` cases failed identically on `main` and on this branch ("expected null"). Deleting the orphan row fixed them. **A killed sweep can leave fixtures that break the next one, so check for rows with the test email before debugging auth code.** Full unit suite on the third run: 275 files passed and 1 skipped; 4,615 tests passed and 8 skipped (4,623, which is B-328's total plus the two new tests). No e2e was run, because the change is email copy only.
 
-## Fix — `/confirm-email`'s title named a page the visitor was not on (2026-09-18, `PENDING`)
+## Fix — `/confirm-email`'s title named a page the visitor was not on (2026-09-18, `dd72a29`)
 
 **What it built.** Without a token, `/confirm-email` shows the error heading ("That link didn't work" / "Ese enlace no funcionó"), but its `<title>` was always `confemail.title`. `generateMetadata` now reads `searchParams`. It titles the page `confemail.error.title` when there is no token and `confemail.title` when there is one. That is the `/reset-password` pattern (B-311).
 

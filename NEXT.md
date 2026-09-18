@@ -4,10 +4,7 @@
 
 ## Start here
 
-**No buildable row is left.** Every open row in `06-backlog.md` is blocked (see the list below). The next session is an owner session:
-
-1. **Decide `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish`**: fix the title or fix the spec. See B-321's `PROGRESS.md` entry. This is the only known red spec.
-2. **Or unblock B-301** by filling `.env.prod-ops`. B-325 was ordered ahead of it so the wording would settle before the backfill sends, and it now has.
+**No buildable row is left, and there are no known red specs.** `/confirm-email`'s title is fixed (`dd72a29`), and `e2e/i18n.spec.ts` passes 102 of 102. The next session is an owner session: **unblock B-301 by filling `.env.prod-ops`.**
 
 **New trap (B-325):** a sweep killed with 137 skips `afterAll`, and the orphaned fixtures break the NEXT run. Last time it was three `auth-flows` failures caused by a stale `auth-flows-test@example.com` tenant, and they also failed on `main`. Look for leftover test-email rows before reading auth code.
 
