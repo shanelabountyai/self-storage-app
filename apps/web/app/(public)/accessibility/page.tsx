@@ -2743,6 +2743,15 @@ function reviewedOn(locale: Locale): string {
 // nobody could click. Asserted in `e2e/message-link-locale.spec.ts`, with an
 // axe scan of the Spanish refusal. This page makes no claim naming these three
 // routes, so no visible line changes; `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-verified 2026-09-18, at B-322. `/portal/pay?account=` refuses an amount
+// over the account's balance with its own sentence, which now ends in a
+// `tel:` link to the office instead of "enter your balance or less" (SC 3.3.3).
+// It renders in the same `#amount-problem` paragraph B-302 ties to the Amount
+// input, so `a11y.true.errors` still holds as written: the message is tied to
+// the field, and the typed amount is still there. Asserted in both languages
+// in `e2e/portal-billing-account.spec.ts`. No visible line changes;
+// `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

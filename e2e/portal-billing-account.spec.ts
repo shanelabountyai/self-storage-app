@@ -140,6 +140,32 @@ test.describe('signed in as the business account payer', () => {
     await assertNoAxeViolations(page)
   })
 
+  // B-322. Paying past an account's balance is refused (D-113 is open on
+  // whose credit it would be), and the refusal must end in something to do:
+  // the office's number as a link, on the paragraph the Amount input names.
+  for (const { locale, pay, sentence, call } of [
+    { locale: 'en', pay: /^Pay \$/, sentence: /has to go through the office/, call: /^Call / },
+    { locale: 'es', pay: /^Pagar \$/, sentence: /tiene que hacerse por la oficina/, call: /^Llame al / },
+  ]) {
+    test(`paying ahead on the account is refused with the office's number (${locale})`, async ({
+      page,
+    }) => {
+      await page.context().addCookies([{ name: 'st_locale', value: locale, url: 'http://localhost:3000' }])
+      await page.goto('/portal')
+      await page.getByRole('main').getByRole('link', { name: pay }).click()
+      await page.waitForURL(/\/portal\/pay\?account=/)
+      await page.goto(`${page.url()}&amount=999999`)
+
+      const refusal = page.locator('#amount-problem')
+      await expect(refusal).toContainText(sentence)
+      await expect(refusal.getByRole('link', { name: call })).toHaveAttribute('href', /^tel:/)
+      await expect(page.locator('input[aria-describedby~="amount-problem"]')).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      )
+    })
+  }
+
   // a11y-state: /portal/pay | business account, Spanish
   //
   // B-282. The consolidated bill had never been rendered in Spanish for any

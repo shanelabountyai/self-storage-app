@@ -876,6 +876,10 @@ export const es: Dictionary = {
   'amt.aboveBalance': 'Eso es más de lo que debe. Escriba su saldo o menos.',
   'amt.abovePrepayCeiling':
     'Eso es mucho más de un año de renta. Llame a la oficina y se lo tomamos por teléfono.',
+  'amt.aboveBalanceAccount':
+    'Pagar por adelantado en una cuenta de empresa tiene que hacerse por la oficina.',
+  'amt.aboveBalanceAccountCall': 'Llame al {phone}',
+  'amt.aboveBalanceAccountAfter': 'y se lo tomamos.',
   'amt.nothingOwed': 'No hay nada que pagar en este momento.',
 
   // --- Gate code panel + pay amount form --------------------------------

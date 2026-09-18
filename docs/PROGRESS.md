@@ -10503,3 +10503,21 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - **Found, not fixed: `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish` fails on both projects.** The page's `<title>` is always `confemail.title` ("Confirme su correo electrónico"), but the spec expects the error heading "Ese enlace no funcionó". Neither file is touched here. Both last changed in B-311/B-315.
 
 **Verification.** Typecheck and lint are clean (the six `_prev`/`_formData` warnings were already there). `e2e/message-link-locale.spec.ts` + `e2e/i18n.spec.ts` on the production build: **108 passed, 2 failed**. Both failures are the pre-existing `/confirm-email` title above. The new spec passed 8 of 8 across both projects. Full unit suite: **4,602 passed, 8 skipped, of 4,610**, which is B-320's 4,605 plus this item's five.
+
+## B-322 — a business-account payer refused a prepayment is given the office's number (2026-09-18, `PENDING`)
+
+**What it built.**
+
+1. **A refusal just for the account case.** On `/portal/pay?account=`, an amount over the balance still fails as `above_balance`, because the prepay ceiling there is still `0`. The page now renders its own sentence for it: *"Paying ahead on a business account has to go through the office. Call {phone} and we'll take it."* The number is a `tel:` link. It uses the same `telHref` and `phone` the rest of the screen uses: the facility's phone, or `SITE.phone`. The link is `min-h-11` (44px, PRD 01 §6.2), and its name ("Call …" / "Llame al …") says it is a phone number (SC 2.4.4).
+2. **Three dictionary keys**, `amt.aboveBalanceAccount`, `amt.aboveBalanceAccountCall` and `amt.aboveBalanceAccountAfter`, in both languages and added to `MUST_ALSO_DIFFER`.
+3. **It reuses B-302's and B-299's wiring and adds none of its own.** The sentence renders inside the existing `#amount-problem` paragraph, so the Amount input's `aria-invalid`/`aria-describedby` and the fragment focus apply to it unchanged. There is no `role="alert"` (B-295).
+4. **e2e:** `e2e/portal-billing-account.spec.ts` adds one test per language. Each one sends `&amount=999999` on the account pay URL and asserts three things: the sentence, a `tel:` link inside the refusal, and the input marked invalid and described by it.
+
+**What it decided.**
+
+- **The refusal is chosen in the page, not in `validatePaymentAmount`.** The validator still returns `above_balance`, and the page picks the sentence when `lease.account` is set. Only this one screen knows it is an account subject, and a new `AmountProblem` would need a key on `/pay/[token]` too, which never meets this case. The per-lease `above_balance` copy and its unit tests are unchanged.
+- **The ceiling is not touched.** Whose credit a payment made ahead on an account becomes is still open under D-113. This row changed copy only.
+
+**What it left behind.** Nothing new. Prepayment on an account waits on the owner's D-113 decision, which has no row.
+
+**Verification.** Typecheck and lint are clean (the same six warnings as before, none in files this row touched). `npm test -- tests/i18n.test.ts tests/portal-payment.test.ts`: 49 passed. `e2e/portal-billing-account.spec.ts` on the production build: **16 passed**, including the new test in both languages on both projects. I did not run the full unit or e2e sweep. CI owns those.

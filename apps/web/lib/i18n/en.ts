@@ -962,6 +962,9 @@ export const en = {
   'amt.aboveBalance': 'That is more than you owe. Enter your balance or less.',
   'amt.abovePrepayCeiling':
     'That is much more than a year of rent. Call the office and we will take it over the phone.',
+  'amt.aboveBalanceAccount': 'Paying ahead on a business account has to go through the office.',
+  'amt.aboveBalanceAccountCall': 'Call {phone}',
+  'amt.aboveBalanceAccountAfter': "and we'll take it.",
   'amt.nothingOwed': 'There is nothing to pay right now.',
 
   // --- Gate code panel + pay amount form --------------------------------

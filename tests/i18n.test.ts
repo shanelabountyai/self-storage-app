@@ -338,6 +338,10 @@ describe('i18n dictionaries', () => {
       'unsub.confirmHeading',
       'unsub.confirmBody',
       'unsub.confirmButton',
+      // B-322: the business-account prepayment refusal and its way out.
+      'amt.aboveBalanceAccount',
+      'amt.aboveBalanceAccountCall',
+      'amt.aboveBalanceAccountAfter',
     ] as const
     const untranslated = Object.keys(en)
       .filter((key) => key.startsWith('err.') || MUST_ALSO_DIFFER.includes(key as never))

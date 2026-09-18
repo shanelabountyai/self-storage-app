@@ -116,8 +116,10 @@ export default async function PortalPayPage({
   // the account's balance would bank credit against the payer, where none of
   // the three jobs that spend credit would ever reach it, and the units it was
   // meant for would still read as owing. Paying ahead on an account needs an
-  // owner decision about whose credit it is; until then the screen refuses it
-  // and says to call, which is what `above_balance` already says.
+  // owner decision about whose credit it is (D-113); until then the screen
+  // refuses it and says to call. B-322: `above_balance` never did say that —
+  // "enter your balance or less" — so the account case renders its own
+  // sentence with the office's number on it, below.
   const checked = validatePaymentAmount(
     requested,
     lease.balanceCents,
@@ -328,9 +330,20 @@ export default async function PortalPayPage({
           tabIndex={-1}
           className="border-input rounded-md border p-3 text-sm text-pretty"
         >
-          {t(AMOUNT_PROBLEM_KEYS[checked.problem], {
-            min: formatRate(MIN_PAYMENT_CENTS),
-          })}{' '}
+          {lease.account && checked.problem === 'above_balance' ? (
+            <>
+              {t('amt.aboveBalanceAccount')}{' '}
+              <a
+                href={telHref}
+                className="inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+              >
+                {t('amt.aboveBalanceAccountCall', { phone })}
+              </a>{' '}
+              {t('amt.aboveBalanceAccountAfter')}
+            </>
+          ) : (
+            t(AMOUNT_PROBLEM_KEYS[checked.problem], { min: formatRate(MIN_PAYMENT_CENTS) })
+          )}{' '}
           {t('paypg.balanceRestored')}
         </p>
       )}
