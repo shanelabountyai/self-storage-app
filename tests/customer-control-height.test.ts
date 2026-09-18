@@ -49,7 +49,11 @@ describe('customer controls stay on --control-h (B-324)', () => {
       .flatMap((file) =>
         readFileSync(file, 'utf8')
           .split('\n')
-          .flatMap((line, i) => (RAW_36PX.test(line) ? [`${file.slice(webDir.length + 1)}:${i + 1}`] : [])),
+          // Comment lines skipped: the accessibility page's B-324 re-read note
+          // QUOTES `h-9`, and failed this guard on the commit that added both.
+          .flatMap((line, i) =>
+            RAW_36PX.test(line) && !line.trim().startsWith('//') ? [`${file.slice(webDir.length + 1)}:${i + 1}`] : [],
+          ),
       )
     expect(offenders).toEqual([])
   })

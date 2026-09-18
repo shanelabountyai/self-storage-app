@@ -182,11 +182,7 @@ export default async function PortalPayPage({
           figures in which one reads "$129" and the next "$20.00" is harder to
           check than one where every row carries its cents. */}
       <ScrollRegion
-        aria-label={
-          lease.account
-            ? t('paypg.captionAccount', { account: lease.account.name })
-            : t('paypg.captionUnit', { unit: lease.unitNumber })
-        }
+        aria-label={t('paypg.region')}
         className="border-input rounded-lg border"
       >
         <table className="w-full text-sm">

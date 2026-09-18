@@ -146,7 +146,7 @@ export default async function PaymentDonePage({
           the sum are related in markup rather than only by position. */}
       {receipt.credits.length > 1 && (
         <ScrollRegion
-          aria-label={t('rcpt.creditsCaption', { facility: receipt.facilityName })}
+          aria-label={t('rcpt.creditsRegion')}
           className="border-input rounded-lg border"
         >
           <table className="w-full text-sm">

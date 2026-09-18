@@ -10554,3 +10554,25 @@ The counter form's Method select was uncontrolled under `key={former | account |
 **What it left behind.** `/pay/[token]`'s input has no e2e height assertion, because that screen needs a live Stripe PaymentIntent to render (the same limit B-314 records). It is covered by the grep guard and by carrying the same class. Admin control heights are untouched, by design.
 
 **Verification.** Typecheck clean; lint clean (the same six warnings). `tests/customer-control-height.test.ts`: 2 passed. The e2e test above on the production build: passed on desktop-chrome and mobile-chrome. I did not run the full sweep. CI owns it.
+
+## B-326 — scroll regions named with their table's caption (2026-09-18, `PENDING`)
+
+**What it built.**
+
+1. **Four new short keys, each in English and Spanish (D-122):** `acct.tableRegion` ("Units on this account"), `paypg.region` ("This bill"), `rcpt.creditsRegion` ("Units paid") and `astmt.region` ("Statement"). The `ScrollRegion` on `/portal`, `/portal/pay`, `/pay/[token]/done`, `/portal/pay/done` and the account statement now uses them. Each table's `<caption>` is unchanged.
+2. **`tests/scroll-regions.test.ts` › "never names a region with its own table's caption"** reads every file that uses `<ScrollRegion>`. It fails when the region's `aria-label` uses the same i18n key or literal as a `<caption>` in that file. Before commit it was checked against the old call sites: it failed, naming `app/pay/[token]/done/page.tsx`.
+3. **`e2e/portal-billing-account.spec.ts`** finds the Spanish pay screen's region as "Esta factura" (`exact`). The two `exact` comments now explain why `exact` stays.
+
+**What it decided.**
+
+- **The contract in `scroll-region.tsx` stands and the call sites move.** The row accepted either fix. The contract is the one `/admin/access` already follows, and a rewrite would have made the rotor worse to keep five lines unchanged.
+- **One region name per page, not per account or unit.** On `/portal/pay` the name no longer changes between the account and single-unit cases. The caption still names which one it is.
+
+**What it left behind.** `tabIndex={0}` and B-282's `offscreenOffenders` waiver are unchanged, as the row requires. The guard compares keys and literals from source. A region and caption built from two different keys that render the same text would pass it. Nothing here does that.
+
+**Bugs found along the way.**
+
+- **The row listed four sites; there were five.** `app/portal/pay/done/page.tsx` also passed `rcpt.creditsCaption`, and the new guard found it on its first run.
+- **B-324's guard failed on the commit that added it.** `tests/customer-control-height.test.ts` matched its own re-read note in the accessibility page, which quotes `h-9` (`page.tsx:2764`, `:2768`). B-324 checked the guard before it wrote that note. The guard now skips `//` comment lines, as `scroll-regions.test.ts` already does.
+
+**Verification.** Typecheck and lint clean. Unit tests (`i18n`, `portal-dashboard`, `portal-payment`, `portal-billing-account-db`, `customer-control-height`, `scroll-regions`): 74 passed. `e2e/portal-billing-account.spec.ts` on the production build: 16 passed. I did not run the full sweep. CI owns it.

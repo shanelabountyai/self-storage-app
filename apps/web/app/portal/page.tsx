@@ -576,7 +576,7 @@ function AccountCard({
           (1.3.1 A). `formatCents` rather than `formatRate` for the same reason
           the pay screen uses it — a column where one figure reads "$129" and
           the next "$20.00" is harder to check. */}
-      <ScrollRegion aria-label={t('acct.tableCaption', { account: account.name })}>
+      <ScrollRegion aria-label={t('acct.tableRegion')}>
         <table className="w-full text-sm">
           <caption className="sr-only">{t('acct.tableCaption', { account: account.name })}</caption>
           <thead>

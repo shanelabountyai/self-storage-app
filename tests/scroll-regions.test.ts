@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -78,6 +79,30 @@ describe('focusable scroll regions', () => {
     expect(byFile.size).toBeGreaterThan(0)
     for (const [file, names] of byFile) {
       expect(new Set(names).size, `${file} names two scroll regions the same`).toBe(names.length)
+    }
+  })
+
+  it("never names a region with its own table's caption", () => {
+    // B-326. `scroll-region.tsx`'s contract: the name is a short noun phrase,
+    // the caption carries the long version, "nothing is said twice". B-282
+    // passed the caption key itself on four customer surfaces. Compared by
+    // i18n key or literal, so interpolated captions are caught without
+    // rendering them.
+    const files = new Set(gitGrep('<ScrollRegion').map((line) => line.split(':')[0]))
+    expect(files.size).toBeGreaterThan(0)
+
+    const namesIn = (chunk: string) =>
+      new Set([...chunk.matchAll(/t\('([^']+)'|"([^"{}]+)"/g)].map((m) => m[1] ?? m[2]))
+
+    for (const file of files) {
+      const source = readFileSync(`${repoRoot}${file}`, 'utf8')
+      const labels = [...source.matchAll(/<ScrollRegion\s[\s\S]*?aria-label=(\{[\s\S]*?\}|"[^"]*")/g)]
+        .map((m) => namesIn(m[1]))
+      const captions = [...source.matchAll(/<caption[^>]*>([\s\S]*?)<\/caption>/g)]
+        .map((m) => new Set([...namesIn(m[1]), m[1].trim()]))
+      for (const label of labels)
+        for (const caption of captions)
+          expect([...label].filter((n) => caption.has(n)), `${file} names a region with its caption`).toEqual([])
     }
   })
 

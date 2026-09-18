@@ -832,6 +832,7 @@ export const es: Dictionary = {
   'acct.allocationNote':
     'Un solo pago cubre toda la cuenta. Se aplica primero a los montos más antiguos, entre todas las unidades de abajo, y no a una unidad en particular.',
   'acct.tableCaption': 'Unidades facturadas a {account}',
+  'acct.tableRegion': 'Unidades de esta cuenta',
   'acct.colUnit': 'Unidad',
   'acct.colRentedBy': 'Rentada por',
   'acct.colBalance': 'Saldo',
@@ -852,6 +853,7 @@ export const es: Dictionary = {
   'paypg.subheadUnit': '{facility} — Unidad {unit}',
   'paypg.captionAccount': 'Lo que debe {account}',
   'paypg.captionUnit': 'Lo que debe de la unidad {unit}',
+  'paypg.region': 'Esta factura',
   'paypg.colUnit': 'Unidad',
   'paypg.colWhat': 'Concepto',
   'paypg.colRentedBy': 'Rentada por',
@@ -961,6 +963,7 @@ export const es: Dictionary = {
   'rcpt.creditOnAccount': 'Saldo a favor',
   'rcpt.creditNextBill': 'Se aplicará a su próxima factura.',
   'rcpt.creditsCaption': 'Aplicado a unidades en {facility}',
+  'rcpt.creditsRegion': 'Unidades pagadas',
   'rcpt.total': 'Total',
 
   // --- Pay link (B-283): /pay/<token> and its receipt --------------------
@@ -1064,6 +1067,7 @@ export const es: Dictionary = {
   'astmt.unitsOne': '{count} unidad · {facility}',
   'astmt.unitsOther': '{count} unidades · {facility}',
   'astmt.caption': 'Todas las unidades facturadas a {account} en {label}',
+  'astmt.region': 'Estado de cuenta',
   'astmt.colUnit': 'Unidad',
   'astmt.colOwedStart': 'Debía al inicio',
   'astmt.colChange': 'Cambio',

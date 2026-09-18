@@ -919,6 +919,7 @@ export const en = {
   'acct.allocationNote':
     'One payment covers the whole account. It goes to the oldest amounts owed first, across every unit below, rather than to one unit in particular.',
   'acct.tableCaption': 'Units billed to {account}',
+  'acct.tableRegion': 'Units on this account',
   'acct.colUnit': 'Unit',
   'acct.colRentedBy': 'Rented by',
   'acct.colBalance': 'Balance',
@@ -938,6 +939,7 @@ export const en = {
   'paypg.subheadUnit': '{facility} — Unit {unit}',
   'paypg.captionAccount': 'What {account} owes',
   'paypg.captionUnit': 'What you owe on unit {unit}',
+  'paypg.region': 'This bill',
   'paypg.colUnit': 'Unit',
   'paypg.colWhat': 'What',
   'paypg.colRentedBy': 'Rented by',
@@ -1045,6 +1047,7 @@ export const en = {
   'rcpt.creditOnAccount': 'Credit on your account',
   'rcpt.creditNextBill': 'It comes off your next bill.',
   'rcpt.creditsCaption': 'Applied to units at {facility}',
+  'rcpt.creditsRegion': 'Units paid',
   'rcpt.total': 'Total',
 
   // --- Pay link (B-283): /pay/<token> and its receipt --------------------
@@ -1149,6 +1152,7 @@ export const en = {
   'astmt.unitsOne': '{count} unit · {facility}',
   'astmt.unitsOther': '{count} units · {facility}',
   'astmt.caption': 'Every unit billed to {account} in {label}',
+  'astmt.region': 'Statement',
   'astmt.colUnit': 'Unit',
   'astmt.colOwedStart': 'Owed at start',
   'astmt.colChange': 'Change',

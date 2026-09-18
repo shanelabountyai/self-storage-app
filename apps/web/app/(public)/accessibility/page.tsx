@@ -2767,6 +2767,12 @@ function reviewedOn(locale: Locale): string {
 // disclose or claim. `tests/customer-control-height.test.ts` now refuses any
 // `h-9` on a customer surface. No visible line changes; `LAST_REVIEWED` is not
 // bumped (D-115).
+//
+// Re-read 2026-09-18, at B-326. Five customer scroll regions (`/portal`,
+// `/portal/pay`, both payment receipts, the account statement) were named with
+// their table's full caption. They now use short names, as `ScrollRegion`'s
+// contract says. SC 1.3.1 was already met, so there is nothing to disclose or
+// claim. No visible line changes; `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

@@ -125,7 +125,7 @@ export default async function PayLinkDonePage({
                 Same table as the portal receipt. */}
             {receipt.credits.length > 1 && (
               <ScrollRegion
-                aria-label={t('rcpt.creditsCaption', { facility: receipt.facilityName })}
+                aria-label={t('rcpt.creditsRegion')}
                 className="border-input rounded-lg border"
               >
                 <table className="w-full text-sm">

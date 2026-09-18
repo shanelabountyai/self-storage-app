@@ -128,7 +128,7 @@ export default async function AccountStatementPage({
           eye, and a row reading "$129" beside one reading "$20.00" is harder
           to check than one where every figure carries its cents. */}
       <ScrollRegion
-        aria-label={t('astmt.caption', { account: account.name, label })}
+        aria-label={t('astmt.region')}
         className="border-input rounded-lg border"
       >
         <table className="w-full text-sm">

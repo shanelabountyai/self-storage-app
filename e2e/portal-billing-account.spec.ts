@@ -59,8 +59,9 @@ test.describe('signed in as the business account payer', () => {
     await page.goto('/portal')
     await expect(page.getByRole('main')).toBeVisible()
 
-    // `exact`: since B-282 the units table inside the card is a region named
-    // "Units billed to {account}", which a substring match also finds.
+    // `exact`: B-282 named the units table's region "Units billed to
+    // {account}", which a substring match also found. B-326 shortened it to
+    // "Units on this account"; `exact` stays so a longer name cannot return.
     const card = page.getByRole('region', { name: DEMO_BUSINESS_ACCOUNT_NAME, exact: true })
     await expect(card).toBeVisible()
 
@@ -178,7 +179,7 @@ test.describe('signed in as the business account payer', () => {
     await page.getByRole('main').getByRole('link', { name: /^Pagar \$/ }).click()
     await page.waitForURL(/\/portal\/pay\?account=/)
     await expect(page.locator('html')).toHaveAttribute('lang', 'es')
-    await expect(page.getByRole('region', { name: `Lo que debe ${DEMO_BUSINESS_ACCOUNT_NAME}` })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Esta factura', exact: true })).toBeVisible()
 
     await assertNoAxeViolations(page)
   })
@@ -201,8 +202,9 @@ test.describe('signed in as an authorized member of the business account', () =>
     await page.goto('/portal')
     await expect(page.getByRole('main')).toBeVisible()
 
-    // `exact`: since B-282 the units table inside the card is a region named
-    // "Units billed to {account}", which a substring match also finds.
+    // `exact`: B-282 named the units table's region "Units billed to
+    // {account}", which a substring match also found. B-326 shortened it to
+    // "Units on this account"; `exact` stays so a longer name cannot return.
     const card = page.getByRole('region', { name: DEMO_BUSINESS_ACCOUNT_NAME, exact: true })
     await expect(card).toBeVisible()
     // The units and their money are there — sight of the account is the point.
