@@ -9,6 +9,7 @@ import { discountForLeasePeriod, markDiscountApplied } from '@/lib/promotions/bi
 import { markReferralRewardApplied, referralRewardsForLease } from '@/lib/referrals/billing'
 import { leaseChainIds } from '@/lib/billing/transfer-chain'
 import {
+  billingPeriodFor,
   buildInvoice,
   formatInvoiceNumber,
   periodStartsBetween,
@@ -145,31 +146,32 @@ export async function generateInvoices(
     // sit on the same period boundaries and the offset is simply how many of
     // them elapsed before this lease opened.
     const originStart = originStarts.get(lease.id)
-    //
-    // `periodStartsBetween` yields the periods starting strictly AFTER its
-    // `after` argument and up to and including `through` — which is exactly the
-    // set already billed on the leases this one came from, since the first
-    // period a lease bills is the first one after its own start (the move-in
-    // payment covers the period it lands in). The cap is raised past the
-    // 12-period default because a tenancy that has run for years before a
-    // transfer would otherwise silently undercount.
-    const offset = originStart
-      ? periodStartsBetween(
-          facility.billingPolicy as BillingPolicy,
-          lease.billingDay,
-          startOfDay(originStart),
-          leaseStart,
-          600,
-        ).length
-      : 0
-    let periodIndex = offset - 1
+    const policy = facility.billingPolicy as BillingPolicy
 
-    for (const period of periodStartsBetween(
-      facility.billingPolicy as BillingPolicy,
-      lease.billingDay,
-      leaseStart,
-      through,
-    )) {
+    // B-328 (D-142). Only the period containing `through`
+    // is billed — never the whole history from the lease start. The generator
+    // used to walk forward from the lease start with `periodStartsBetween`'s
+    // default cap of 12, so every lease stopped being billed after its twelfth
+    // period and nothing noticed. A missed night is still caught up: the
+    // scheduler replays each missed business date, and a period stays in this
+    // window for every night from its invoice date until the next one opens.
+    // Periods a stuck lease already missed are deliberately NOT back-billed
+    // here — that is an owner decision with notice to tenants.
+    const windowAfter = new Date(billingPeriodFor(policy, lease.billingDay, through).start.getTime() - 86_400_000)
+    const after = windowAfter.getTime() > leaseStart.getTime() ? windowAfter : leaseStart
+
+    // `periodStartsBetween` yields the periods starting strictly AFTER its
+    // `after` argument and up to and including `through`. Counting them from
+    // the tenancy's origin to `after` gives the periods that came before this
+    // window — on the leases this one came from (B-162: the first period a
+    // lease bills is the first one after its own start, the move-in payment
+    // covers the one it lands in) and on this lease before the window. The cap
+    // is raised past the 12-period default because a long tenancy would
+    // otherwise silently undercount.
+    let periodIndex =
+      periodStartsBetween(policy, lease.billingDay, startOfDay(originStart ?? leaseStart), after, 600).length - 1
+
+    for (const period of periodStartsBetween(policy, lease.billingDay, after, through)) {
       periodIndex += 1
       // A scheduled move-out inside or before the period means the tenant is
       // not there for it. Billing a full month to someone who has given notice

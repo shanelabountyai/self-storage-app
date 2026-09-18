@@ -234,11 +234,14 @@ describeDb('recurring invoice generation', () => {
   })
 
   it('catches up every period missed while nothing ran', async () => {
-    // The scheduler was down for three months. Each missed period gets its own
+    // The scheduler was down for three months. It replays each missed business
+    // date (`missedBusinessDates`), and each missed period gets its own
     // invoice rather than one merged catch-all.
     const leaseId = await makeLease({ startDate: d('2026-08-20'), billingDay: 20 })
 
-    await generateInvoices(facilityId, d('2026-12-01'), recordItem)
+    for (let day = d('2026-08-21'); day <= d('2026-12-01'); day = new Date(day.getTime() + 86_400_000)) {
+      await generateInvoices(facilityId, day, recordItem)
+    }
 
     const invoices = await prisma.invoice.findMany({
       where: { leaseId },
@@ -249,6 +252,71 @@ describeDb('recurring invoice generation', () => {
       '2026-10-20',
       '2026-11-20',
     ])
+  })
+
+  // B-328. The generator walked forward from the lease start with a cap of
+  // twelve periods, so period thirteen was never billed.
+  it('bills a lease past its twelfth period', async () => {
+    await setPolicy({ billingPolicy: 'first_of_month' })
+    const leaseId = await makeLease({ startDate: d('2025-01-01'), billingDay: 1 })
+
+    await generateInvoices(facilityId, d('2026-08-28'), recordItem)
+
+    const invoices = await prisma.invoice.findMany({ where: { leaseId } })
+    expect(invoices.map((i) => isoOf(i.periodStart))).toEqual(['2026-09-01'])
+  })
+
+  // B-328 / D-142: the periods a stuck lease missed are an owner decision,
+  // not something one night raises on its own.
+  it('does not back-bill periods before the current one', async () => {
+    await setPolicy({ billingPolicy: 'first_of_month' })
+    const leaseId = await makeLease({ startDate: d('2026-03-01'), billingDay: 1 })
+
+    await generateInvoices(facilityId, d('2026-09-10'), recordItem)
+
+    const invoices = await prisma.invoice.findMany({ where: { leaseId } })
+    expect(invoices.map((i) => isoOf(i.periodStart))).toEqual(['2026-09-01'])
+  })
+
+  // B-328 / B-162. The window moved; the index must still count from the
+  // tenancy's first billed period, so period 13's discount lands on period 13.
+  it('keys a promotion to the tenancy period index past twelve', async () => {
+    await setPolicy({ billingPolicy: 'first_of_month' })
+    // Period 0 is 2025-09-01 (the first after the start), so 2026-09-01 is 12
+    // and 2026-10-01 is 13.
+    const leaseId = await makeLease({ startDate: d('2025-08-01'), billingDay: 1 })
+    const promotion = await prisma.promotion.create({
+      data: {
+        name: `Late discount ${suffix}`,
+        type: 'amount_off',
+        value: 1_000,
+        durationPeriods: 1,
+        status: 'active',
+        facilityIds: [facilityId],
+      },
+    })
+    await prisma.promoRedemption.create({
+      data: {
+        promotionId: promotion.id,
+        facilityId,
+        leaseId,
+        schedule: [
+          { periodIndex: 12, amountCents: 1_200 },
+          { periodIndex: 13, amountCents: 1_300 },
+        ],
+        totalCents: 2_500,
+        appliedPeriods: [],
+      },
+    })
+
+    await generateInvoices(facilityId, d('2026-09-28'), recordItem)
+
+    const invoice = await prisma.invoice.findFirstOrThrow({
+      where: { leaseId, kind: 'rent' },
+      include: { lineItems: true },
+    })
+    expect(invoice.periodStart).toEqual(d('2026-10-01'))
+    expect(invoice.lineItems.find((line) => line.type === 'discount')?.amountCents).toBe(1_300)
   })
 
   it('writes line items and a ledger charge that agree with the invoice total', async () => {

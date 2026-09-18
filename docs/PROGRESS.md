@@ -10602,3 +10602,24 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - **The nightly run never bills a lease past its twelfth period → B-328**, added directly after this row. `generateInvoices` counts `periodStartsBetween` from the lease start with the default `maxPeriods = 12`. A `first_of_month` lease that started 2025-01-01, run through 2026-09-20, yields 12 periods ending 2026-01-01, and every period after that is never invoiced. Nothing reports it, because a lease with no invoice is not overdue. This is not fixed here. It is a separate money path, and the row asks for a production count first.
 
 **Verification.** Lint and typecheck are clean. Schema drift was checked against local `public` after `migrate deploy`: no difference. Full unit suite: 274 files passed and 1 skipped; 4,610 tests passed and 8 skipped (4,618). No e2e was run: nothing customer-facing changed, and CI owns the sweep. The Neon dev branch is now four migrations behind (`npm run db:migrate:cloud`).
+
+## B-328 — the nightly invoice run never billed a lease past its twelfth period (2026-09-18, `SHA`)
+
+**What it built.**
+
+1. **`generateInvoices` bills from a window that ends at `through`** (`apps/web/lib/billing/invoices.ts`). It no longer counts from the lease start. The window opens the day before the period that contains `through`, or at the lease start if that is later, so each lease is offered one period per night (occasionally two, when the lead days cross a boundary). The old loop went forward from the lease start with `periodStartsBetween`'s default cap of 12, so period thirteen was never yielded.
+2. **The promotion period index is still counted from the tenancy's first billed period** (B-162). It is `periodStartsBetween(origin ?? leaseStart → windowStart, 600).length - 1`. That one expression replaces the transfer-only offset, and it covers both earlier leases in a transfer chain and this lease's own periods before the window.
+3. **Tests** in `tests/invoices-db.test.ts`: (a) a `first_of_month` lease from 2025-01-01, run on 2026-08-28, bills 2026-09-01; (b) a lease from 2026-03-01, run on 2026-09-10, bills only 2026-09-01, with no back-bill; (c) a promotion scheduled for index 13 lands on the 13th period. All three fail on the old generator. The existing "catches up every period missed" case now replays each missed business date, the way `missedBusinessDates` drives the scheduler, instead of expecting a single call to back-bill three months.
+
+**What it decided.**
+
+- **D-142, the owner's call: only the current period is billed, and missed periods are not back-billed.** Outage catch-up comes from the scheduler replaying each missed date (up to 30 per tick, and it keeps advancing). A period stays in the window for every night from its invoice date until the next period opens. The rejected options were a trailing 12-period window, which would raise up to 12 invoices at once on a stuck lease, and billing every unbilled period since the lease start.
+- **No production count was taken.** `.env.prod-ops` is still empty. Under D-142 the count no longer gates the code, because the fix back-bills nothing. It only sizes the owner's catch-up decision.
+
+**What it left behind.**
+
+- **Periods a stuck production lease already missed stay unbilled.** Whether to raise them with notice to tenants is an owner decision. It needs the count of live leases older than twelve periods and how many periods each missed. No row owns it yet.
+- **B-327's automatic re-bill after a void now reaches only an invoice for the current period.** Voiding an older rent invoice leaves its period unbilled. The admin void copy (`ledger-corrections.tsx` and the action's success message) now says so.
+- The local demo has no occupying lease older than twelve months (checked in `storage_test`'s `public` schema), so the e2e suite does not exercise this path.
+
+**Verification.** Lint and typecheck are clean. No schema change was made, so there is no drift to check. Full unit suite: 274 files passed and 1 skipped; 4,613 tests passed and 8 skipped (4,621, which is B-327's total plus the three new tests). No e2e was run: the only customer-facing change is admin copy, and CI owns the sweep.
