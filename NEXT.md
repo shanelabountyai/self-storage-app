@@ -1,14 +1,16 @@
 # Next
 
-**B-318 is done** (`e1c24cf`, SHA follow-up `199c51c`, both pushed). The letter B-281 renders for a renter with no email now prints: `/admin/messages/[messageId]/print` lays out the stored `bodySnapshot` verbatim with the address of record in a window-envelope block and the facility return address. `no_reachable_channel` gained `resolvedByAction`, so **a note can no longer close it** — `recordLetterPrinted` (`apps/web/lib/admin/message-print.ts`) is the only closer, and it is scoped to the message's own facility. The tenant profile's message log pages past 20 (`?messages=`, clamped at 200) and says so at the ceiling. Unit suite: 4,590 passed, 8 skipped, of 4,598.
+**B-319 is done** (`8e38408`, SHA follow-up next commit, both pushed). The counter's Method is controlled state now — the `key` that remounted it at Cash is gone, and a picker change only resets Card (to Cash, with the reason in a `role="status"` line) when the new subject cannot take one. `settleTender` refuses `cash` with a check number as `check_number_on_cash`, so the POS payment, the counter move-in and merchandise all get it. Unit suite: 4,592 passed, 8 skipped, of 4,600; `e2e/admin-pos.spec.ts` 30/30.
 
 ## Start here
 
-**B-319**, next in file order: the counter's Method select silently resets to Cash when the payer changes, so a check payment can book as cash **with the check number still on it**. Money path, verified in code, and the `key=` that causes it is named in the row (`counter-payment-form.tsx:124`). Read the row's SC 3.2.2 paragraph — the row deliberately leaves that argument open rather than settling it.
+**B-320**, next in file order: a card taken at the counter has no printable receipt (`counterReceipt` refuses anything but cash), and a business account cannot pay by card at all. Read the row in full first.
 
 **B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts.
 
 Nothing in the block is blocked on the tree. B-301 still is.
+
+- **`storage_test` was reset on 2026-09-18** (it had 5,468 facilities and `marketplace-db.test.ts` was timing out on its full scan). If that file times out again, `npm run db:reset-test` before reading a stack trace.
 
 ## Two things worth knowing before the next sweep
 

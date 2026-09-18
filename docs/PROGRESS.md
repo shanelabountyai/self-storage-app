@@ -10428,7 +10428,7 @@ B-281 renders the message for a renter with no email address and stores it on th
 
 **Verification.** Full unit suite: **4,590 passed, 8 skipped, of 4,598** — B-317's 4,591 plus this item's five new tests and the two the D-15 lint adds per new `.tsx` under `app/admin`. Typecheck and lint clean. One earlier sweep died `EXIT=137` with zero failures and no JetsamEvent for that minute: another project's session runs an unscoped `pkill -9 -f 'node \(vitest'`, which takes this repo's workers with it. The re-run was gated on that reaching zero.
 
-## B-319 — the counter's Method no longer resets under a typed check number, and cash with a check number is refused (2026-09-18, `SHA_PENDING`)
+## B-319 — the counter's Method no longer resets under a typed check number, and cash with a check number is refused (2026-09-18, `8e38408`)
 
 The counter form's Method select was uncontrolled under `key={former | account | current}`, so moving the Unit-or-account picker across those classes remounted it at `cash`. Check selected on the account, number typed, then switched to one unit: **Method read Cash, the number was still there, and "Record payment" booked cash** — onto B-281's deposit slip and the receipt. Both of the row's remedies shipped.
 
