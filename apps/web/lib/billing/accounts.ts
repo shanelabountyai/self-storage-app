@@ -553,8 +553,11 @@ export async function addMember(
     throw new AccountError('email', `${name} can already see this account.`)
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.billingAccountMember.create({ data: { accountId: account.id, tenantId } })
+  const memberId = await prisma.$transaction(async (tx) => {
+    const member = await tx.billingAccountMember.create({
+      data: { accountId: account.id, tenantId },
+      select: { id: true },
+    })
     await recordAudit(
       {
         actor: toAuditActor(actor),
@@ -566,6 +569,7 @@ export async function addMember(
       },
       tx,
     )
+    return member.id
   })
 
   // B-287. Tell them, with a way to sign in. After the commit and never fatal:
@@ -573,7 +577,7 @@ export async function addMember(
   // which so the staffer knows whether they still have to tell them.
   let notified = true
   try {
-    await sendAccountAccessLink({ id: tenantId, email }, account.name)
+    await sendAccountAccessLink({ id: tenantId, email }, account.name, memberId)
   } catch (error) {
     console.error(`[billing] could not email ${email} their account access`, error)
     notified = false

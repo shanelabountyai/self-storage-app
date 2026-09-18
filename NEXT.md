@@ -4,7 +4,7 @@
 
 ## Start here
 
-**No buildable row is left, and there are no known red specs.** `/confirm-email`'s title is fixed (`dd72a29`), and `e2e/i18n.spec.ts` passes 102 of 102. **`.env.prod-ops` was filled 2026-09-18** (production endpoint `ep-frosty-darkness-ay0fzkst`, distinct from dev's `ep-holy-block`). Connectivity has NOT been checked yet. The next session: **B-301's dry run**, then the B-328 missed-period count for the owner.
+**No buildable row is left, and there are no known red specs.** `/confirm-email`'s title is fixed (`dd72a29`), and `e2e/i18n.spec.ts` passes 102 of 102. **`.env.prod-ops` was filled 2026-09-18** (production endpoint `ep-frosty-darkness-ay0fzkst`, distinct from dev's `ep-holy-block`). Connectivity has NOT been checked yet. **B-301's script is built** (`npm run db:backfill:account-access`, keyed per membership; `tests/backfill-account-access.test.ts`). Its production dry run was NOT taken: the auto-mode classifier refuses production reads. The owner runs it (`! npx dotenv -e .env.prod-ops -- npm run db:backfill:account-access`) and the count goes in B-301's `PROGRESS.md` entry. `--apply` refuses without `RESEND_API_KEY`, which `.env.prod-ops` does not carry. `npm run lint` was also refused by the classifier this session and has not run on the change. After that: the B-328 missed-period count.
 
 **New trap (B-325):** a sweep killed with 137 skips `afterAll`, and the orphaned fixtures break the NEXT run. Last time it was three `auth-flows` failures caused by a stale `auth-flows-test@example.com` tenant, and they also failed on `main`. Look for leftover test-email rows before reading auth code.
 

@@ -105,9 +105,17 @@ export async function requestPasswordReset(
 ///
 /// The member's stated language, else English. Never the request's: here that
 /// is the STAFFER's browser, which says nothing about the person reading this.
+///
+/// B-301. Keyed on the membership, so `sendDirectEmail` refuses a second mail
+/// about the same membership — which is what makes the backfill safe to re-run.
+export function accountAccessKey(memberId: string): string {
+  return `auth:account_access:${memberId}`
+}
+
 export async function sendAccountAccessLink(
   tenant: { id: string; email: string },
   accountName: string,
+  memberId: string,
 ): Promise<void> {
   const { token, expiresAt } = await mintToken({
     purpose: 'password_reset',
@@ -124,6 +132,7 @@ export async function sendAccountAccessLink(
     locale: (await currentWritingLocale(tenant.id)) ?? DEFAULT_LOCALE,
     accountName,
     recipientTenantId: tenant.id,
+    idempotencyKey: accountAccessKey(memberId),
   })
 }
 

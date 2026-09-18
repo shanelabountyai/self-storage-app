@@ -39,6 +39,10 @@ type SendArgs = {
   /// email with why it came, because they did not ask for it.
   accountName?: string
   recipientTenantId?: string
+  /// B-301. A key that names the membership rather than the send, so the same
+  /// member can never be told about the same account twice. Omitted, a send is
+  /// keyed randomly, which is right for every self-served link.
+  idempotencyKey?: string
 }
 
 export async function sendAuthEmail({
@@ -49,6 +53,7 @@ export async function sendAuthEmail({
   locale,
   accountName,
   recipientTenantId,
+  idempotencyKey,
 }: SendArgs): Promise<void> {
   const minutes = Math.round((expiresAt.getTime() - Date.now()) / 60_000)
   const say = proseFor(locale).direct
@@ -66,7 +71,7 @@ export async function sendAuthEmail({
   // link, which is exactly what `requestMagicLink`/`requestPasswordReset`
   // already invalidate the previous one for.
   const sent = await sendDirectEmail({
-    idempotencyKey: `auth:${purpose}:${randomUUID()}`,
+    idempotencyKey: idempotencyKey ?? `auth:${purpose}:${randomUUID()}`,
     eventId: `auth:${purpose}`,
     templateKey: `auth_${purpose}`,
     classification: 'transactional',
