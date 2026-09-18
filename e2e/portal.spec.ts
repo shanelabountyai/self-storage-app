@@ -250,6 +250,10 @@ test.describe('signed in as the demo tenant', () => {
     // (4.1.3) rather than inserted with the message.
     await page.getByRole('group').filter({ hasText: 'Pay a different amount' }).click()
     const amount = page.getByLabel('Amount in dollars')
+    // B-324. PRD 01 §6.2's 44px, not a WCAG 2.1 AA rule — this field was a raw
+    // 36px `h-9` until then. `/pay/[token]` carries the same input but needs a
+    // live PaymentIntent to render, so it is held by the grep guard instead.
+    expect((await amount.boundingBox())!.height).toBeGreaterThanOrEqual(44)
     await amount.fill('1.00')
     await expect(
       page.getByRole('status').filter({ hasText: 'will not reopen your gate' }),

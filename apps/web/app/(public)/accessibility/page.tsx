@@ -2759,6 +2759,14 @@ function reviewedOn(locale: Locale): string {
 // neighbours (SC 1.3.1) and prints with them. The "later marked" note and the
 // no-email task detail now read in words rather than identifiers (D-15). No
 // route added; no visible line changes; `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-18, at B-324. The amount inputs on `/portal/pay` and
+// `/pay/[token]` went from a raw 36px `h-9` to `--control-h` (44px). As at
+// B-247, that is PRD 01 §6.2 met and **not** a WCAG 2.1 AA change (2.5.5 is
+// AAA, 2.5.8 is WCAG 2.2 and was already met at 36px), so there is nothing to
+// disclose or claim. `tests/customer-control-height.test.ts` now refuses any
+// `h-9` on a customer surface. No visible line changes; `LAST_REVIEWED` is not
+// bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

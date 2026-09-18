@@ -104,7 +104,7 @@ export function PayAmountForm({
           onChange={(event) => setTyped(event.target.value)}
           aria-invalid={problemId ? true : undefined}
           aria-describedby={problemId}
-          className="border-input bg-background h-9 rounded-md border px-2"
+          className="border-input bg-background h-(--control-h,2.75rem) rounded-md border px-2"
         />
       </label>
       {/* Rendered unconditionally and empty when there is nothing to say. A

@@ -154,7 +154,7 @@ export default async function PayLinkPage({
               defaultValue={amountProblemId ? requested : (amountCents / 100).toFixed(2)}
               aria-invalid={amountProblemId ? true : undefined}
               aria-describedby={amountProblemId}
-              className="border-input bg-background h-9 rounded-md border px-2"
+              className="border-input bg-background h-(--control-h,2.75rem) rounded-md border px-2"
             />
           </label>
           <button

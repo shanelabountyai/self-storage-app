@@ -10537,3 +10537,20 @@ The counter form's Method select was uncontrolled under `key={former | account |
 **What it left behind.** Operator finding 12 is recorded on the row: the receipt names units, not invoice numbers, so an AP department cannot apply the payment. It has no row, as the backlog says. The same `.replace(/_/g, ' ')` pattern remains in `app/admin/maintenance/page.tsx` and two refusal strings in `lib/pricing/tenant-rate-increases.ts`. Both are staff-only and outside this row. No row for either.
 
 **Verification.** Typecheck clean; lint clean (the same six warnings). `npm test -- tests/pos-db.test.ts tests/counter-card-account-db.test.ts tests/comms-db.test.ts tests/no-internal-identifiers.test.ts`: 281 passed.
+
+## B-324 — the two customer amount inputs are 36px tall (2026-09-18, `PENDING`)
+
+**What it built.**
+
+1. **Both amount inputs now use `h-(--control-h,2.75rem)`:** `components/portal/pay-amount-form.tsx` (`/portal/pay`) and `app/pay/[token]/page.tsx`. They were raw `h-9`, which is 36px.
+2. **`tests/customer-control-height.test.ts`** fails on any `h-9` class token under `app/portal`, `app/pay`, `app/(public)` or `components/{portal,checkout,site}`. The regex takes variant prefixes (`sm:h-9`) and ignores `h-90`, `min-h-9` and `h-9.5`, and the test asserts those cases itself. Before commit it was checked by putting `h-9` back: it failed, naming `pay-amount-form.tsx:107`.
+3. **`e2e/portal.spec.ts`** ("itemises the balance…") now checks that the "Amount in dollars" input's bounding box is ≥44px.
+
+**What it decided.**
+
+- **The token is inline, not `CONTROL_CLASS`.** `CONTROL_CLASS` lives in `components/admin/form.tsx`, and customer components do not import from admin. The row allowed either.
+- **This is PRD 01 §6.2, not WCAG 2.1 AA**, as the row says. The accessibility statement records a re-read; no visible line changes and `LAST_REVIEWED` does not move (D-115).
+
+**What it left behind.** `/pay/[token]`'s input has no e2e height assertion, because that screen needs a live Stripe PaymentIntent to render (the same limit B-314 records). It is covered by the grep guard and by carrying the same class. Admin control heights are untouched, by design.
+
+**Verification.** Typecheck clean; lint clean (the same six warnings). `tests/customer-control-height.test.ts`: 2 passed. The e2e test above on the production build: passed on desktop-chrome and mobile-chrome. I did not run the full sweep. CI owns it.
