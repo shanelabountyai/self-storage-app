@@ -1,12 +1,15 @@
 # Next
 
-**B-328 is done** (`e787410`, with the SHA follow-up in the next commit; both pushed). The nightly invoice run now bills the period that contains `through` for a lease of any age, and it back-bills nothing (**D-142**, owner's call). Outage catch-up relies on the scheduler replaying each missed business date. Tests are in `tests/invoices-db.test.ts`.
+**B-325 is done** (`f466377`, with the SHA follow-up in the next commit; both pushed). The business-account access email is now three short paragraphs, fact first, with one conditional per sentence in both languages. `tests/auth-email-conditionals.test.ts` asserts that.
 
 ## Start here
 
-**B-325**, the first open row in file order that is not owner-blocked: `authAccountAccess` is one 62-word sentence doing three jobs. It is low severity and a copy-only change. Read the row in full first; it caps how strongly the fix may be worded.
+**No buildable row is left.** Every open row in `06-backlog.md` is blocked (see the list below). The next session is an owner session:
 
-**Pre-existing e2e failure, not yet owned:** `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish`. See B-321's `PROGRESS.md` entry. Owner call: fix the title or fix the spec.
+1. **Decide `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish`**: fix the title or fix the spec. See B-321's `PROGRESS.md` entry. This is the only known red spec.
+2. **Or unblock B-301** by filling `.env.prod-ops`. B-325 was ordered ahead of it so the wording would settle before the backfill sends, and it now has.
+
+**New trap (B-325):** a sweep killed with 137 skips `afterAll`, and the orphaned fixtures break the NEXT run. Last time it was three `auth-flows` failures caused by a stale `auth-flows-test@example.com` tenant, and they also failed on `main`. Look for leftover test-email rows before reading auth code.
 
 ## Owner actions
 

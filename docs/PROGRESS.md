@@ -10624,7 +10624,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Lint and typecheck are clean. No schema change was made, so there is no drift to check. Full unit suite: 274 files passed and 1 skipped; 4,613 tests passed and 8 skipped (4,621, which is B-327's total plus the three new tests). No e2e was run: the only customer-facing change is admin copy, and CI owns the sweep.
 
-## B-325 — the business-account access email was one 62-word sentence doing three jobs (2026-09-18, `PENDING`)
+## B-325 — the business-account access email was one 62-word sentence doing three jobs (2026-09-18, `f466377`)
 
 **What it built.**
 
