@@ -1,10 +1,12 @@
 # Next
 
-**B-320 is done** (`ba141eb`, SHA follow-up next commit, both pushed). `/admin/pos/card/done` prints the same receipt table and Print control as cash, from `receiptRows` + `paymentCredits` (`components/admin/counter-receipt-table.tsx`). A business account takes Card at the counter as its **payer** (`chargeableAccount`), allocated undirected by `claimsFor(payer)` through the existing webhook. Unit suite: 4,597 passed, 8 skipped, of 4,605; `e2e/admin-pos.spec.ts` 32/32.
+**B-321 is done** (`f9d7859`, SHA follow-up next commit, both pushed). `/checkout/resume`, `/waitlist/cancel` and `/unsubscribe` now take their language from the record the token names (`messageLinkLocale`, `lib/i18n/link-locale.ts`), sent to the root layout in a proxy header. The proxy matcher now includes the two dotted-token routes it used to skip. Unsubscribe tokens sign the email's locale. Unit suite: 4,602 passed, 8 skipped, of 4,610. `e2e/message-link-locale.spec.ts` passed 8 of 8.
 
 ## Start here
 
-**B-321**, next in file order: the token landing pages reached from translated emails are English, and two dead-end. Read the row in full first.
+**B-322**, next in file order: a business-account payer is refused a prepayment with no reason and no way out (copy only). Read the row in full first.
+
+**Pre-existing e2e failure, not yet owned:** `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish` fails on both projects. The `<title>` is always `confemail.title`, but the spec expects the error heading. The details are in B-321's `PROGRESS.md` entry. Owner call: fix the title or fix the spec.
 
 **B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts.
 

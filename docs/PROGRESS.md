@@ -10478,7 +10478,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Typecheck and lint are clean (the six `_prev`/`_formData` warnings were already there). `e2e/admin-pos.spec.ts`: 32 passed of 32 on the production build, counting the two auth setup steps. Full unit suite: **4,597 passed, 8 skipped, of 4,605**, which is B-319's 4,600 plus this item's five.
 
-## B-321 — the pages a message links to speak that message's language, and the resume refusals are no longer dead ends (2026-09-18, `SHA-PENDING`)
+## B-321 — the pages a message links to speak that message's language, and the resume refusals are no longer dead ends (2026-09-18, `f9d7859`)
 
 **What it built.**
 
