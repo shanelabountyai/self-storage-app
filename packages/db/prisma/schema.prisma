@@ -1645,6 +1645,10 @@ model Invoice {
   /// `reservation_one_held_per_unit` and `delinquency_step_run_open_episode`:
   ///   invoice_one_rent_per_period — unique(leaseId, periodStart)
   ///                                 where "kind" = 'rent'
+  ///                                   and "status" <> 'void'
+  /// B-327 added the void exclusion (migration 20260918120000), so a voided
+  /// rent invoice releases its period for re-billing; `voidRentInvoice` unwinds
+  /// the promotion and referral marks it consumed in the same transaction.
   /// It was never the generator's key for anything but rent, and unscoped it
   /// silently capped a lease at ONE fee invoice per day: a move-out posting a
   /// cleaning fee and a damage fee on the same afternoon lost the second, and

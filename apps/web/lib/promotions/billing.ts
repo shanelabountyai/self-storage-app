@@ -158,7 +158,7 @@ export async function recaptureForLease(
 
 /// When this tenant's unbroken tenancy began — the start date of the oldest
 /// lease in the transfer chain, or this lease's own if it has never moved.
-async function tenancyStart(
+export async function tenancyStart(
   leaseId: string,
   ownStart: Date,
   client: Prisma.TransactionClient | typeof prisma,

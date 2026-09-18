@@ -1,8 +1,10 @@
-import { prisma } from '@storage/db'
+import { prisma, type Prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
-import { reconcile, type ReconciliationInput } from '@storage/core/billing'
+import { periodStartsBetween, reconcile, type BillingPolicy, type ReconciliationInput } from '@storage/core/billing'
 
 import { reconciliationInputs } from '@/lib/admin/ledger'
+import { tenancyStart } from '@/lib/promotions/billing'
+import { REFERRAL_DISCOUNT_PREFIX } from '@/lib/referrals/billing'
 
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import { assertFacilityAccess, checkMonetaryAuthority, nextApproverRole } from '@/lib/rbac/authorize'
@@ -332,15 +334,17 @@ export type VoidInvoiceResult = { ok: true; amountCents: number; number: string 
 /// rather than as an uninvoiced charge and the lease still reconciles
 /// afterwards — it is NOT `isCorrection`.
 ///
-/// **Re-billing the period is not built.** `invoice_one_rent_per_period` is a
-/// partial unique index on `(leaseId, periodStart) where kind = 'rent'` and it
-/// does not exclude voided rows, so the generator will not raise that period
-/// again. Excluding them is four lines of SQL and was deliberately not done
-/// here: `markDiscountApplied` and `markReferralRewardApplied` are consumed per
-/// period inside the same transaction that raised the invoice, so a re-raise
-/// today silently drops a promotion a tenant was promised. B-327 owns it. The
-/// working repair in the meantime is `postFeeCharge`, which raises a correctly
-/// priced charge under its own authority.
+/// **B-327: the period is released, and so is everything the invoice spent.**
+/// `invoice_one_rent_per_period` excludes voided rows, so the next nightly run
+/// bills the period again at the lease's current rate. That alone would have
+/// re-billed it at FULL price: the promotion period and the referral rewards
+/// the original carried were marked consumed in the transaction that raised
+/// it, and `discountForLeasePeriod` / `referralRewardsForLease` would have
+/// answered "already given". `releaseRentInvoiceCredits` unwinds exactly those
+/// marks, in the void's own transaction, so the reissue carries what the
+/// original carried — the same snapshotted amount, because the period index is
+/// calendar-derived and the schedule was frozen at redemption. It cannot re-roll
+/// a discount: it only returns a period this invoice held.
 export async function voidRentInvoice(
   actor: Actor,
   input: { invoiceId: string; reasonCode: string; note?: string },
@@ -387,6 +391,7 @@ export async function voidRentInvoice(
     })
 
     await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'void' } })
+    await releaseRentInvoiceCredits(tx, invoice.id)
 
     await recordAudit(
       {
@@ -408,4 +413,61 @@ export async function voidRentInvoice(
   })
 
   return { ok: true, amountCents: outstanding, number: invoice.number }
+}
+
+/// B-327. Hands back the promotion period and referral rewards a voided rent
+/// invoice consumed, so the re-raise can spend them again — once.
+///
+/// Referral rewards are recorded against the invoice id, so they are exact. The
+/// promotion records a period INDEX, so it is recomputed the way
+/// `generateInvoices` counts it — from the tenancy's first billed period, across
+/// a transfer — and released only when the invoice actually carries the
+/// promotion's line. The evidence is the line, not the index: an index can be
+/// spent without this invoice having been the one that spent it.
+async function releaseRentInvoiceCredits(tx: Prisma.TransactionClient, invoiceId: string): Promise<void> {
+  await tx.referral.updateMany({ where: { refereeRewardInvoiceId: invoiceId }, data: { refereeRewardInvoiceId: null } })
+  await tx.referral.updateMany({
+    where: { referrerRewardInvoiceId: invoiceId },
+    data: { referrerRewardInvoiceId: null },
+  })
+
+  const invoice = await tx.invoice.findUniqueOrThrow({
+    where: { id: invoiceId },
+    select: {
+      periodStart: true,
+      lineItems: { where: { type: 'discount' }, select: { description: true } },
+      lease: {
+        select: {
+          id: true,
+          startDate: true,
+          billingDay: true,
+          facility: { select: { billingPolicy: true } },
+          promoRedemption: { select: { id: true, appliedPeriods: true } },
+        },
+      },
+    },
+  })
+  const redemption = invoice.lease.promoRedemption
+  const carriedPromotion = invoice.lineItems.some((line) => !line.description.startsWith(REFERRAL_DISCOUNT_PREFIX))
+  if (!redemption || !carriedPromotion) return
+
+  const origin = await tenancyStart(invoice.lease.id, invoice.lease.startDate, tx)
+  const periodIndex =
+    periodStartsBetween(
+      invoice.lease.facility.billingPolicy as BillingPolicy,
+      invoice.lease.billingDay,
+      startOfUtcDay(origin),
+      invoice.periodStart,
+      600,
+    ).length - 1
+  if (!redemption.appliedPeriods.includes(periodIndex)) return
+
+  await tx.promoRedemption.update({
+    where: { id: redemption.id },
+    data: { appliedPeriods: redemption.appliedPeriods.filter((index) => index !== periodIndex) },
+  })
+}
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
 }

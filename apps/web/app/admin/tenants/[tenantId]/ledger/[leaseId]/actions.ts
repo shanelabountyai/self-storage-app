@@ -160,6 +160,6 @@ export async function voidInvoiceAction(
 
   revalidateLedger(tenantId, leaseId)
   return success(
-    `Invoice ${result.number} voided and ${formatCents(result.amountCents)} taken off the ledger. This period will not be billed again — raise a corrected charge if it should be.`,
+    `Invoice ${result.number} voided and ${formatCents(result.amountCents)} taken off the ledger. While the lease is active, the next billing run bills the period again at its current rate.`,
   )
 }

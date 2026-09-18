@@ -185,8 +185,9 @@ export function LedgerCorrections({
           </h3>
           <p className="text-muted-foreground max-w-prose text-xs text-pretty">
             For an invoice that should never have been raised. The charge and the entry that
-            cancels it both stay on the ledger. The period will not be billed again — raise a
-            corrected charge from the tenant profile if it should be.
+            cancels it both stay on the ledger. While the lease is active, the next billing run
+            bills the period again at the lease&rsquo;s current rate, with any promotion or
+            referral credit this invoice carried.
           </p>
           <ul className="flex flex-col gap-3">
             {voidableInvoices.map((invoice) => (

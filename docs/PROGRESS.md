@@ -10576,3 +10576,29 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - **B-324's guard failed on the commit that added it.** `tests/customer-control-height.test.ts` matched its own re-read note in the accessibility page, which quotes `h-9` (`page.tsx:2764`, `:2768`). B-324 checked the guard before it wrote that note. The guard now skips `//` comment lines, as `scroll-regions.test.ts` already does.
 
 **Verification.** Typecheck and lint clean. Unit tests (`i18n`, `portal-dashboard`, `portal-payment`, `portal-billing-account-db`, `customer-control-height`, `scroll-regions`): 74 passed. `e2e/portal-billing-account.spec.ts` on the production build: 16 passed. I did not run the full sweep. CI owns it.
+
+## B-327 — a voided rent invoice's period can never be billed again (2026-09-18, `SHA_PENDING`)
+
+**What it built.**
+
+1. **Migration `20260918120000_b327_rent_period_excludes_void`** recreates `invoice_one_rent_per_period` with `AND "status" <> 'void'`. After a void, the next nightly run bills the period again at the lease's current rate. The generator is still idempotent for live rows.
+2. **`voidRentInvoice` now calls `releaseRentInvoiceCredits` inside its own transaction** (`apps/web/lib/billing/corrections.ts`). It clears `refereeRewardInvoiceId` / `referrerRewardInvoiceId` on any referral that points at the voided invoice. It also removes the invoice's period index from the lease's `PromoRedemption.appliedPeriods`, but only when the invoice carries a promotion discount line (a discount line without the `Referral credit` prefix). It recomputes the index the way `generateInvoices` counts it: from the tenancy's first billed period, across a transfer. `tenancyStart` in `lib/promotions/billing.ts` is now exported for this.
+3. **The admin void copy** (`ledger-corrections.tsx` and the action's success message) no longer says "the period will not be billed again". It now says the next run re-bills an active lease's period at the current rate, with any promotion or referral credit the voided invoice carried.
+4. **`tests/void-rebill-db.test.ts`** has four cases, and each one runs the real generator both before and after the void: (a) a promotion period is re-billed with the same discount line, `appliedPeriods` ends at `[0]`, a third run creates nothing, and October still gets period 1's different amount; (b) a period with no promotion re-bills with identical lines; (c) on a transferred lease, September is released as period 2 of the tenancy, not period 0; (d) a referee reward moves to the reissue and is not repeated in October. With the release call commented out, cases a, c and d fail and b passes, as it should.
+
+**What it decided.**
+
+- **The row's first option: release and unwind, not "void and reissue".** The period index comes from the calendar and the schedule was frozen at redemption, so the re-raise gets the same amount. A void cannot re-roll a discount, because it only returns a period that this invoice held. The reissue uses the lease's current rate. That is the point when the rate was the error.
+- **Marks are released with the void, not with the re-raise.** A lease that is never re-billed (for example, one moved out before the next run) was not given that period's discount, so `appliedPeriods` must not say it was. Recapture (`recaptureForLease`) and promo ROI both read `appliedPeriods`, and both now see the truth.
+- **A line on the invoice is the evidence, not the index alone.** A spent index is released only if this invoice shows the promotion's line.
+
+**What it left behind.**
+
+- **A voided period now re-bills on its own.** A manager who voids rent on an active lease because the tenant should never owe that period at all (not because the amount was wrong) will see it raised again by the next run. The paths the row listed are still covered: a moved-out lease is skipped by the generator's `moveOutDate` check, and a non-occupying lease is not generated at all. There is no "void and do not re-bill" option. No row owns one, and none has been asked for.
+- A redemption that followed a transfer to a newer lease is not released when an invoice on the OLD lease is voided (`promoRedemption` is keyed to the current lease). The old lease is no longer occupying, so it is never re-billed either way.
+
+**Bugs found along the way.**
+
+- **The nightly run never bills a lease past its twelfth period → B-328**, added directly after this row. `generateInvoices` counts `periodStartsBetween` from the lease start with the default `maxPeriods = 12`. A `first_of_month` lease that started 2025-01-01, run through 2026-09-20, yields 12 periods ending 2026-01-01, and every period after that is never invoiced. Nothing reports it, because a lease with no invoice is not overdue. This is not fixed here. It is a separate money path, and the row asks for a production count first.
+
+**Verification.** Lint and typecheck are clean. Schema drift was checked against local `public` after `migrate deploy`: no difference. Full unit suite: 274 files passed and 1 skipped; 4,610 tests passed and 8 skipped (4,618). No e2e was run: nothing customer-facing changed, and CI owns the sweep. The Neon dev branch is now four migrations behind (`npm run db:migrate:cloud`).
