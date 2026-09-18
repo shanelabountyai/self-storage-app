@@ -33,6 +33,7 @@ import {
 import { paymentsEnabled } from "@/lib/payments/stripe";
 import { OCCUPYING_LEASE_STATUSES } from "@storage/core/inventory";
 import { daysPastDue } from "@storage/core/metrics";
+import { formatCents } from "@/lib/format";
 
 // PRD 02 §4.8 US-32. Money taken across the counter.
 //
@@ -611,12 +612,21 @@ function timezoneOffsetMs(at: Date, timezone: string): number {
 // states — a client that never comes back must not lose the payment.
 
 export type CounterCharge = {
+  /// For an account, the ANCHOR lease: where the webhook's `postPaymentLedger`
+  /// puts a remainder no invoice claimed, exactly as `accountAnchor` does for a
+  /// check. Not what the money settles — `claimsFor(payer)` decides that.
   leaseId: string;
+  /// Who is charged: the lease's tenant, or an account's PAYER (B-320). This is
+  /// the Stripe customer, and the `Payment.tenantId` that `claimsFor` spreads.
   tenantId: string;
   facilityId: string;
   tenantName: string;
   unitNumber: string;
   balanceCents: number;
+  accountId: string | null;
+  /// What is being paid for, in the words the screens use: "unit C-7", or
+  /// "Acme Moving (units C-3, C-7)".
+  subject: string;
 };
 
 /// The lease a staffer is allowed to take money for, with what it owes.
@@ -667,6 +677,73 @@ export async function chargeableLease(
     tenantName: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
     unitNumber: lease.unit.number,
     balanceCents: balance._sum.amountCents ?? 0,
+    accountId: null,
+    subject: `unit ${lease.unit.number}`,
+  };
+}
+
+/// B-320. A whole business account as a card charge: the PAYER is the Stripe
+/// customer, so the webhook allocates it by `claimsFor(payer)` exactly as
+/// `recordCounterPayment` allocates the account's check — undirected, across
+/// every unit on the account (B-280). B-305 governs both paths; this one does
+/// not pre-empt it by narrowing.
+///
+/// Needs an open lease on the account, the same rule `chargeableLease` keeps
+/// for one unit: a card at the counter is not widened to closed leases here.
+/// Facility from the account, never the switcher, for `chargeableLease`'s
+/// reason.
+export async function chargeableAccount(
+  actor: Actor,
+  accountId: string,
+): Promise<CounterCharge | null> {
+  if (actor.kind !== "staff") throw new ForbiddenError("Staff access required");
+
+  const account = await prisma.billingAccount.findFirst({
+    where: { id: accountId },
+    select: {
+      id: true,
+      name: true,
+      facilityId: true,
+      payerTenantId: true,
+      payer: { select: { firstName: true, lastName: true } },
+      leases: {
+        orderBy: { startDate: "asc" },
+        select: { id: true, facilityId: true, status: true, unit: { select: { number: true } } },
+      },
+    },
+  });
+  if (!account) return null;
+
+  assertFacilityAccess(actor, account.facilityId);
+  if (!can(actor, "payments:take", account.facilityId)) {
+    throw new ForbiddenError(
+      "Missing permission payments:take",
+      "payments:take",
+      account.facilityId,
+    );
+  }
+
+  // The picker's own set (`counterPayableAccounts`), so the figure the card
+  // screen charges is the figure the staffer was just shown.
+  const leases = account.leases.filter(
+    (lease) =>
+      lease.facilityId === account.facilityId &&
+      [...OCCUPYING_LEASE_STATUSES, "ended"].includes(lease.status),
+  );
+  const anchor = leases.find((lease) => lease.status !== "ended");
+  if (!anchor) return null;
+
+  const balances = await balancesFor(leases.map((lease) => lease.id));
+  const units = leases.map((lease) => lease.unit.number).sort();
+  return {
+    leaseId: anchor.id,
+    tenantId: account.payerTenantId,
+    facilityId: account.facilityId,
+    tenantName: `${account.payer.firstName} ${account.payer.lastName}`,
+    unitNumber: units.join(", "),
+    balanceCents: leases.reduce((sum, lease) => sum + (balances.get(lease.id) ?? 0), 0),
+    accountId: account.id,
+    subject: `${account.name} (units ${units.join(", ")})`,
   };
 }
 
@@ -717,8 +794,11 @@ export async function startCounterCardPayment(
       tenantId: lease.tenantId,
       leaseId: lease.leaseId,
       amountCents,
-      reference: `counter:${lease.leaseId}:${amountCents}:${lease.balanceCents}`,
-      description: `Counter payment — unit ${lease.unitNumber}`,
+      // B-320. An account is keyed by the ACCOUNT: its anchor lease is also a
+      // unit somebody can be charged for alone, and the two are different
+      // payments against different balances.
+      reference: `counter:${lease.accountId ? `account:${lease.accountId}` : lease.leaseId}:${amountCents}:${lease.balanceCents}`,
+      description: `Counter payment — ${lease.subject}`,
       // The tenant handed over a card to settle a balance, not to enrol in
       // anything. Autopay enrolment has its own disclosure (D-11a) and its own
       // screen; retaining a card because it passed through a staff-operated
@@ -797,8 +877,8 @@ export async function chargeCardOnFile(
       // Same key shape as the on-session counter charge above and for the same
       // reason, in its own namespace: a staffer who presses this twice while
       // the first round trip is in flight charges the card once.
-      reference: `counter-cof:${lease.leaseId}:${amountCents}:${lease.balanceCents}`,
-      description: `Counter payment — unit ${lease.unitNumber}`,
+      reference: `counter-cof:${lease.accountId ? `account:${lease.accountId}` : lease.leaseId}:${amountCents}:${lease.balanceCents}`,
+      description: `Counter payment — ${lease.subject}`,
       offSession: true,
       paymentMethodId: tenant.stripeDefaultPaymentMethodId,
     });
@@ -812,6 +892,7 @@ export async function chargeCardOnFile(
       context: {
         amountCents,
         leaseId: lease.leaseId,
+        accountId: lease.accountId,
         // The whole point of the audit row: a charge nobody was standing in
         // front of, made by a named person on a stored card.
         offSession: true,
@@ -927,6 +1008,9 @@ export type CounterPayableAccount = {
   balanceCents: number;
   /// The worst unit's, by the same `daysPastDue` the unit picker shows.
   daysPastDue: number;
+  /// Every unit on it moved out of: no Card, because `chargeableAccount` needs
+  /// an open lease (B-320).
+  isFormer: boolean;
 };
 
 /// B-280. The business accounts the counter can take ONE payment for, at this
@@ -981,6 +1065,7 @@ export async function counterPayableAccounts(
         },
         select: {
           id: true,
+          status: true,
           unit: { select: { number: true } },
           invoices: {
             where: { kind: "rent" },
@@ -1011,16 +1096,19 @@ export async function counterPayableAccounts(
         account.leases.flatMap((lease) => lease.invoices),
         now,
       ),
+      isFormer: account.leases.every((lease) => lease.status === "ended"),
     }));
 }
 
 export type CounterReceipt = {
-  receiptNumber: number;
+  /// Null for a card: the receipt book is the cash drawer's (US-32), and a
+  /// card's record is the processor's.
+  receiptNumber: number | null;
   facilityName: string;
   timezone: string;
   tenantId: string;
   tenantName: string;
-  method: "cash" | "check" | "money_order";
+  method: "cash" | "check" | "money_order" | "card";
   status: string;
   checkNumber: string | null;
   amountCents: number;
@@ -1035,10 +1123,15 @@ export type CounterReceipt = {
 };
 
 /// B-281. The printable receipt for a payment taken at the counter by cash,
-/// check or money order — the screen `takePaymentAction` lands on.
+/// check or money order — the screen `takePaymentAction` lands on — and, since
+/// B-320, for a card (`card/done`). One read for both, so the two printouts
+/// cannot name different units for the same credits.
 ///
-/// Null for any payment the counter did not receipt (a card, a portal payment),
-/// so an id in a URL cannot turn into a receipt this desk never issued.
+/// Null for a cash, check or money order payment with no receipt number (one
+/// the counter did not take), so an id in a URL cannot turn into a receipt this
+/// desk never issued. A card is receipted whoever raised it: the tenant asking
+/// at the desk for a printout of a card payment is the same request either way,
+/// and `payments:take` at its facility already reads it on the tenant profile.
 /// Authorised at the PAYMENT's facility rather than the switcher's, because the
 /// id comes from a URL.
 export async function counterReceipt(
@@ -1049,8 +1142,10 @@ export async function counterReceipt(
   const payment = await prisma.payment.findFirst({
     where: {
       id: paymentId,
-      receiptNumber: { not: null },
-      method: { in: ["cash", "check", "money_order"] },
+      OR: [
+        { receiptNumber: { not: null }, method: { in: ["cash", "check", "money_order"] } },
+        { method: "card" },
+      ],
     },
     select: {
       facilityId: true,
@@ -1079,7 +1174,7 @@ export async function counterReceipt(
 
   const credits = await paymentCredits(paymentId);
   return {
-    receiptNumber: payment.receiptNumber!,
+    receiptNumber: payment.receiptNumber,
     facilityName: payment.facility.name,
     timezone: payment.facility.timezone,
     tenantId: payment.tenant.id,
@@ -1097,4 +1192,53 @@ export async function counterReceipt(
     credits: credits.lines,
     balanceCents: credits.balanceCents,
   };
+}
+
+const METHOD_LABEL = {
+  cash: "Cash",
+  check: "Check",
+  money_order: "Money order",
+  card: "Card",
+} as const;
+
+export type ReceiptRow = { label: string; value: string; strong?: boolean };
+
+/// B-320. The rows of the printed receipt, for cash and card alike — the one
+/// source `CounterReceiptTable` renders, so a card's printout and a cash
+/// printout for the same credits cannot drift (B-278's guarantee, not forked).
+export function receiptRows(receipt: CounterReceipt): ReceiptRow[] {
+  const received = new Intl.DateTimeFormat("en-US", {
+    timeZone: receipt.timezone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(receipt.receivedAt);
+  const method = METHOD_LABEL[receipt.method];
+  return [
+    { label: "Received from", value: receipt.tenantName },
+    { label: "Date", value: received },
+    {
+      label: "Paid by",
+      value: receipt.checkNumber ? `${method} #${receipt.checkNumber}` : method,
+    },
+    ...receipt.credits.map((credit) => ({
+      label: `Unit ${credit.unitNumber}`,
+      value: formatCents(credit.amountCents),
+    })),
+    { label: "Amount paid", value: formatCents(receipt.amountCents), strong: true },
+    ...(receipt.tenderedCents !== null
+      ? [
+          { label: "Cash tendered", value: formatCents(receipt.tenderedCents) },
+          { label: "Change", value: formatCents(receipt.changeCents) },
+        ]
+      : []),
+    {
+      label: receipt.balanceCents < 0 ? "Credit on account" : "Balance now",
+      value: formatCents(Math.abs(receipt.balanceCents)),
+    },
+    ...(receipt.takenBy ? [{ label: "Taken by", value: receipt.takenBy }] : []),
+  ];
 }

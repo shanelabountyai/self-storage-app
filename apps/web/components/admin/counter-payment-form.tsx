@@ -71,21 +71,19 @@ export function CounterPaymentForm({
   const account = accounts.find((a) => `${ACCOUNT}${a.accountId}` === subject)
   const lease = account ? null : (leases.find((l) => l.leaseId === subject) ?? leases[0])
   const selected = account
-    ? { ...account, heading: account.name, isFormer: false }
+    ? { ...account, heading: account.name }
     : { ...lease!, heading: lease!.unitNumber }
 
-  // Card is the one method a subject can rule out: an account's payer is not
-  // any one unit's tenant, and the card screen needs an open lease.
+  // Card is the one method a subject can rule out: the card screen needs an
+  // open lease. An account takes one since B-320, charged to its payer.
   function chooseSubject(next: string) {
     setSubject(next)
     const nextAccount = accounts.find((a) => `${ACCOUNT}${a.accountId}` === next)
-    const nextLease = leases.find((l) => l.leaseId === next)
-    if (method === 'card' && (nextAccount || nextLease?.isFormer)) {
+    const nextFormer = (nextAccount ?? leases.find((l) => l.leaseId === next))?.isFormer
+    if (method === 'card' && nextFormer) {
       setMethod('cash')
       setMethodReset(
-        nextAccount
-          ? 'Method changed from Card to Cash: a business account pays by cash, check or money order.'
-          : 'Method changed from Card to Cash: this unit has been moved out of, and a card needs an open lease.',
+        `Method changed from Card to Cash: ${nextAccount ? 'every unit on this account' : 'this unit'} has been moved out of, and a card needs an open lease.`,
       )
     } else {
       setMethodReset('')
@@ -153,7 +151,7 @@ export function CounterPaymentForm({
         <option value="cash">Cash</option>
         <option value="check">Check</option>
         <option value="money_order">Money order</option>
-        {!selected.isFormer && !account && <option value="card">Card</option>}
+        {!selected.isFormer && <option value="card">Card</option>}
       </Field>
       {/* B-319. Always mounted so the reset is announced, not just shown. */}
       <p role="status" className="col-span-2 text-sm font-medium text-pretty empty:hidden">
@@ -201,7 +199,7 @@ export function CounterPaymentForm({
       />
       <p className="text-muted-foreground col-span-2 text-xs text-pretty">
         {account
-          ? `Settles ${account.name}’s oldest invoices first, across ${account.unitNumbers.join(', ')}, and is receipted to ${account.payerName}. Cash, check or money order only.`
+          ? `Settles ${account.name}’s oldest invoices first, across ${account.unitNumbers.join(', ')}, and is receipted to ${account.payerName}. ${account.isFormer ? 'Every unit on it has been moved out of — cash, check or money order only.' : `Card takes you to the card screen, where ${account.payerName}’s card is charged — the one they hand over, or the one on file.`}`
           : selected.isFormer
           ? `Settles unit ${selected.heading} only; anything over its balance stays as credit on it. This unit has been moved out of — cash, check or money order only, because a card at the counter needs an open lease.`
           : `Settles unit ${selected.heading} only; anything over its balance stays as credit on it. Card takes you to the card screen with this amount, where the tenant enters their own details — or you can charge the card they have on file.`}

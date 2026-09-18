@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { chargeableLease } from '@/lib/admin/pos'
+import { chargeableAccount, chargeableLease, counterReceipt } from '@/lib/admin/pos'
 import { paymentReceipt } from '@/lib/portal/payment'
 import { formatCents } from '@/lib/format'
+import { CounterReceiptTable } from '@/components/admin/counter-receipt-table'
+import { FocusedHeading, PrintButton } from '@/components/admin/receipt-controls'
 
 export const metadata = {
   title: 'Card payment',
@@ -19,18 +21,30 @@ export const metadata = {
 // `chargeableLease` is what authorises this — it checks `payments:take` at the
 // LEASE's facility — and it is also where the tenant id comes from, so
 // `paymentReceipt`'s own tenant scoping still holds and a payment id in a URL
-// cannot read a payment belonging to somebody else's lease.
+// cannot read a payment belonging to somebody else's lease. For a business
+// account (B-320) the same holds through `chargeableAccount`, whose tenant is
+// the payer the card was charged to.
+//
+// B-320. Once the webhook has settled it, the receipt is the cash receipt's
+// table and Print control, read by the same `counterReceipt` from the same
+// `paymentCredits` — never a second rendering of the same money.
 
 export default async function CounterCardDonePage({
   searchParams,
 }: {
-  searchParams: Promise<{ payment?: string; lease?: string }>
+  searchParams: Promise<{ payment?: string; lease?: string; account?: string }>
 }) {
-  const { payment: paymentId, lease: leaseId } = await searchParams
+  const { payment: paymentId, lease: leaseId, account: accountId } = await searchParams
   const actor = await requireStaffActor()
 
-  const lease = leaseId ? await chargeableLease(actor, leaseId) : null
+  const lease = accountId
+    ? await chargeableAccount(actor, accountId)
+    : leaseId
+      ? await chargeableLease(actor, leaseId)
+      : null
   const receipt = lease && paymentId ? await paymentReceipt(lease.tenantId, paymentId) : null
+  const printable =
+    receipt?.status === 'succeeded' && paymentId ? await counterReceipt(actor, paymentId) : null
 
   if (!lease || !receipt) {
     return (
@@ -48,14 +62,16 @@ export default async function CounterCardDonePage({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-lg font-semibold">
+    <div className="flex max-w-lg flex-col gap-6 print:max-w-none">
+      {/* Focus follows the outcome here as it does on the cash receipt (2.4.3):
+          the Element's Pay button that had it was on the page this replaced. */}
+      <FocusedHeading className="text-lg font-semibold">
         {receipt.status === 'succeeded'
           ? 'Payment taken'
           : receipt.status === 'failed'
             ? 'That card was declined'
             : 'Payment sent'}
-      </h1>
+      </FocusedHeading>
 
       {/* `role="status"` and `role="alert"` rather than plain paragraphs: this
           page is reached by a client-side navigation from the Element, so the
@@ -78,26 +94,25 @@ export default async function CounterCardDonePage({
         </p>
       )}
 
-      <dl className="border-input flex flex-col gap-2 rounded-lg border p-4 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Amount</dt>
-          <dd className="font-medium tabular-nums">{formatCents(receipt.amountCents)}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Tenant</dt>
-          <dd>
-            {lease.tenantName} — unit {lease.unitNumber}
-          </dd>
-        </div>
-        {receipt.status === 'succeeded' && receipt.balanceCents !== null && (
-          <div className="flex justify-between gap-4 border-t pt-2 font-medium">
-            <dt>Balance now</dt>
-            <dd className="tabular-nums">{formatCents(Math.max(receipt.balanceCents, 0))}</dd>
+      {printable ? (
+        <CounterReceiptTable receipt={printable} />
+      ) : (
+        <dl className="border-input flex flex-col gap-2 rounded-lg border p-4 text-sm">
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Amount</dt>
+            <dd className="font-medium tabular-nums">{formatCents(receipt.amountCents)}</dd>
           </div>
-        )}
-      </dl>
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted-foreground">Tenant</dt>
+            <dd>
+              {lease.tenantName} — {lease.subject}
+            </dd>
+          </div>
+        </dl>
+      )}
 
-      <div className="flex flex-wrap gap-4 text-sm">
+      <div className="flex flex-wrap items-center gap-4 text-sm print:hidden">
+        {printable && <PrintButton />}
         <Link href="/admin/pos" className="underline underline-offset-2">
           Back to POS
         </Link>

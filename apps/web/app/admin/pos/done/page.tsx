@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { counterReceipt } from '@/lib/admin/pos'
 import { formatCents } from '@/lib/format'
+import { CounterReceiptTable } from '@/components/admin/counter-receipt-table'
 import { FocusedHeading, PrintButton } from '@/components/admin/receipt-controls'
 
 export const metadata = {
@@ -16,23 +17,6 @@ export const metadata = {
 //
 // Printed with the admin header and nav hidden (`print:hidden` on both) and the
 // controls below hidden with them; what is left is text in a table.
-
-const METHOD_LABEL = { cash: 'Cash', check: 'Check', money_order: 'Money order' } as const
-
-function formatReceivedAt(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  }).format(date)
-}
-
-const ROW_HEADER = 'py-2 pr-4 text-left align-top font-medium'
-const CELL = 'py-2 text-right align-top tabular-nums'
 
 export default async function CounterReceiptPage({
   searchParams,
@@ -58,10 +42,6 @@ export default async function CounterReceiptPage({
     )
   }
 
-  const paidBy = receipt.checkNumber
-    ? `${METHOD_LABEL[receipt.method]} #${receipt.checkNumber}`
-    : METHOD_LABEL[receipt.method]
-
   return (
     <div className="flex max-w-lg flex-col gap-6 print:max-w-none">
       <FocusedHeading className="text-lg font-semibold">
@@ -81,61 +61,7 @@ export default async function CounterReceiptPage({
         </p>
       )}
 
-      <table className="w-full text-sm">
-        <caption className="pb-2 text-left font-medium">
-          {receipt.facilityName} — payment received
-        </caption>
-        <tbody>
-          <tr className="border-b">
-            <th scope="row" className={ROW_HEADER}>Received from</th>
-            <td className="py-2 text-right align-top">{receipt.tenantName}</td>
-          </tr>
-          <tr className="border-b">
-            <th scope="row" className={ROW_HEADER}>Date</th>
-            <td className="py-2 text-right align-top">
-              {formatReceivedAt(receipt.receivedAt, receipt.timezone)}
-            </td>
-          </tr>
-          <tr className="border-b">
-            <th scope="row" className={ROW_HEADER}>Paid by</th>
-            <td className="py-2 text-right align-top">{paidBy}</td>
-          </tr>
-          {receipt.credits.map((credit) => (
-            <tr key={credit.leaseId} className="border-b">
-              <th scope="row" className={ROW_HEADER}>Unit {credit.unitNumber}</th>
-              <td className={CELL}>{formatCents(credit.amountCents)}</td>
-            </tr>
-          ))}
-          <tr className="border-b">
-            <th scope="row" className={ROW_HEADER}>Amount paid</th>
-            <td className={`${CELL} font-medium`}>{formatCents(receipt.amountCents)}</td>
-          </tr>
-          {receipt.tenderedCents !== null && (
-            <>
-              <tr className="border-b">
-                <th scope="row" className={ROW_HEADER}>Cash tendered</th>
-                <td className={CELL}>{formatCents(receipt.tenderedCents)}</td>
-              </tr>
-              <tr className="border-b">
-                <th scope="row" className={ROW_HEADER}>Change</th>
-                <td className={CELL}>{formatCents(receipt.changeCents)}</td>
-              </tr>
-            </>
-          )}
-          <tr className="border-b">
-            <th scope="row" className={ROW_HEADER}>
-              {receipt.balanceCents < 0 ? 'Credit on account' : 'Balance now'}
-            </th>
-            <td className={CELL}>{formatCents(Math.abs(receipt.balanceCents))}</td>
-          </tr>
-          {receipt.takenBy && (
-            <tr>
-              <th scope="row" className={ROW_HEADER}>Taken by</th>
-              <td className="py-2 text-right align-top">{receipt.takenBy}</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <CounterReceiptTable receipt={receipt} />
 
       <div className="flex flex-wrap items-center gap-4 text-sm print:hidden">
         <PrintButton />

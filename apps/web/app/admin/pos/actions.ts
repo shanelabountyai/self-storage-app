@@ -71,16 +71,12 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
   // old refusal read like a dead end. The amount is validated ABOVE this line,
   // so nothing unparseable reaches the query string.
   if (method === 'card') {
-    // The card screen charges one unit's tenant (`chargeableLease`), which for
-    // an account is not the payer — so it is never where an account's money goes.
-    if (accountId) {
-      return fieldError({
-        method: 'A business account pays by cash, check or money order at the counter.',
-      })
-    }
-    redirect(
-      `/admin/pos/card?lease=${encodeURIComponent(leaseId)}&amount=${(amountCents / 100).toFixed(2)}`,
-    )
+    // B-320. An account goes to the same screen keyed by the account, which
+    // charges its PAYER — never one unit's tenant.
+    const target = accountId
+      ? `account=${encodeURIComponent(accountId)}`
+      : `lease=${encodeURIComponent(leaseId)}`
+    redirect(`/admin/pos/card?${target}&amount=${(amountCents / 100).toFixed(2)}`)
   }
 
   const result = await recordCounterPayment(actor, {

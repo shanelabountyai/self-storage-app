@@ -64,7 +64,8 @@ test.describe('signed in as the demo owner', () => {
 
   // B-280. Read-only on purpose: the demo account's balance is asserted by the
   // portal suites, so this finds the account and never takes money against it.
-  test('finds a business account by name and offers it as one payment, with no card', async ({
+  // B-320: with Card among its methods — the payer's card, on the card screen.
+  test('finds a business account by name and offers it as one payment, card included', async ({
     page,
   }) => {
     await page.goto(`/admin/pos?q=${encodeURIComponent(DEMO_BUSINESS_ACCOUNT_NAME)}`)
@@ -75,7 +76,7 @@ test.describe('signed in as the demo owner', () => {
     await expect(
       picker.getByRole('option', { name: new RegExp(`^${DEMO_BUSINESS_ACCOUNT_NAME} — `) }),
     ).toHaveCount(1)
-    await expect(page.getByLabel('Method').locator('option[value="card"]')).toHaveCount(0)
+    await expect(page.getByLabel('Method').locator('option[value="card"]')).toHaveCount(1)
 
     await assertNoAxeViolations(page)
   })
@@ -83,7 +84,9 @@ test.describe('signed in as the demo owner', () => {
   // B-319. Read-only: nothing here is submitted against the account. The
   // Method select used to remount at Cash whenever the picker crossed between
   // an account and a unit, leaving a typed check number behind it.
-  test('Method survives a change of payer, and a Card reset says why', async ({ page }) => {
+  // B-320 took away the reset this used to end on: an account takes a card
+  // now, so Card survives the crossing like every other method.
+  test('Method survives a change of payer, Card included', async ({ page }) => {
     // The account's payer holds no unit, so the page with BOTH an account and a
     // unit on it is one of the two "Alex Active" tenants whose units it pays for.
     await page.goto('/admin/pos?q=Alex%20Active')
@@ -112,10 +115,8 @@ test.describe('signed in as the demo owner', () => {
     await picker.selectOption(unitValue!)
     await method.selectOption('card')
     await picker.selectOption(accountValue!)
-    await expect(method).toHaveValue('cash')
-    await expect(page.getByRole('status').filter({ hasText: 'Method changed from Card to Cash' })).toContainText(
-      /business account pays by cash, check or money order/,
-    )
+    await expect(method).toHaveValue('card')
+    await expect(page.getByRole('status').filter({ hasText: 'Method changed' })).toHaveCount(0)
   })
 
   test('cash with a check number is refused on the Method field', async ({ page }) => {
@@ -213,6 +214,28 @@ test.describe('card at the counter', () => {
     const summary = page.getByRole('main').getByRole('definition').filter({ hasText: '$35.00' })
     await expect(page.getByText('Charging today')).toBeVisible()
     await expect(summary).toHaveCount(1)
+  })
+
+  // B-320. Read-only like the rest of this block: no key, so no intent.
+  test('an account paying by Card lands on the card screen keyed by the account', async ({
+    page,
+  }) => {
+    await page.goto(`/admin/pos?q=${encodeURIComponent(DEMO_BUSINESS_ACCOUNT_NAME)}`)
+    await page.getByRole('link', { name: DEMO_BUSINESS_ACCOUNT_NAME }).click()
+    const picker = page.getByLabel('Unit or account')
+    await picker.selectOption(
+      (await picker
+        .getByRole('option', { name: new RegExp(`^${DEMO_BUSINESS_ACCOUNT_NAME} — `) })
+        .getAttribute('value'))!,
+    )
+    await page.getByLabel('Method').selectOption('card')
+    await page.getByLabel('Amount ($)').fill('35')
+    await page.getByRole('button', { name: 'Record payment' }).click()
+
+    await page.waitForURL(/\/admin\/pos\/card\?account=[^&]+&amount=35\.00/)
+    await expect(page.getByRole('heading', { level: 1, name: 'Take a card payment' })).toBeVisible()
+    await expect(page.getByText('Balance on this account')).toBeVisible()
+    await expect(page.getByRole('main')).toContainText(DEMO_BUSINESS_ACCOUNT_NAME)
   })
 
   test('the tenant profile can take a payment for a lease that owes something', async ({ page }) => {

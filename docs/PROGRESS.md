@@ -10450,3 +10450,30 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - The accessibility statement was re-read: it makes no claims about `/admin`, and the counter move-in change is a new refusal message only. Nothing moved.
 
 **Verification.** Typecheck and lint clean. `e2e/admin-pos.spec.ts`: 30 passed of 30 (production build). Full unit suite: **4,592 passed, 8 skipped, of 4,600** — B-318's 4,598 plus this item's two. The first sweep failed 5 tests in `marketplace-db.test.ts` on 20s timeouts with `storage_test` holding 5,468 accumulated facilities (B-185's full-scan symptom); that file passed alone, and after `npm run db:reset-test` the whole sweep was green.
+
+## B-320 — a card taken at the counter prints the same receipt cash does, and a business account can pay by card (2026-09-18, `SHA`)
+
+`/admin/pos/card/done` rendered a status line and three `<dl>` rows — no receipt table, no Print control — and `counterReceipt` refused every method but cash, check and money order. The POS form withheld Card whenever a business account was the subject, and `takePaymentAction` refused it server-side, so the account payer with a company card was sent away to pay online.
+
+**What it built.**
+
+1. **One receipt, two screens.** The rows moved into `receiptRows(receipt)` in `apps/web/lib/admin/pos.ts` and one server component, `components/admin/counter-receipt-table.tsx` (`<caption>`, `<th scope="row">`), which both `/admin/pos/done` and `/admin/pos/card/done` render. `counterReceipt` now also returns a `card` payment, with `receiptNumber: null`; the credits are still `paymentCredits`, so screen, print and B-278's email read one source. The card done page shows the table and `PrintButton` once the webhook has marked the payment succeeded, and moves focus to its heading with `FocusedHeading`, both copied from B-281.
+2. **`chargeableAccount(actor, accountId)`** returns the same `CounterCharge` shape as `chargeableLease`. `tenantId` is the account's **payer**, which makes the payer the Stripe customer and the `Payment.tenantId`. `leaseId` is the account's oldest open lease at the facility, used as the anchor. The balance covers the same leases `counterPayableAccounts` shows. Authorization is checked at the account's facility, not the switcher's. `CounterCharge` gains `accountId` and `subject` ("unit C-7" / "Acme Moving (units C-3, C-7)"), which the card screen's copy uses.
+3. **Card for an account** at three points: the form offers it, `takePaymentAction` redirects to `/admin/pos/card?account=…`, and the card screen, the done page and `chargeCardOnFileAction` accept `account`. The card-on-file charge uses the payer's saved card. An account whose units have all ended is `isFormer` on `CounterPayableAccount` and gets no Card, which is the same rule as for a former tenant's unit.
+4. Tests: `tests/counter-card-account-db.test.ts` (new) covers the payer as the customer, the anchor, the balance and a refusal at another facility. It also covers the intent keyed `counter:account:<id>:…`, and a real `applyStripeEvent` run: one `payment.succeeded` even after a redelivery, credited to the oldest account invoice. The same $50 taken as account cash produces identical credits and identical `Unit …`/`Amount paid` rows from `receiptRows`. It also checks that an unnumbered cash payment still gets no receipt. `e2e/admin-pos.spec.ts` now expects Card on the account, expects Card to survive a unit → account switch, and adds a read-only check that an account + Card lands on `/admin/pos/card?account=…&amount=35.00` with "Balance on this account".
+
+**What it decided.**
+
+- **The account's card is not directed.** It allocates by `claimsFor(payer)`, the same as the account's check does. B-305 governs both, and this item does not narrow either one ahead of it.
+- **`payment.succeeded` for a card stays with the webhook.** Nothing new emits it. B-313's emit stays on the cash/check path.
+- **A card receipt has no receipt number.** The gapless book belongs to the drawer (US-32), and Stripe holds the card's record. `counterReceipt` returns any `card` payment at a facility where the actor holds `payments:take`, including one taken in the portal: printing it at the desk is the same request, and the tenant profile already shows it. For cash, check and money order it still requires a receipt number.
+- **Account idempotency keys use their own namespace** (`counter:account:` / `counter-cof:account:`). The anchor lease can also be charged on its own, and that is a different payment against a different balance.
+
+**What it left behind.**
+
+- **No e2e prints a card receipt.** e2e has no Stripe key, so no card payment is ever settled there. The parity is asserted in the unit suite. No row.
+- **Card → Cash reset on the picker now has no e2e.** Its only remaining trigger is a former unit or a former account, and no demo fixture has one (B-319 already noted the former-unit gap). No row.
+- **A card that has not settled yet has nothing to print.** The pending page is unchanged: it says the payment is still confirming, with no refresh control. No row.
+- The accessibility statement was not re-read for content: nothing customer-facing changed. Every screen touched is under `/admin`.
+
+**Verification.** Typecheck and lint are clean (the six `_prev`/`_formData` warnings were already there). `e2e/admin-pos.spec.ts`: 32 passed of 32 on the production build, counting the two auth setup steps. Full unit suite: **4,597 passed, 8 skipped, of 4,605**, which is B-319's 4,600 plus this item's five.

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { chargeableLease, chargeCardOnFile } from '@/lib/admin/pos'
+import { chargeableAccount, chargeableLease, chargeCardOnFile } from '@/lib/admin/pos'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 import { formatCents } from '@/lib/format'
 
@@ -24,8 +24,16 @@ export async function chargeCardOnFileAction(
 ): Promise<FormState> {
   const actor = await requireStaffActor()
 
-  const lease = await chargeableLease(actor, String(formData.get('leaseId') ?? ''))
-  if (!lease) return fieldError({ amount: 'That unit is no longer rented.' })
+  // B-320. An account charges its payer's card; `chargeableAccount` says who.
+  const accountId = String(formData.get('accountId') ?? '')
+  const lease = accountId
+    ? await chargeableAccount(actor, accountId)
+    : await chargeableLease(actor, String(formData.get('leaseId') ?? ''))
+  if (!lease) {
+    return fieldError({
+      amount: accountId ? 'That account has no rented unit left.' : 'That unit is no longer rented.',
+    })
+  }
 
   // The amount comes from the form, but the FIGURE it is checked against comes
   // from the ledger read a line above — never from a hidden field. Same rule
@@ -42,7 +50,7 @@ export async function chargeCardOnFileAction(
     // somebody's account off-session is not a thing a counter should be able
     // to do by mistyping a figure.
     return fieldError({
-      amount: `That is more than the ${formatCents(lease.balanceCents)} owed on unit ${lease.unitNumber}.`,
+      amount: `That is more than the ${formatCents(lease.balanceCents)} owed on ${lease.subject}.`,
     })
   }
 
@@ -61,6 +69,6 @@ export async function chargeCardOnFileAction(
   // the balance, and a message asserting a settled payment the ledger has not
   // seen yet is the one a staffer reads out to the tenant.
   return success(
-    `${formatCents(result.amountCents)} charged to the card on file for unit ${lease.unitNumber}. The balance updates when it clears — usually within a few seconds.`,
+    `${formatCents(result.amountCents)} charged to the card on file for ${lease.subject}. The balance updates when it clears — usually within a few seconds.`,
   )
 }

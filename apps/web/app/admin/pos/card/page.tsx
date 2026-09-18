@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { chargeableLease, startCounterCardPayment } from '@/lib/admin/pos'
+import { chargeableAccount, chargeableLease, startCounterCardPayment } from '@/lib/admin/pos'
 import { savedMethods } from '@/lib/portal/payment-methods'
 import { AdminForm, Field } from '@/components/admin/form'
 import { PortalPayment } from '@/components/portal/portal-payment'
@@ -21,6 +21,10 @@ export const metadata = { title: 'Take a card payment' }
 // raised against the switcher's facility rather than the lease's would be
 // money posted to the wrong deposit — `chargeableLease` derives the facility
 // from the lease and checks access against that.
+//
+// B-320. Or keyed by ACCOUNT (`?account=`), for a business account's payer at
+// the desk with a company card. `chargeableAccount` makes the payer the Stripe
+// customer; everything below reads the same `CounterCharge` either way.
 
 /// Dollars as typed to integer cents, without floating point — the same parse
 /// as `takePaymentAction`'s, for the same reason: `Math.round(parseFloat * 100)`
@@ -36,12 +40,20 @@ function parseDollars(input: string): number | null {
 export default async function CounterCardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lease?: string; amount?: string }>
+  searchParams: Promise<{ lease?: string; account?: string; amount?: string }>
 }) {
-  const { lease: leaseId, amount } = await searchParams
+  const { lease: leaseId, account: accountId, amount } = await searchParams
   const actor = await requireStaffActor()
 
-  const lease = leaseId ? await chargeableLease(actor, leaseId) : null
+  const lease = accountId
+    ? await chargeableAccount(actor, accountId)
+    : leaseId
+      ? await chargeableLease(actor, leaseId)
+      : null
+  // Where the Element returns to, on the same subject.
+  const subjectParam = lease?.accountId
+    ? `account=${encodeURIComponent(lease.accountId)}`
+    : `lease=${encodeURIComponent(lease?.leaseId ?? '')}`
   if (!lease) {
     return (
       <div className="flex flex-col gap-4">
@@ -72,8 +84,7 @@ export default async function CounterCardPage({
       <div className="flex flex-col gap-4">
         <h1 className="text-lg font-semibold">Take a card payment</h1>
         <p className="text-sm text-pretty">
-          {lease.tenantName} owes nothing on unit {lease.unitNumber} right now — there is nothing to
-          charge.
+          {lease.tenantName} owes nothing on {lease.subject} right now — there is nothing to charge.
         </p>
         <Link href="/admin/pos" className="text-sm underline underline-offset-2">
           Back to POS
@@ -93,7 +104,7 @@ export default async function CounterCardPage({
       <div>
         <h1 className="text-lg font-semibold">Take a card payment</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          {lease.tenantName} — unit {lease.unitNumber}
+          {lease.tenantName} — {lease.subject}
         </p>
       </div>
 
@@ -103,7 +114,7 @@ export default async function CounterCardPage({
           unambiguous. */}
       <dl className="border-input rounded-lg border p-4 text-sm">
         <div className="flex justify-between gap-4">
-          <dt>Balance on this unit</dt>
+          <dt>{lease.accountId ? 'Balance on this account' : 'Balance on this unit'}</dt>
           <dd className="tabular-nums">{formatCents(lease.balanceCents)}</dd>
         </div>
         <div className="mt-2 flex justify-between gap-4 border-t pt-2 text-base font-medium">
@@ -128,7 +139,11 @@ export default async function CounterCardPage({
         {/* A GET form, so the whole screen works without JavaScript up to the
             Element itself — which is Stripe's and needs it by nature. */}
         <form method="GET" className="mt-3 flex flex-wrap items-end gap-2">
-          <input type="hidden" name="lease" value={lease.leaseId} />
+          {lease.accountId ? (
+            <input type="hidden" name="account" value={lease.accountId} />
+          ) : (
+            <input type="hidden" name="lease" value={lease.leaseId} />
+          )}
           <label htmlFor="amount" className="flex flex-col gap-1 text-sm">
             Amount ($)
             <input
@@ -170,7 +185,7 @@ export default async function CounterCardPage({
           <PortalPayment
             clientSecret={setup.clientSecret}
             customerSessionSecret={setup.customerSessionSecret}
-            returnUrl={`${process.env.AUTH_URL ?? 'http://localhost:3000'}/admin/pos/card/done?payment=${setup.paymentId}&lease=${lease.leaseId}`}
+            returnUrl={`${process.env.AUTH_URL ?? 'http://localhost:3000'}/admin/pos/card/done?payment=${setup.paymentId}&${subjectParam}`}
             amountLabel={formatCents(amountCents)}
           />
         ) : (
@@ -202,6 +217,7 @@ export default async function CounterCardPage({
               className="flex flex-col gap-3"
             >
               <input type="hidden" name="leaseId" value={lease.leaseId} />
+              <input type="hidden" name="accountId" value={lease.accountId ?? ''} />
               <input type="hidden" name="amountCents" value={amountCents} />
               {/* Not a `<Field>`: there is nothing to type. The hidden amount
                   above is the figure stated in the summary at the top of the
