@@ -4,14 +4,14 @@
 
 ## Start here
 
-**No buildable row is left, and there are no known red specs.** `/confirm-email`'s title is fixed (`dd72a29`), and `e2e/i18n.spec.ts` passes 102 of 102. The next session is an owner session: **unblock B-301 by filling `.env.prod-ops`.**
+**No buildable row is left, and there are no known red specs.** `/confirm-email`'s title is fixed (`dd72a29`), and `e2e/i18n.spec.ts` passes 102 of 102. **`.env.prod-ops` was filled 2026-09-18** (production endpoint `ep-frosty-darkness-ay0fzkst`, distinct from dev's `ep-holy-block`). Connectivity has NOT been checked yet. The next session: **B-301's dry run**, then the B-328 missed-period count for the owner.
 
 **New trap (B-325):** a sweep killed with 137 skips `afterAll`, and the orphaned fixtures break the NEXT run. Last time it was three `auth-flows` failures caused by a stale `auth-flows-test@example.com` tenant, and they also failed on `main`. Look for leftover test-email rows before reading auth code.
 
 ## Owner actions
 
 - **B-328's missed periods:** any production lease older than twelve periods has unbilled periods that D-142 deliberately does not back-bill. Whether to raise them, with notice to tenants, is your decision. It needs the production count, which needs `.env.prod-ops`.
-- `.env.prod-ops` is still empty. It blocks B-277's backfill, B-301's dry run, the signed-lease scoping query, and the B-328 count. Full list: the `B-316` section of `docs/PROGRESS.md`.
+- `.env.prod-ops` is filled (2026-09-18). It unblocks B-277's backfill, B-301's dry run, the signed-lease scoping query, and the B-328 count. Full list: the `B-316` section of `docs/PROGRESS.md`.
 
 ## Worth knowing before the next sweep
 
