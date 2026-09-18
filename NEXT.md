@@ -1,10 +1,10 @@
 # Next
 
-**B-319 is done** (`8e38408`, SHA follow-up next commit, both pushed). The counter's Method is controlled state now — the `key` that remounted it at Cash is gone, and a picker change only resets Card (to Cash, with the reason in a `role="status"` line) when the new subject cannot take one. `settleTender` refuses `cash` with a check number as `check_number_on_cash`, so the POS payment, the counter move-in and merchandise all get it. Unit suite: 4,592 passed, 8 skipped, of 4,600; `e2e/admin-pos.spec.ts` 30/30.
+**B-320 is done** (`ba141eb`, SHA follow-up next commit, both pushed). `/admin/pos/card/done` prints the same receipt table and Print control as cash, from `receiptRows` + `paymentCredits` (`components/admin/counter-receipt-table.tsx`). A business account takes Card at the counter as its **payer** (`chargeableAccount`), allocated undirected by `claimsFor(payer)` through the existing webhook. Unit suite: 4,597 passed, 8 skipped, of 4,605; `e2e/admin-pos.spec.ts` 32/32.
 
 ## Start here
 
-**B-320**, next in file order: a card taken at the counter has no printable receipt (`counterReceipt` refuses anything but cash), and a business account cannot pay by card at all. Read the row in full first.
+**B-321**, next in file order: the token landing pages reached from translated emails are English, and two dead-end. Read the row in full first.
 
 **B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts.
 

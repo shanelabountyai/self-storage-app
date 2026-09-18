@@ -10451,7 +10451,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Typecheck and lint clean. `e2e/admin-pos.spec.ts`: 30 passed of 30 (production build). Full unit suite: **4,592 passed, 8 skipped, of 4,600** — B-318's 4,598 plus this item's two. The first sweep failed 5 tests in `marketplace-db.test.ts` on 20s timeouts with `storage_test` holding 5,468 accumulated facilities (B-185's full-scan symptom); that file passed alone, and after `npm run db:reset-test` the whole sweep was green.
 
-## B-320 — a card taken at the counter prints the same receipt cash does, and a business account can pay by card (2026-09-18, `SHA`)
+## B-320 — a card taken at the counter prints the same receipt cash does, and a business account can pay by card (2026-09-18, `ba141eb`)
 
 `/admin/pos/card/done` rendered a status line and three `<dl>` rows — no receipt table, no Print control — and `counterReceipt` refused every method but cash, check and money order. The POS form withheld Card whenever a business account was the subject, and `takePaymentAction` refused it server-side, so the account payer with a company card was sent away to pay online.
 
