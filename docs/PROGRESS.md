@@ -10577,7 +10577,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Typecheck and lint clean. Unit tests (`i18n`, `portal-dashboard`, `portal-payment`, `portal-billing-account-db`, `customer-control-height`, `scroll-regions`): 74 passed. `e2e/portal-billing-account.spec.ts` on the production build: 16 passed. I did not run the full sweep. CI owns it.
 
-## B-327 — a voided rent invoice's period can never be billed again (2026-09-18, `SHA_PENDING`)
+## B-327 — a voided rent invoice's period can never be billed again (2026-09-18, `97e1d57`)
 
 **What it built.**
 

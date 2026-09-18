@@ -1,35 +1,29 @@
 # Next
 
-**B-326 is done** (`e8b1686`, with the SHA follow-up in the next commit; both pushed). Five customer `ScrollRegion`s now take short names; `tests/scroll-regions.test.ts` refuses a region named with its table's caption. It also fixed B-324's `h-9` guard, which had been failing on `main` because it matched its own accessibility-page note.
+**B-327 is done** (`97e1d57`, with the SHA follow-up in the next commit; both pushed). Voiding a rent invoice now releases its period. The void also unwinds the promotion period and referral rewards the invoice consumed, so the nightly re-raise carries the same discount lines. Tests are in `tests/void-rebill-db.test.ts`.
 
 ## Start here
 
-**B-327**, next in file order: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts. Read the row in full first. It is a money path.
+**B-328**, next in file order and raised by B-327: **the nightly run never bills a lease past its twelfth period** (`generateInvoices` uses `periodStartsBetween`'s default `maxPeriods = 12`, counted from the lease start). Read the row in full. It is a money path, and it asks for a **production count first**: how many live leases are older than twelve periods. That needs `.env.prod-ops`, which is still empty, so the count is an owner action. The code fix and its tests do not depend on it.
 
-**Pre-existing e2e failure, not yet owned:** `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish` fails on both projects. The `<title>` is always `confemail.title`, but the spec expects the error heading. The details are in B-321's `PROGRESS.md` entry. Owner call: fix the title or fix the spec.
+**Pre-existing e2e failure, not yet owned:** `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish`. See B-321's `PROGRESS.md` entry. Owner call: fix the title or fix the spec.
 
-Nothing in the block is blocked on the tree. B-301 still is.
+## Worth knowing before the next sweep
 
-- **`storage_test` was reset on 2026-09-18** (it had 5,468 facilities and `marketplace-db.test.ts` was timing out on its full scan). If that file times out again, `npm run db:reset-test` before reading a stack trace.
-
-## Two things worth knowing before the next sweep
-
-- **Another project kills this repo's vitest.** The `Restaurant ordering` session's pre-sweep cleanup runs `pkill -9 -f 'node \(vitest'` **unscoped** — its playwright line is correctly `$PWD`-scoped, its vitest line is not. It SIGKILLed a full sweep here on 2026-09-17: `EXIT=137`, 405 lines of ✓, **zero failures**, no `JetsamEvent-*.ips` for that minute and 61% memory available. A dead runner on a healthy machine is not your branch. Gate the re-run on `pgrep -f 'node \(vitest'` reaching zero. The real fix is one word of scoping in the countertop repo.
-- **`npm run db:migrate:test` after any template edit (B-206)**, and **a bare `npx vitest run` skips every `describeDb` suite silently** — use `npm test -- <paths>`.
-- **`db:migrate:e2e` reseeds the demo, and that stales `.next/cache/fetch-cache`.** `rm -rf apps/web/.next/cache/fetch-cache` after any reseed, before believing an e2e failure.
+- **Another project kills this repo's vitest.** countertop's unscoped `pkill -9 -f 'node \(vitest'`. A 137 with zero failures is that, not your branch. Gate a re-run on `pgrep -f 'node \(vitest'` reaching zero.
+- **`npm run db:migrate:test` after any migration or template edit**, and **`npm test -- <paths>`, never bare `npx vitest run`** (it skips every `describeDb` suite silently).
+- **`db:migrate:e2e` reseeds the demo and stales `.next/cache/fetch-cache`.** `rm -rf apps/web/.next/cache/fetch-cache` after any reseed.
 
 ## Owner actions
 
-Unchanged from the B-317 handoff — the Neon dev branch is still three migrations behind (`npm run db:status` exits non-zero; `npm run db:migrate:cloud` is the script), `.env.prod-ops` is still empty and still blocks B-277's backfill, B-301's dry run and the signed-lease scoping query. See the `B-316` section of `docs/PROGRESS.md` and `git show 9b0cf73:NEXT.md` for the full list — nothing in it was answered or actioned by B-317 or B-318.
+- **The Neon dev branch is now four migrations behind** (B-327 added one). The script is `npm run db:migrate:cloud`, and `npm run db:status` confirms it.
+- `.env.prod-ops` is still empty. It blocks B-277's backfill, B-301's dry run, the signed-lease scoping query, and now B-328's production count. Full list: the `B-316` section of `docs/PROGRESS.md` and `git show 9b0cf73:NEXT.md`.
 
-**Answered 2026-09-14, do not re-ask:** the Spanish recapture line (D-140, stays English); the signed-lease disclosure (scope first, query written); the business-account members (B-300 ✅, B-301 open).
+**Answered 2026-09-14, do not re-ask:** the Spanish recapture line (D-140), the signed-lease disclosure, the business-account members (B-300 ✅, B-301 open).
 
 ## Do not re-raise
 
-Read the numbering note at the top of `06-backlog.md` first — twelve refusals and two stated limits. The carried-gap list is unchanged from the B-316 handoff (`git show 9b0cf73:NEXT.md`), plus:
-
-- **B-317**: no e2e covers the credit sentence, because no demo tenant has overpaid. No row.
-- **B-318** adds three, all in its `PROGRESS.md` entry and none with a row: no axe scan of the print route (it needs a real `Message` row and the demo seed writes none — it is in `SCAN_EXCEPTIONS` as `audience: 'admin'`, same posture as the four other per-entity admin routes); a `no_reachable_channel` task whose tenant's only message failed to RENDER cannot be closed at all (nothing to mail, and a note no longer closes the type); and cancelling the browser's print dialog still records the letter.
+Read the numbering note at the top of `06-backlog.md`. For carried gaps, see `git show 9b0cf73:NEXT.md` plus the B-317, B-318 and B-327 `PROGRESS.md` entries. B-327 adds two: there is no "void without re-billing" option, and a redemption that followed a transfer is not released when an invoice on the old lease is voided.
 
 ## The blocked list
 
