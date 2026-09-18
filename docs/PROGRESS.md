@@ -10555,7 +10555,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Typecheck clean; lint clean (the same six warnings). `tests/customer-control-height.test.ts`: 2 passed. The e2e test above on the production build: passed on desktop-chrome and mobile-chrome. I did not run the full sweep. CI owns it.
 
-## B-326 — scroll regions named with their table's caption (2026-09-18, `PENDING`)
+## B-326 — scroll regions named with their table's caption (2026-09-18, `e8b1686`)
 
 **What it built.**
 

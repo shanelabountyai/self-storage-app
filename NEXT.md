@@ -1,14 +1,12 @@
 # Next
 
-**B-324 is done** (`1dd7ddf`, with the SHA follow-up in the next commit; both pushed). Both customer amount inputs are on `--control-h` (44px). `tests/customer-control-height.test.ts` refuses `h-9` on every customer surface. The portal pay e2e test measures the input.
+**B-326 is done** (`e8b1686`, with the SHA follow-up in the next commit; both pushed). Five customer `ScrollRegion`s now take short names; `tests/scroll-regions.test.ts` refuses a region named with its table's caption. It also fixed B-324's `h-9` guard, which had been failing on `main` because it matched its own accessibility-page note.
 
 ## Start here
 
-**B-326**, next in file order: three `ScrollRegion` names repeat their table's caption verbatim. It is not a WCAG failure. Read the row in full first.
+**B-327**, next in file order: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts. Read the row in full first. It is a money path.
 
 **Pre-existing e2e failure, not yet owned:** `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish` fails on both projects. The `<title>` is always `confemail.title`, but the spec expects the error heading. The details are in B-321's `PROGRESS.md` entry. Owner call: fix the title or fix the spec.
-
-**B-327 is still open and still worth reading before touching the rent-invoice index**: a voided rent invoice's period can never be billed again, and the bare index change that would release it drops promised discounts.
 
 Nothing in the block is blocked on the tree. B-301 still is.
 
