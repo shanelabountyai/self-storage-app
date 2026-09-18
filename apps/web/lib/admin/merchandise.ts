@@ -190,7 +190,7 @@ export type SellResult =
   /// refuses to invent change for one, because an overpaid cheque produces a
   /// credit on the ledger rather than notes out of the drawer.
   | { ok: true; saleId: string; totals: SaleTotals; changeCents: number | null; receiptNumber: number }
-  | { ok: false; problem: SaleProblem | 'card_not_supported' | 'tender' | 'no_product' | 'tenant_required' }
+  | { ok: false; problem: SaleProblem | 'card_not_supported' | 'tender' | 'check_number_on_cash' | 'no_product' | 'tenant_required' }
 
 /// The facility's combined tax rate in basis points, from the same
 /// effective-dated components invoicing uses — merchandise does not get a
@@ -244,7 +244,9 @@ export async function sellMerchandise(actor: Actor, input: SellInput): Promise<S
     tenderedCents: input.tenderedCents,
     checkNumber: input.checkNumber,
   })
-  if (!settled.ok) return { ok: false, problem: 'tender' }
+  if (!settled.ok) {
+    return { ok: false, problem: settled.problem === 'check_number_on_cash' ? settled.problem : 'tender' }
+  }
 
   // US-34 says "sellable standalone", and this is where that stops short:
   // `Payment.tenantId` is required, so every sale must name a tenant. A true

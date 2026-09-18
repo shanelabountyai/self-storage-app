@@ -55,6 +55,20 @@ describe('settleTender', () => {
     })
   })
 
+  // B-319. The counter form could flip Method to Cash under a typed number.
+  it('refuses cash with a check number, ahead of the tender checks', () => {
+    expect(
+      settleTender({ method: 'cash', amountCents: 5_000, tenderedCents: 5_000, checkNumber: '1041' }),
+    ).toEqual({ ok: false, problem: 'check_number_on_cash' })
+    expect(settleTender({ method: 'cash', amountCents: 5_000, checkNumber: '1041' })).toEqual({
+      ok: false,
+      problem: 'check_number_on_cash',
+    })
+    expect(
+      settleTender({ method: 'cash', amountCents: 5_000, tenderedCents: 5_000, checkNumber: '  ' }),
+    ).toMatchObject({ ok: true })
+  })
+
   it('never invents change for a non-cash method', () => {
     // Overpaying by cheque is real, but it is a ledger credit to resolve, not
     // notes out of a drawer.

@@ -265,6 +265,22 @@ describeDb('counter payments', () => {
       })
       expect(result).toEqual({ ok: false, problem: 'card_not_supported' })
     })
+
+    // B-319. A check booked as cash reaches the deposit slip as notes.
+    it('refuses cash carrying a check number and writes nothing', async () => {
+      const before = await prisma.payment.count({ where: { tenantId } })
+      const result = await recordCounterPayment(counterActor(), {
+        facilityId,
+        tenantId,
+        leaseId,
+        method: 'cash',
+        amountCents: 1_000,
+        tenderedCents: 1_000,
+        checkNumber: '1041',
+      })
+      expect(result).toEqual({ ok: false, problem: 'check_number_on_cash' })
+      expect(await prisma.payment.count({ where: { tenantId } })).toBe(before)
+    })
   })
 
   describe('manager approval over the cash threshold', () => {

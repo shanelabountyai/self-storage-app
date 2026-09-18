@@ -67,6 +67,7 @@ const SELL_PROBLEM_COPY: Record<string, string> = {
   price_negative: 'That product has a negative price or cost — fix it before selling.',
   insufficient_stock: 'There is not enough stock for that.',
   card_not_supported: 'Card sales need a terminal, which is not wired up. Take cash or a check.',
+  check_number_on_cash: 'Method is Cash, but a check number is filled in. Choose Check or Money order, or clear the number.',
   tender: 'Check the amount tendered — it has to cover the total.',
   no_product: 'That product is not on sale at this facility.',
   tenant_required: 'A sale has to be attached to a tenant. Anonymous walk-in sales are not supported yet.',

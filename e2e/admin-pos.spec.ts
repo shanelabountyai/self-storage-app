@@ -80,6 +80,59 @@ test.describe('signed in as the demo owner', () => {
     await assertNoAxeViolations(page)
   })
 
+  // B-319. Read-only: nothing here is submitted against the account. The
+  // Method select used to remount at Cash whenever the picker crossed between
+  // an account and a unit, leaving a typed check number behind it.
+  test('Method survives a change of payer, and a Card reset says why', async ({ page }) => {
+    // The account's payer holds no unit, so the page with BOTH an account and a
+    // unit on it is one of the two "Alex Active" tenants whose units it pays for.
+    await page.goto('/admin/pos?q=Alex%20Active')
+    const hrefs = await page
+      .getByRole('link', { name: 'Alex Active' })
+      .evaluateAll((links) => links.map((link) => (link as HTMLAnchorElement).href))
+    const picker = page.getByLabel('Unit or account')
+    for (const href of hrefs) {
+      await page.goto(href)
+      if ((await picker.locator('optgroup[label="Unit"] option').count()) > 0) break
+    }
+    const method = page.getByLabel('Method')
+    const accountValue = await picker
+      .getByRole('option', { name: new RegExp(`^${DEMO_BUSINESS_ACCOUNT_NAME} — `) })
+      .getAttribute('value')
+    const unitValue = await picker.locator('optgroup[label="Unit"] option').first().getAttribute('value')
+
+    await picker.selectOption(accountValue!)
+    await method.selectOption('check')
+    await page.getByLabel('Check / money-order number').fill('1041')
+    await picker.selectOption(unitValue!)
+    await expect(method).toHaveValue('check')
+    await picker.selectOption(accountValue!)
+    await expect(method).toHaveValue('check')
+
+    await picker.selectOption(unitValue!)
+    await method.selectOption('card')
+    await picker.selectOption(accountValue!)
+    await expect(method).toHaveValue('cash')
+    await expect(page.getByRole('status').filter({ hasText: 'Method changed from Card to Cash' })).toContainText(
+      /business account pays by cash, check or money order/,
+    )
+  })
+
+  test('cash with a check number is refused on the Method field', async ({ page }) => {
+    await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
+    await page.getByRole('link', { name: 'Alex Active' }).first().click()
+
+    await page.getByLabel('Method').selectOption('cash')
+    await page.getByLabel('Amount ($)').fill('25')
+    await page.getByLabel('Cash tendered ($)').fill('25')
+    await page.getByLabel('Check / money-order number').fill('1041')
+    await page.getByRole('button', { name: 'Record payment' }).click()
+
+    await expect(page.getByRole('main').getByRole('alert')).toContainText(/check number is filled in/i)
+    await expect(page.getByLabel('Method')).toHaveAttribute('aria-invalid', 'true')
+    await expect(page).toHaveURL(/\/admin\/pos(?!\/done)/)
+  })
+
   test('a check with no number is refused', async ({ page }) => {
     await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
     await page.getByRole('link', { name: 'Alex Active' }).first().click()

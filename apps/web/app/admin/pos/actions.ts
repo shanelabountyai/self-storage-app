@@ -19,6 +19,8 @@ const PROBLEM_COPY: Record<string, string> = {
   tender_required: 'Enter how much cash the tenant handed over.',
   tender_below_amount: 'Cash tendered is less than the amount being paid.',
   check_number_required: 'Enter the check or money-order number.',
+  // B-319.
+  check_number_on_cash: 'Method is Cash, but a check number is filled in. Choose Check or Money order, or clear the number.',
   lease_not_found: 'That unit is not on this tenant’s account at this facility.',
   // B-280 / D-137.
   account_remainder:
@@ -102,7 +104,9 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
         ? 'tendered'
         : result.problem === 'check_number_required'
           ? 'checkNumber'
-          : 'amount'
+          : result.problem === 'check_number_on_cash'
+            ? 'method'
+            : 'amount'
     return fieldError({ [field]: message })
   }
 

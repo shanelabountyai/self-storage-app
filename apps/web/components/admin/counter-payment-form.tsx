@@ -59,6 +59,12 @@ export function CounterPaymentForm({
       `${ACCOUNT}${accounts[0].accountId}`,
   )
   const [amount, setAmount] = useState('')
+  // B-319. Controlled, so changing the picker never touches it. It used to be
+  // uncontrolled under a `key` that changed with the picker's class (unit,
+  // former unit, account), which remounted it at `cash` — and a check typed
+  // against the account then booked as cash against the unit, number and all.
+  const [method, setMethod] = useState('cash')
+  const [methodReset, setMethodReset] = useState('')
 
   // B-280. Either a whole account or one unit; everything below the picker
   // reads this one shape so the balance, the aging and "Pay in full" follow it.
@@ -67,6 +73,24 @@ export function CounterPaymentForm({
   const selected = account
     ? { ...account, heading: account.name, isFormer: false }
     : { ...lease!, heading: lease!.unitNumber }
+
+  // Card is the one method a subject can rule out: an account's payer is not
+  // any one unit's tenant, and the card screen needs an open lease.
+  function chooseSubject(next: string) {
+    setSubject(next)
+    const nextAccount = accounts.find((a) => `${ACCOUNT}${a.accountId}` === next)
+    const nextLease = leases.find((l) => l.leaseId === next)
+    if (method === 'card' && (nextAccount || nextLease?.isFormer)) {
+      setMethod('cash')
+      setMethodReset(
+        nextAccount
+          ? 'Method changed from Card to Cash: a business account pays by cash, check or money order.'
+          : 'Method changed from Card to Cash: this unit has been moved out of, and a card needs an open lease.',
+      )
+    } else {
+      setMethodReset('')
+    }
+  }
 
   const leaseOptions = leases.map((lease) => (
     <option key={lease.leaseId} value={lease.leaseId}>
@@ -89,7 +113,7 @@ export function CounterPaymentForm({
         required
         className={FIELD_CLASS}
         value={subject}
-        onChange={(event) => setSubject(event.target.value)}
+        onChange={(event) => chooseSubject(event.target.value)}
       >
         {accounts.length > 0 ? (
           <>
@@ -111,9 +135,13 @@ export function CounterPaymentForm({
         name="method"
         label="Method"
         as="select"
-        defaultValue="cash"
         required
         className={FIELD_CLASS}
+        value={method}
+        onChange={(event) => {
+          setMethod(event.target.value)
+          setMethodReset('')
+        }}
         // B-231. A former tenant's card is NOT offered here, and the omission is
         // deliberate rather than an oversight: `chargeableLease` scopes the card
         // screen to leases that have not ended, so a `card` selection on an
@@ -121,13 +149,16 @@ export function CounterPaymentForm({
         // are what the row was raised for — someone standing at the desk with
         // $400 — and widening the card path to closed leases is a change to the
         // money path, which this row says twice it is not.
-        key={selected.isFormer ? 'former' : account ? 'account' : 'current'}
       >
         <option value="cash">Cash</option>
         <option value="check">Check</option>
         <option value="money_order">Money order</option>
         {!selected.isFormer && !account && <option value="card">Card</option>}
       </Field>
+      {/* B-319. Always mounted so the reset is announced, not just shown. */}
+      <p role="status" className="col-span-2 text-sm font-medium text-pretty empty:hidden">
+        {methodReset}
+      </p>
       <div className="col-span-2 flex flex-wrap items-center gap-3">
         <p className="text-sm text-pretty">
           <span className="font-medium">

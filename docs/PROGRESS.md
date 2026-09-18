@@ -10427,3 +10427,26 @@ B-281 renders the message for a renter with no email address and stores it on th
 - The accessibility statement was re-read: it makes no claims about `/admin`, and this item's every surface is under it. Nothing moved.
 
 **Verification.** Full unit suite: **4,590 passed, 8 skipped, of 4,598** — B-317's 4,591 plus this item's five new tests and the two the D-15 lint adds per new `.tsx` under `app/admin`. Typecheck and lint clean. One earlier sweep died `EXIT=137` with zero failures and no JetsamEvent for that minute: another project's session runs an unscoped `pkill -9 -f 'node \(vitest'`, which takes this repo's workers with it. The re-run was gated on that reaching zero.
+
+## B-319 — the counter's Method no longer resets under a typed check number, and cash with a check number is refused (2026-09-18, `SHA_PENDING`)
+
+The counter form's Method select was uncontrolled under `key={former | account | current}`, so moving the Unit-or-account picker across those classes remounted it at `cash`. Check selected on the account, number typed, then switched to one unit: **Method read Cash, the number was still there, and "Record payment" booked cash** — onto B-281's deposit slip and the receipt. Both of the row's remedies shipped.
+
+**What it built.**
+
+1. **Method is controlled state in `CounterPaymentForm`** (`apps/web/components/admin/counter-payment-form.tsx`); the `key` is gone. A picker change leaves it alone unless it is Card and the new subject cannot take a card (an account, or a former tenant's unit) — then it drops to Cash and says why in a `role="status"` paragraph under the controls, which is always mounted so the change is announced, and clears on the next Method or picker change.
+2. **`settleTender` refuses `cash` with a non-blank `checkNumber`** as `check_number_on_cash` (`packages/core/pos/tender.ts`), ahead of the tender checks so the refusal names the real problem rather than an empty cash box. In the shared function, so all three callers get it: the POS payment (error on `method`, which gets `Field`'s `aria-invalid`/`aria-describedby`), the counter move-in (falls through to `method` already) and merchandise (its own copy instead of the generic "check the amount tendered").
+3. Tests: the pure refusal and its whitespace edge (`tests/pos-tender.test.ts`), `recordCounterPayment` refusing and writing no `Payment` (`tests/pos-db.test.ts`), and two e2e specs in `e2e/admin-pos.spec.ts` — Check survives account → unit → account, Card resets to Cash with the stated reason on a switch to the account, and a cash submission with a check number is refused on the Method field and stays on `/admin/pos`.
+
+**What it decided.**
+
+- **Refuse, never guess.** Cash + a check number could mean either field is the stale one; which is the staffer's call.
+- **Only Card is ever reset**, because it is the only method a subject can rule out. The server's existing account-card refusal (D-137's path) is unchanged.
+- **SC 3.2.2 stays arguable**, as the row left it: the reset now announces itself, which is the half the row asked for, without settling whether it was a change of context.
+
+**What it left behind.**
+
+- **The former-tenant class has no e2e.** No demo tenant has an ended lease with a balance, and seeding one would move shared fixtures other suites assert against. It is the same code path as the account case (`chooseSubject`'s `nextLease?.isFormer` branch), and no `key` remains to make the class matter. No row.
+- The accessibility statement was re-read: it makes no claims about `/admin`, and the counter move-in change is a new refusal message only. Nothing moved.
+
+**Verification.** Typecheck and lint clean. `e2e/admin-pos.spec.ts`: 30 passed of 30 (production build). Full unit suite: **4,592 passed, 8 skipped, of 4,600** — B-318's 4,598 plus this item's two. The first sweep failed 5 tests in `marketplace-db.test.ts` on 20s timeouts with `storage_test` holding 5,468 accumulated facilities (B-185's full-scan symptom); that file passed alone, and after `npm run db:reset-test` the whole sweep was green.

@@ -79,6 +79,8 @@ const COUNTER_MOVE_IN_COPY: Record<string, string> = {
   tender_required: 'Enter how much cash they handed over.',
   tender_below_amount: 'Cash tendered is less than the move-in total.',
   check_number_required: 'Enter the check or money-order number.',
+  // B-319. Falls through to `method` in the field mapping above.
+  check_number_on_cash: 'Method is Cash, but a check number is filled in. Choose Check or Money order, or clear the number.',
   needs_manager: 'Cash this large needs a manager. Ask one to take it, or split the payment.',
   card_not_supported: 'Use the card form below for a card.',
   not_at_payment: 'This checkout is not at the payment step. Refresh and start again.',

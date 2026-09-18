@@ -24,6 +24,7 @@ export type TenderProblem =
   | 'tender_required'
   | 'tender_below_amount'
   | 'check_number_required'
+  | 'check_number_on_cash'
 
 export type TenderResult =
   | { ok: true; amountCents: number; tenderedCents: number | null; changeCents: number | null }
@@ -51,6 +52,15 @@ export function settleTender(input: {
     // US-32 AC: "check # required". A cheque with no number cannot be traced
     // to a bank line on the day it bounces.
     return { ok: false, problem: 'check_number_required' }
+  }
+
+  if (method === 'cash' && input.checkNumber?.trim()) {
+    // B-319. Cash with a check number is a form whose Method changed under the
+    // staffer after they typed the number — booking it as cash puts a cheque
+    // on the deposit slip as notes. Refused rather than guessed: which of the
+    // two fields is wrong is the staffer's call, not ours. Ahead of the tender
+    // checks so the refusal names the real problem, not the empty cash box.
+    return { ok: false, problem: 'check_number_on_cash' }
   }
 
   if (method !== 'cash') {
