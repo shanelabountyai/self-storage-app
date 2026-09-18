@@ -1,10 +1,10 @@
 # Next
 
-**B-321 is done** (`f9d7859`, SHA follow-up next commit, both pushed). `/checkout/resume`, `/waitlist/cancel` and `/unsubscribe` now take their language from the record the token names (`messageLinkLocale`, `lib/i18n/link-locale.ts`), sent to the root layout in a proxy header. The proxy matcher now includes the two dotted-token routes it used to skip. Unsubscribe tokens sign the email's locale. Unit suite: 4,602 passed, 8 skipped, of 4,610. `e2e/message-link-locale.spec.ts` passed 8 of 8.
+**B-322 is done** (`b31144f`, SHA follow-up next commit, both pushed). On `/portal/pay?account=`, an amount over the balance now gets its own refusal sentence with a `tel:` link to the office. It renders in B-302's `#amount-problem` paragraph. The ceiling is still `0` (D-113 open). `e2e/portal-billing-account.spec.ts`: 16 passed.
 
 ## Start here
 
-**B-322**, next in file order: a business-account payer is refused a prepayment with no reason and no way out (copy only). Read the row in full first.
+**B-323**, next in file order: two staff-facing strings print internal identifiers at the customer counter. Read the row in full first.
 
 **Pre-existing e2e failure, not yet owned:** `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish` fails on both projects. The `<title>` is always `confemail.title`, but the spec expects the error heading. The details are in B-321's `PROGRESS.md` entry. Owner call: fix the title or fix the spec.
 

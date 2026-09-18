@@ -10504,7 +10504,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Typecheck and lint are clean (the six `_prev`/`_formData` warnings were already there). `e2e/message-link-locale.spec.ts` + `e2e/i18n.spec.ts` on the production build: **108 passed, 2 failed**. Both failures are the pre-existing `/confirm-email` title above. The new spec passed 8 of 8 across both projects. Full unit suite: **4,602 passed, 8 skipped, of 4,610**, which is B-320's 4,605 plus this item's five.
 
-## B-322 — a business-account payer refused a prepayment is given the office's number (2026-09-18, `PENDING`)
+## B-322 — a business-account payer refused a prepayment is given the office's number (2026-09-18, `b31144f`)
 
 **What it built.**
 
