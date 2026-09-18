@@ -5,9 +5,16 @@ import { SITE } from '@/lib/site-config'
 import { dictionaryFor, translate } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
-export async function generateMetadata(): Promise<Metadata> {
+// Titled by token presence, as /reset-password is: resolving the token here
+// would spend it, since confirmEmailChange is single-use.
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ token?: string }>
+}): Promise<Metadata> {
+  const { token } = await searchParams
   return {
-    title: translate(dictionaryFor(await getLocale()), 'confemail.title'),
+    title: translate(dictionaryFor(await getLocale()), token ? 'confemail.title' : 'confemail.error.title'),
     robots: { index: false, follow: false },
   }
 }

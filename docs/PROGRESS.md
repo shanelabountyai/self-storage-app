@@ -10642,3 +10642,13 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - **B-301**'s backfill will send this wording. That is the reason for the ordering.
 
 **Verification.** Lint and typecheck are clean. There was no schema change. The three affected files pass: the new test, `auth-email-ignore` unchanged, and `billing-account-members-db`. The first full-suite run was killed with 137 before any test ran (zero failures, and no jetsam event for that minute), which is the known sibling-project kill. **Real finding from that kill:** because `afterAll` never ran, it left an orphan `auth-flows-test@example.com` tenant (no password) in `storage_test`. `authenticateWithPassword` looks up by email, so on the next run three `tests/auth-flows.test.ts` cases failed identically on `main` and on this branch ("expected null"). Deleting the orphan row fixed them. **A killed sweep can leave fixtures that break the next one, so check for rows with the test email before debugging auth code.** Full unit suite on the third run: 275 files passed and 1 skipped; 4,615 tests passed and 8 skipped (4,623, which is B-328's total plus the two new tests). No e2e was run, because the change is email copy only.
+
+## Fix — `/confirm-email`'s title named a page the visitor was not on (2026-09-18, `PENDING`)
+
+**What it built.** Without a token, `/confirm-email` shows the error heading ("That link didn't work" / "Ese enlace no funcionó"), but its `<title>` was always `confemail.title`. `generateMetadata` now reads `searchParams`. It titles the page `confemail.error.title` when there is no token and `confemail.title` when there is one. That is the `/reset-password` pattern (B-311).
+
+**What it decided.** **The spec was right and the page was wrong.** SC 2.4.2 wants the title to describe the page the visitor is actually on. The title cannot follow the token's *outcome*, because `confirmEmailChange` is single-use and resolving it in `generateMetadata` would spend it before the page renders. So a present-but-bad token still gets the neutral "confirm your email" title. `/reset-password` accepts the same limit.
+
+**What it left behind.** Nothing new. The B-321 carries stand.
+
+**Verification.** Typecheck and lint are clean (the same six warnings as before). `e2e/i18n.spec.ts` on the production build: **102 passed, 0 failed**. That includes `/confirm-email renders in Spanish` on both projects, which was the only known red spec. No unit suite was run: the change is page metadata that no unit test reaches.
