@@ -1,10 +1,10 @@
 # Next
 
-**B-323 is done** (`128f7fb`, SHA follow-up next commit, both pushed). The no-email task names the message by its subject, not its template key. `/admin/pos/done` now uses `PAYMENT_STATUS_LABEL` (typed over the whole enum) instead of `.replace(/_/g, ' ')`. An account payment's receipt now has an `Account` row. 281 tests passed across the four touched suites. No e2e was run, because no e2e asserts these strings.
+**B-324 is done** (`1dd7ddf`, with the SHA follow-up in the next commit; both pushed). Both customer amount inputs are on `--control-h` (44px). `tests/customer-control-height.test.ts` refuses `h-9` on every customer surface. The portal pay e2e test measures the input.
 
 ## Start here
 
-**B-324**, next in file order: the two customer amount inputs are 36px tall. Read the row in full first.
+**B-326**, next in file order: three `ScrollRegion` names repeat their table's caption verbatim. It is not a WCAG failure. Read the row in full first.
 
 **Pre-existing e2e failure, not yet owned:** `e2e/i18n.spec.ts` › `/confirm-email renders in Spanish` fails on both projects. The `<title>` is always `confemail.title`, but the spec expects the error heading. The details are in B-321's `PROGRESS.md` entry. Owner call: fix the title or fix the spec.
 

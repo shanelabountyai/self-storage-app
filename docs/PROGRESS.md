@@ -10538,7 +10538,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Typecheck clean; lint clean (the same six warnings). `npm test -- tests/pos-db.test.ts tests/counter-card-account-db.test.ts tests/comms-db.test.ts tests/no-internal-identifiers.test.ts`: 281 passed.
 
-## B-324 — the two customer amount inputs are 36px tall (2026-09-18, `PENDING`)
+## B-324 — the two customer amount inputs are 36px tall (2026-09-18, `1dd7ddf`)
 
 **What it built.**
 
