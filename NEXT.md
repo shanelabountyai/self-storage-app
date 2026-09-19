@@ -1,17 +1,14 @@
 # Next
 
-**B-301 is done** (`11c55a7`). Production's dry run found 0 memberships, so nothing needed sending. **Production was 52 migrations behind and is now migrated** (D-143; backup branch `pre-migrate-2026-09-19`).
+**Production is verified and caught up** (2026-09-19). Dynamic routes and the database work on `storage.labintelligence.co`. Every page returns 401 because of the app's demo gate (`DEMO_ACCESS_PASSWORD`), not Vercel protection. B-328's missed-period count is **zero**, so that owner question is closed. **D-144:** production migrations stay manual under D-143, and `npm run db:status` now reports production as well.
 
 ## Start here
 
-1. **Smoke-test production on its public domain.** The `AUTH_URL` host returns 401 because of Vercel deployment protection. Check that `/storage/search?q=78704` returns 200.
-2. **The B-328 missed-period count for the owner.** Production is migrated and `.env.prod-ops` works.
-3. **Decide whether production migrations should run on deploy.** D-143 is manual, and `db:status` does not look at production.
+1. **The next ⬜ row in `docs/prds/06-backlog.md`**, working top to bottom and skipping the blocked list.
 
 ## Owner actions
 
-- **B-328's missed periods:** whether to raise them, with notice to tenants. This needs the count.
-- Once production has been verified, delete the Neon backup branch `pre-migrate-2026-09-19`.
+- **Delete the Neon backup branch `pre-migrate-2026-09-19`.** Production has been verified.
 
 ## Worth knowing before the next sweep
 

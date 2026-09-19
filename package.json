@@ -25,7 +25,7 @@
     "db:migrate": "dotenv -e .env.test -e .env.local -- prisma migrate dev --schema packages/db/prisma/schema.prisma",
     "db:migrate:cloud": "dotenv -e .env.local -- prisma migrate deploy --schema packages/db/prisma/schema.prisma",
     "db:migrate:all": "npm run db:migrate:test && npm run db:migrate:e2e && npm run db:migrate:cloud",
-    "db:status": "dotenv -e .env.test -e .env.local -- prisma migrate status --schema packages/db/prisma/schema.prisma || rc=1; dotenv -e .env.local -- prisma migrate status --schema packages/db/prisma/schema.prisma || rc=1; exit ${rc:-0}",
+    "db:status": "dotenv -e .env.test -e .env.local -- prisma migrate status --schema packages/db/prisma/schema.prisma || rc=1; dotenv -e .env.local -- prisma migrate status --schema packages/db/prisma/schema.prisma || rc=1; [ ! -f .env.prod-ops ] || dotenv -e .env.prod-ops -- prisma migrate status --schema packages/db/prisma/schema.prisma || rc=1; exit ${rc:-0}",
     "db:seed": "dotenv -e .env.local -- node packages/db/prisma/seed.mts",
     "db:migrate:test": "dotenv -e .env.test -e .env.local -- tsx --tsconfig apps/web/tsconfig.json scripts/migrate-test-db.mts",
     "db:reset-test": "dotenv -e .env.test -e .env.local -- tsx --tsconfig apps/web/tsconfig.json scripts/reset-test-schema.mts",
