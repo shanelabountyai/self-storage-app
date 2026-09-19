@@ -5,7 +5,7 @@
 ## Start here
 
 1. **B-329 (`83azza`)**: voiding a partly paid rent invoice double-bills the part already paid. This is a live money defect. **Before building, count in production** every voided rent invoice with money allocated to it since B-327 reached production (2026-09-19), and whether its period was billed again.
-2. Then work down the block. B-346 is last and blocked on **D-145** (the owner decides whether ledger corrections get a confirm step).
+2. Then work down the block. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
 
 ## Owner actions
 
