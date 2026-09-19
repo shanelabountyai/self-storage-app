@@ -1,10 +1,11 @@
 # Next
 
-**Production is verified and caught up** (2026-09-19). Dynamic routes and the database work on `storage.labintelligence.co`. Every page returns 401 because of the app's demo gate (`DEMO_ACCESS_PASSWORD`), not Vercel protection. B-328's missed-period count is **zero**, so that owner question is closed. **D-144:** production migrations stay manual under D-143, and `npm run db:status` now reports production as well.
+**Review block 9 is written** (2026-09-19, `072becd` + `ab39408`): B-329–B-346 at `83azza`–`83azzr`, from the operator, UX and accessibility reviews over B-301–B-328. 31 refusals are recorded in the numbering note.
 
 ## Start here
 
-1. **The next ⬜ row in `docs/prds/06-backlog.md`**, working top to bottom and skipping the blocked list.
+1. **B-329 (`83azza`)**: voiding a partly paid rent invoice double-bills the part already paid. This is a live money defect. **Before building, count in production** every voided rent invoice with money allocated to it since B-327 reached production (2026-09-19), and whether its period was billed again.
+2. Then work down the block. B-346 is last and blocked on **D-145** (the owner decides whether ledger corrections get a confirm step).
 
 ## Owner actions
 
