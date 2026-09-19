@@ -10673,3 +10673,14 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - **Production was not smoke-tested.** The `AUTH_URL` host returns 401 on every path, including `/`: Vercel deployment protection is in front of it. A dynamic-route check needs the public production domain.
 
 **Verification.** Typecheck is clean, and lint is clean on the changed files. The new test, `billing-accounts-db` and `auth-email-ignore` pass (13 tests). There was no schema change. The accessibility statement was not re-read, because nothing customer-facing shipped.
+
+## Ops — production smoke test and the B-328 missed-period count (2026-09-19)
+
+**What it built.** Nothing in the tree. Two checks against production, both read-only apart from one failed-login row.
+
+1. **Production serves dynamic routes and reaches its database.** The public domain is `storage.labintelligence.co`. The live deployment is `11c55a7`, which includes B-328. Every page returns 401, and that is expected: the 401 comes from the app's own `demoGate` (`DEMO_ACCESS_PASSWORD`, realm "Demo"), not from Vercel deployment protection. `NEXT.md` had it wrong. The gate-exempt routes answer correctly. `/api/auth/session`, `/csrf` and `/providers` return 200, `/api/cron` returns 401 `unauthorized` from its own handler, and the Stripe webhook returns 405 to a GET. **The database check:** a password sign-in as `smoke-test@example.invalid` redirects with `error=CredentialsSignin`. That means `authenticateWithPassword` ran its throttle and user lookups against production. A broken engine or connection would have returned `error=Configuration`.
+2. **B-328's count is zero.** Production has 12 leases, and no live one is older than twelve periods. The oldest live lease starts on 2025-10-17 (`pending_auction`, 10 invoices). The two leases older than twelve months are `ended` (2025-07-09 to 2026-08-08) and have **no** invoices at all, so they are demo-seed rows, not leases stuck at the cap. Every lease comes in pairs, one per demo facility, which confirms production holds seeded data only.
+
+**What it decided.** The owner's B-328 catch-up question is moot. No live lease missed a period, and every one of them reaches its thirteenth period only after the fix was deployed.
+
+**What it left behind.** A full page-level smoke test needs the demo password. Pulling it from Vercel for a second time was blocked as credential materialization, and the first pull's file was deleted. The Neon backup branch `pre-migrate-2026-09-19` can now be deleted, which is an owner action.
