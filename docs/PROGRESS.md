@@ -10313,6 +10313,8 @@ A counter payment posted to the ledger and printed a paper receipt, and nothing 
 - **`app/login/page.tsx`'s page-load `role="alert"` is still unfixed** — see above. Worth its own row if a third instance of the same shape (a redirect-delivered message with no controlling form) accumulates elsewhere.
 - **The balance-owed `/pay/[token]` screen's skip link is proven by code inspection, not by its own e2e assertion** — the acceptance line only asked for "at least one of the two routes," and minting a live Stripe PaymentIntent for a disposable e2e fixture is a materially bigger lift than the row's stakes justify. The two routes do NOT share a component — `page.tsx` has its own `Shell` function and `done/page.tsx` duplicates the same skip-link/`<main>` markup inline rather than importing it — so this is two independent fixes proven identical by inspection, not one fix proven twice. If they ever drift, this gap is the one that would miss it.
 
+**Correction (2026-09-19, the review block over B-301–B-328, accessibility finding A7).** The first decision above says the `/login` banner "renders from a `?reason=` query param set by a redirect elsewhere". **It does not.** `/login` (`apps/web/app/(auth)/login/page.tsx`) reads only `from` and `error`, and nothing anywhere reads `reason`, so the `reason=pay_link_expired` this route sends is dropped and the tenant sees no explanation. The page-load `role="alert"` this entry left alone is real and still unfixed; the premise that it carries a pay-link message was wrong. **B-336** owns the fix.
+
 ---
 
 ## B-315 — the payer's nav and the account card now quote the same figure, and the staff list says how far behind each account is (2026-09-17, `52edf38`)
