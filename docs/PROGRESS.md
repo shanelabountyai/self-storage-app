@@ -10652,3 +10652,24 @@ The counter form's Method select was uncontrolled under `key={former | account |
 **What it left behind.** Nothing new. The B-321 carries stand.
 
 **Verification.** Typecheck and lint are clean (the same six warnings as before). `e2e/i18n.spec.ts` on the production build: **102 passed, 0 failed**. That includes `/confirm-email renders in Spanish` on both projects, which was the only known red spec. No unit suite was run: the change is page metadata that no unit test reaches.
+
+## B-301 — existing business-account members were never told they have portal access (2026-09-19, `11c55a7`)
+
+**What it built.**
+
+1. **`npm run db:backfill:account-access`** (`apps/web/scripts/backfill-account-access.mts`). It sends B-287's account-access mail to every member who never got it. It prints and sends nothing until `--apply`. It has the same shape as `db:backfill:move-in-payments`.
+2. **One send per membership, ever.** `sendAuthEmail` takes an optional `idempotencyKey`, and `sendAccountAccessLink` passes `accountAccessKey(memberId)`, so `sendDirectEmail` refuses a second send for the same membership. `addMember` uses the same key, which means a member added from now on is never backfilled.
+3. **`tests/backfill-account-access.test.ts`** covers who the plan emails and who it skips: a member with no email is skipped; a member already sent the mail under their key, or by B-287 under a random key (a sent message after they joined that names the account), counts as already told; an earlier failed send under the key is reported for a person to handle; and an ordinary password reset does not count as telling them.
+
+**What it decided.**
+
+- **No migration.** The record of who has been told is the `Message` row keyed on the membership, not a new column.
+- **`--apply` refuses without `RESEND_API_KEY`.** Without a provider, `sendAuthEmail` prints the reset link to the console, which here would be a live sign-in link for a real person in a terminal.
+- **The production dry run count is 0 memberships**, so nothing needed sending. Production had no `billing_account_member` table until 2026-09-19 (below), so no member could predate B-287 there.
+
+**What it left behind.**
+
+- **Production was 52 migrations behind**, last applied 2026-08-15. It was found because the first dry run failed on a missing `billing_account_member` table. The owner chose to take a Neon backup branch first, then deploy (**D-143**). The backup is the branch `pre-migrate-2026-09-19`. All 52 applied, and `migrate status` reports it up to date. **Nothing applies migrations to production automatically**, so every migration merged from now on is pending there until somebody follows D-143.
+- **Production was not smoke-tested.** The `AUTH_URL` host returns 401 on every path, including `/`: Vercel deployment protection is in front of it. A dynamic-route check needs the public production domain.
+
+**Verification.** Typecheck is clean, and lint is clean on the changed files. The new test, `billing-accounts-db` and `auth-email-ignore` pass (13 tests). There was no schema change. The accessibility statement was not re-read, because nothing customer-facing shipped.
