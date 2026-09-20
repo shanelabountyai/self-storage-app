@@ -10730,7 +10730,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 ## B-333 — a correction now announces itself outside the form it removes (2026-09-20)
 
-**Commit:** `PENDING`
+**Commit:** `af32799`
 
 **What it built.** The announcement, the focus target and the re-bill sentence that B-303 and B-304 wrote and nobody ever received.
 
