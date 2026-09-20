@@ -1,6 +1,7 @@
 'use client'
 
 import { AdminForm, Field } from '@/components/admin/form'
+import { AnnounceRegion } from '@/components/admin/announce'
 import {
   adjustLedgerAction,
   voidInvoiceAction,
@@ -108,6 +109,27 @@ export function LedgerCorrections({
 
   return (
     <div className="flex flex-col gap-6">
+      {/* B-333 / SC 4.1.3, 2.4.3. Two of the three forms below REMOVE
+          themselves by succeeding — a written-off balance reaches zero and
+          fails `balanceCents > 0`, a voided invoice leaves `voidableInvoices`
+          and takes its `<li>` with it — so the `role="status"` inside
+          `AdminForm` was unmounted in the same commit that populated it.
+          Nothing was announced, nothing was PRINTED either, and focus fell
+          from the submit to `<body>`. B-327's and B-328's "the next run bills
+          it again at the current rate" sentence is in that lost message, so
+          the one line telling a manager what a void does next never arrived.
+
+          B-170's region is the fix rather than a second mechanism: it is
+          mounted here, above all three, where no correction can remove it,
+          and `announceOutside` pushes the success text up from the action
+          while the form is still mounted.
+
+          The adjustment form deliberately does NOT opt in. It survives its own
+          success — it renders unconditionally — so its message belongs where
+          the reader already is, and focus stays on its submit button rather
+          than being pulled to the top of the section. That is B-170's own
+          rule, not an omission. */}
+      <AnnounceRegion>
       <AdminForm
         action={adjustLedgerAction}
         label={`Post a ledger correction — ${unitLabel}`}
@@ -157,6 +179,7 @@ export function LedgerCorrections({
           action={writeOffLedgerAction}
           label={`Write off the balance — ${unitLabel}`}
           className="border-input flex flex-col gap-3 border-t pt-6"
+          announceOutside
         >
           <input type="hidden" name="tenantId" value={tenantId} />
           <input type="hidden" name="leaseId" value={leaseId} />
@@ -205,6 +228,7 @@ export function LedgerCorrections({
                   action={voidInvoiceAction}
                   label={`Void invoice ${invoice.number}`}
                   className="mt-3 flex flex-wrap items-end gap-2"
+                  announceOutside
                 >
                   <input type="hidden" name="tenantId" value={tenantId} />
                   <input type="hidden" name="leaseId" value={leaseId} />
@@ -221,6 +245,7 @@ export function LedgerCorrections({
           </ul>
         </section>
       )}
+      </AnnounceRegion>
     </div>
   )
 }

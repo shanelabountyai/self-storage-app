@@ -26,6 +26,10 @@ export function AcknowledgeExceptionForm({
       action={acknowledgeExceptionAction}
       label={`Mark reviewed — ${subject}`}
       className="flex flex-wrap items-end gap-2"
+      // B-333. This form succeeds by ceasing to exist: the cell re-renders as
+      // "Reviewed by …". The message goes to the page's `AnnounceRegion`,
+      // which the revalidation cannot unmount.
+      announceOutside
     >
       <input type="hidden" name="leaseId" value={leaseId} />
       {/* A visible label, not a placeholder. A placeholder is gone the moment

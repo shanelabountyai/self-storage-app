@@ -868,6 +868,45 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       "Same single-column container as the English state above, and the one thing Spanish changes here — string length — has its tightest public case measured on the facility page, which STATE_REACH does reach in Spanish.",
   },
+  // B-333. The three corrections that succeed by removing the form that
+  // reported them. Until this row each was scanned only in its BEFORE state —
+  // the route loop reaches the ledger and the exception report at rest — so
+  // the announcement, the focus target and the markup that replaces the form
+  // had never been given to axe at all, which is precisely where the 4.1.3
+  // and 2.4.3 failures lived.
+  //
+  // All three are `layout: 'excepted'` for one reason, and it is a property of
+  // the actions rather than a gap being waived: each is destructive and
+  // one-shot. An invoice can be voided once, a balance written off once, an
+  // exception acknowledged once — so a `STATE_REACH` entry, which re-reaches
+  // its state at three viewports in one test, has nothing to re-reach. The
+  // layout claim is carried by the at-rest routes, which ARE measured: what
+  // each success adds is one paragraph of text in the page's existing single
+  // column, above content already measured at 320px.
+  {
+    route: '/admin/tenants/[tenantId]/ledger/[leaseId]',
+    state: 'invoice voided',
+    spec: 'e2e/admin-ledger-corrections.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the action is one-shot — an invoice voids once — so there is no state to re-reach at three viewports; the at-rest route is measured, and what this adds is one wrapped paragraph above it.',
+  },
+  {
+    route: '/admin/tenants/[tenantId]/ledger/[leaseId]',
+    state: 'balance written off',
+    spec: 'e2e/admin-ledger-corrections.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'one-shot for the same reason as the voided state above — a balance reaches zero once — and it adds the same single wrapped paragraph to a column already measured at 320px.',
+  },
+  {
+    route: '/admin/reports/ledger-exceptions',
+    state: 'exception acknowledged',
+    spec: 'e2e/admin-ledger-corrections.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'one-shot — a lease is acknowledged once — and the table itself is already inside a ScrollRegion measured by the at-rest route; the acknowledgement replaces a form in one cell with shorter text and adds one paragraph above.',
+  },
 ] as const
 
 export type StateException = {

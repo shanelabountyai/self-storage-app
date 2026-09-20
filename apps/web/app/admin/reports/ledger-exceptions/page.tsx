@@ -5,6 +5,7 @@ import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { formatCents } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 import { AcknowledgeExceptionForm } from '@/components/admin/acknowledge-exception-form'
+import { AnnounceRegion } from '@/components/admin/announce'
 import { can } from '@/lib/rbac/authorize'
 
 export const metadata = { title: 'Ledger exceptions' }
@@ -80,6 +81,13 @@ export default async function LedgerExceptionsPage() {
         </Link>
       </nav>
 
+      {/* B-333 / SC 4.1.3, 2.4.3. Acknowledging a row switches the cell's
+          branch below — the form is replaced by "Reviewed by …" — so the
+          `role="status"` inside `AdminForm` was unmounted in the same commit
+          that wrote the message, and focus fell from the submit to `<body>`,
+          at the top of a table of up to a facility's worth of rows. The
+          region has to live where the row cannot take it: above the table. */}
+      <AnnounceRegion>
       {exceptions.length === 0 ? (
         <p className="text-sm">
           Every lease at the facilities you can see reconciles to its invoices.
@@ -172,6 +180,7 @@ export default async function LedgerExceptionsPage() {
           </table>
         </ScrollRegion>
       )}
+      </AnnounceRegion>
     </div>
   )
 }

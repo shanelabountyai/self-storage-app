@@ -10727,3 +10727,29 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - **No confirm step on any of the three corrections** — B-346 under D-145, deliberately last in the block.
 
 **Verification.** Typecheck clean (including `tests/`), lint clean. `tests/void-rebill-db.test.ts`, `ledger-corrections-db`, `ledger-db`, `ledger-exceptions-db` and `transfer-db`: 82 passed. No schema change, so no drift check was needed. The accessibility statement was not re-read: nothing customer-facing shipped — both screens are admin.
+
+## B-333 — a correction now announces itself outside the form it removes (2026-09-20)
+
+**Commit:** `PENDING`
+
+**What it built.** The announcement, the focus target and the re-bill sentence that B-303 and B-304 wrote and nobody ever received.
+
+1. **`AnnounceRegion` above the three corrections** (`apps/web/components/admin/ledger-corrections.tsx`) and **above the exception table** (`apps/web/app/admin/reports/ledger-exceptions/page.tsx`), with `announceOutside` on the void, write-off and acknowledge forms. Each of those three succeeds by ceasing to exist — a voided invoice leaves `voidableInvoices` and takes its `<li>`, a written-off balance fails `balanceCents > 0`, an acknowledged row switches its cell to "Reviewed by …" — so React unmounted the `role="status"` inside `AdminForm` in the same commit that filled it. Nothing was announced (4.1.3), focus fell to `<body>` (2.4.3), and because the text was never painted either, **sighted staff never saw B-327/B-328's "the next billing run bills it again at the current rate" — the one sentence saying what a void does next.**
+2. **The acknowledgement names its lease** (`…/ledger-exceptions/actions.ts`). "Recorded. The daily task will not name this lease again" had an antecedent inside the row it was read from; above a table of a facility's worth of rows it names nothing. The subject is read back from the database, not taken from a hidden field.
+3. **`e2e/admin-ledger-corrections.spec.ts`**, three tests, each asserting the region was **attached and empty before the press** (`expectPreexisting`), carries the message after it, and **took focus** — plus an axe scan of each post-interaction state, declared in `SCANNED_STATES`. All three were confirmed to **fail with the fix stashed** (`toBeAttached()` on a region that does not exist) and pass with it.
+
+**What it decided.**
+
+- **The adjustment form deliberately does NOT opt in.** It renders unconditionally, so it survives its own success; its message belongs where the reader already is and focus stays on its submit. That is B-170's own rule, and the fourth action is compliant without a change.
+- **B-170's mechanism, not a second one.** `AnnounceRegion` + `announceOutside` already existed and already solved this exact shape for the task queues. The functional diff is ten lines.
+- **The fixture is the spec's own, and its facility is reused rather than deleted.** All three actions write `audit_log`, which RESTRICTs against `facility` and refuses DELETE on itself (B-185), so an `afterAll` that dropped the facility would fail permanently from the second run on. Found-or-created by a fixed slug; the disposable rows under it are cleared in `beforeAll`.
+- **The three post-interaction states are `layout: 'excepted'`, not unmeasured by omission.** Each action is one-shot — an invoice voids once — so a `STATE_REACH` entry that re-reaches its state at three viewports has nothing to re-reach.
+- **PRD 02 FR-20 now says where the region lives when the form does not survive.** B-170 built the mechanism and recorded nothing in the PRD, which is why the same shape shipped three more times.
+
+**What it left behind.**
+
+- **Only these four forms were audited.** Any other form in the product whose success removes it has the same defect and is not covered here; the rule is now in FR-20, but nothing sweeps for violations of it.
+- **`AdminForm`'s error/confirm summary still does not pre-exist** — it is rendered only once the action has failed, so `expectPreexisting` cannot be pointed at it. That gap is `a11y-helpers.ts`'s own comment, older than this row, and still open.
+- **The e2e fixture's facility and three leases stay resident in `storage_test`'s `public` schema between runs** (they cannot be reclaimed, per above). `npm run db:reset-test` clears them with everything else.
+
+**Verification.** Typecheck clean (including `e2e/` and `tests/`), lint clean (6 pre-existing `_prev` warnings, 0 errors). `tests/a11y-scan-coverage.test.ts`: 14 passed. `e2e/admin-ledger-corrections.spec.ts` on `desktop-chrome`: 3 passed, **twice in a row**, and the same three confirmed failing with the fix stashed (`toBeAttached()`, individually — serial mode skips the rest after the first failure, so each was re-run under `-g` to prove it). **The route loop's own scan of `/admin/reports/ledger-exceptions` was re-run in BOTH branches**, because the fixture leaves a permanent exception row and that route had only ever been scanned in its empty state: the acknowledged branch and the unacknowledged one (a form inside a table cell) are each clean. No schema change. The accessibility statement was not re-read: nothing customer-facing shipped — both screens are admin, and the three new `SCANNED_STATES` rows are admin rows, which carry no `reasonEs` and are not rendered on the public page.
