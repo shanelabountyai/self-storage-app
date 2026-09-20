@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { voidRentInvoice } from '../apps/web/lib/billing/corrections'
+import { recomputeInvoices } from '../apps/web/lib/billing/allocation'
 import { generateInvoices } from '../apps/web/lib/billing/invoices'
+import { leaseLedger } from '../apps/web/lib/admin/ledger'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
 
@@ -28,7 +30,7 @@ const tenantIds: string[] = []
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`)
 const noop = () => {}
 
-function manager(): Actor {
+function manager(maxCreditCents: number | null = null): Actor {
   return {
     kind: 'staff',
     staffUserId: staffId,
@@ -38,7 +40,7 @@ function manager(): Actor {
         roleKey: 'manager',
         rank: 20,
         permissions: new Set<PermissionKey>(['credits:manual', 'tenants:view']),
-        limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents: null },
+        limits: { maxFeeWaiverCents: 0, maxRefundCents: 0, maxCreditCents },
       },
     ],
   }
@@ -147,6 +149,7 @@ describeDb('B-327 — re-billing a voided rent period', () => {
     await prisma.promoRedemption.deleteMany({ where: { facilityId } })
     await prisma.promotion.deleteMany({ where: { name: { contains: suffix } } })
     await prisma.paymentAllocation.deleteMany({ where: { invoice: { facilityId } } })
+    await prisma.payment.deleteMany({ where: { facilityId } })
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
     await prisma.invoiceLineItem.deleteMany({ where: { invoice: { facilityId } } })
     await prisma.invoice.deleteMany({ where: { facilityId } })
@@ -295,5 +298,66 @@ describeDb('B-327 — re-billing a voided rent period', () => {
 
     await generateInvoices(facilityId, d('2026-09-28'), noop)
     expect(discounts(await liveRent(leaseId, '2026-10-01'))).toEqual([])
+  })
+
+  // B-329. The void's other half: B-327 releasing the period is what turned a
+  // part-paid void into a double bill, so the refusal is tested against the
+  // real generator too — the assertion that matters is that the period is NOT
+  // re-billed, not merely that the call returned `ok: false`.
+  describe('a rent invoice money has been paid against', () => {
+    async function payPartOf(invoiceId: string, tenantId: string, amountCents: number) {
+      const payment = await prisma.payment.create({
+        data: { facilityId, tenantId, amountCents, method: 'cash', status: 'succeeded' },
+      })
+      await prisma.paymentAllocation.create({ data: { paymentId: payment.id, invoiceId, amountCents } })
+      // The real recompute, so the fixture cannot disagree with what a payment
+      // actually leaves behind.
+      await prisma.$transaction((tx) => recomputeInvoices(tx, [invoiceId]))
+    }
+
+    it('is refused, writes nothing, and its period is not billed again', async () => {
+      const { leaseId, tenantId } = await makeLease(d('2026-08-01'))
+      await generateInvoices(facilityId, d('2026-08-28'), noop)
+      const invoice = await liveRent(leaseId, '2026-09-01')
+      await payPartOf(invoice.id, tenantId, Math.round(invoice.totalCents / 2))
+
+      const entriesBefore = await prisma.ledgerEntry.count({ where: { leaseId } })
+      expect(await voidRentInvoice(manager(), { invoiceId: invoice.id, reasonCode: 'wrong_rate' })).toMatchObject({
+        ok: false,
+        reason: 'partly_paid',
+      })
+
+      const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })
+      expect(after.status).toBe('partially_paid')
+      expect(await prisma.ledgerEntry.count({ where: { leaseId } })).toBe(entriesBefore)
+
+      // The double bill itself: before the guard, this raised a second full-rate
+      // invoice for a month the tenant had half paid.
+      await generateInvoices(facilityId, d('2026-08-28'), noop)
+      expect(await prisma.invoice.count({ where: { leaseId, kind: 'rent', periodStart: d('2026-09-01') } })).toBe(1)
+    })
+
+    it('is not offered as voidable on the ledger screen', async () => {
+      const { leaseId, tenantId } = await makeLease(d('2026-08-01'))
+      await generateInvoices(facilityId, d('2026-08-28'), noop)
+      const invoice = await liveRent(leaseId, '2026-09-01')
+      expect((await leaseLedger(manager(), leaseId))?.voidableInvoices.map((row) => row.id)).toEqual([invoice.id])
+
+      await payPartOf(invoice.id, tenantId, 1_000)
+      expect((await leaseLedger(manager(), leaseId))?.voidableInvoices).toEqual([])
+    })
+
+    it('still refuses a staffer over their credit limit, and writes nothing', async () => {
+      const { leaseId } = await makeLease(d('2026-08-01'))
+      await generateInvoices(facilityId, d('2026-08-28'), noop)
+      const invoice = await liveRent(leaseId, '2026-09-01')
+
+      expect(await voidRentInvoice(manager(100), { invoiceId: invoice.id, reasonCode: 'wrong_rate' })).toMatchObject({
+        ok: false,
+        reason: 'over_limit',
+      })
+      expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe('open')
+      expect(await prisma.ledgerEntry.count({ where: { leaseId, type: 'adjustment' } })).toBe(0)
+    })
   })
 })

@@ -314,7 +314,10 @@ export async function writeOffOpenLeaseBalance(
 
 // ---------------------------------------------------------- invoice void ----
 
-export type VoidInvoiceResult = { ok: true; amountCents: number; number: string } | CorrectionRefusal
+export type VoidInvoiceResult =
+  | { ok: true; amountCents: number; number: string }
+  | { ok: false; reason: 'partly_paid'; amountPaidCents: number }
+  | CorrectionRefusal
 
 /// Void a rent invoice that should never have been raised.
 ///
@@ -368,17 +371,39 @@ export async function voidRentInvoice(
   assertFacilityAccess(actor, invoice.facilityId)
 
   const outstanding = invoice.totalCents - invoice.amountPaidCents
-  // Money already taken against it is a refund, which is B-048's, with its own
-  // permission and its own limit. Voiding it here would leave a settled
-  // payment allocated to an invoice that no longer exists.
   if (outstanding <= 0 || invoice.status === 'void' || invoice.status === 'uncollectible') {
     return { ok: false, reason: 'nothing_to_do' }
+  }
+  // B-329. Money already taken against it is a refund, which is B-048's, with
+  // its own permission and its own limit. Voiding it here would leave a settled
+  // payment allocated to an invoice that no longer exists — and since B-327
+  // released the period, the next nightly run bills it again AT FULL RATE, so
+  // the tenant owes the whole month for one they part paid. The guard tested
+  // `outstanding` where the comment above it meant money paid.
+  if (invoice.amountPaidCents > 0) {
+    return { ok: false, reason: 'partly_paid', amountPaidCents: invoice.amountPaidCents }
   }
 
   const refusal = await authorize(actor, invoice.facilityId, outstanding)
   if (refusal) return refusal
 
-  await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx): Promise<VoidInvoiceResult> => {
+    // B-329, the second half. The read above is outside this transaction, so a
+    // payment landing between the two would otherwise slip past it. `FOR UPDATE`
+    // takes the same row lock `recomputeInvoices`'s own `invoice.update` takes,
+    // so the two serialise: either this sees the payment's paid total, or the
+    // payment waits and lands on an invoice already voided (where
+    // `recomputeInvoices` leaves it voided, by its own rule).
+    const [locked] = await tx.$queryRaw<{ amountPaidCents: number; status: string }[]>`
+      SELECT "amountPaidCents", "status" FROM "invoice" WHERE "id" = ${invoice.id} FOR UPDATE
+    `
+    if (!locked || locked.status === 'void' || locked.status === 'uncollectible') {
+      return { ok: false, reason: 'nothing_to_do' }
+    }
+    if (locked.amountPaidCents > 0) {
+      return { ok: false, reason: 'partly_paid', amountPaidCents: locked.amountPaidCents }
+    }
+
     await tx.ledgerEntry.create({
       data: {
         facilityId: invoice.facilityId,
@@ -410,9 +435,11 @@ export async function voidRentInvoice(
       },
       tx,
     )
+
+    return { ok: true, amountCents: outstanding, number: invoice.number }
   })
 
-  return { ok: true, amountCents: outstanding, number: invoice.number }
+  return result
 }
 
 /// B-327. Hands back the promotion period and referral rewards a voided rent

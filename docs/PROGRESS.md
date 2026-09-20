@@ -10686,3 +10686,28 @@ The counter form's Method select was uncontrolled under `key={former | account |
 **What it decided.** The owner's B-328 catch-up question is moot. No live lease missed a period, and every one of them reaches its thirteenth period only after the fix was deployed.
 
 **What it left behind.** A full page-level smoke test needs the demo password. Pulling it from Vercel for a second time was blocked as credential materialization, and the first pull's file was deleted. The Neon backup branch `pre-migrate-2026-09-19` can now be deleted, which is an owner action.
+
+## B-329 — a partly paid rent invoice can no longer be voided (2026-09-20)
+
+**Commit:** `PENDING`
+
+**What it built.** The refusal the void's own comment had described since B-303 but never tested for.
+
+1. **`voidRentInvoice` refuses any rent invoice with money settled against it** (`apps/web/lib/billing/corrections.ts`). The guard tested `outstanding` where the comment above it meant money paid, so a $100 invoice with $50 paid still had $50 outstanding and voided cleanly. It now returns a new `partly_paid` refusal carrying `amountPaidCents`. The check runs **twice**: once on the read outside the transaction, and again inside it on a `SELECT … FOR UPDATE` of the invoice row, which takes the same row lock `recomputeInvoices`'s own `invoice.update` takes — so a payment landing between the read and the write either is seen by the void, or waits and lands on an invoice already voided (where `recomputeInvoices` leaves it voided, by its own rule). The transaction now returns the result rather than the caller assuming success.
+2. **The ledger screen stops offering it** (`apps/web/lib/admin/ledger.ts`): `voidableInvoices` is `status: 'open'`, not `['open', 'partially_paid']`, and the section's prose says why and names the two repairs. The server-side refusal says the same thing with the amount in it (`…/ledger/[leaseId]/actions.ts`) — the screen is the first a staffer hears of it, the refusal is the backstop.
+3. **Three cases in `tests/void-rebill-db.test.ts`**, beside B-327's four because it is the same fixture and the same defect's two halves. The one that matters runs the **real generator** after the refused void and asserts the period still carries exactly one invoice — the double bill itself, not merely that the call returned `ok: false`. Both new void cases were confirmed to **fail** with the fix stashed and pass with it; B-327's four pass unchanged either way.
+
+**What it decided.**
+
+- **The refusal, not the carry-forward.** Carrying the paid amount onto the reissue was the reviewer's other option and is refused: it moves a settled payment's allocation, which B-303 says a correction must never do, and it would make the re-raise a second writer of allocations beside `applyPayment`. PRD 02 §4.10 records this.
+- **`amountPaidCents > 0` is the test, so a pending allocation does not block a void** and a fully refunded payment does not either — both leave the settled total at zero, which is `recomputeInvoices`'s own definition (`SETTLING_STATUSES`).
+- **A fully paid invoice still refuses as `nothing_to_do`, not `partly_paid`.** The existing `outstanding <= 0` check runs first, so no existing message or test changed; only the partially-paid case moved.
+- **No migration.** Nothing about the schema was wrong.
+
+**What it left behind.**
+
+- **The production count was not taken.** The row asks for every rent invoice with `status = 'void'` and any `PaymentAllocation`, and whether a live rent invoice now exists for the same `(leaseId, periodStart)`. The query is written and read-only, but running it was refused by the sandbox as a production read, so it needs the owner. It is an **owner action in `NEXT.md`**, and it does not gate this build: the fix refuses the void from now on, and a non-zero result is an owner remedy (a credit and a word to each tenant), not a code one. The Ops entry of 2026-09-19 found production holding 12 seeded demo leases, so zero is still expected — it remains counted, not assumed.
+- **The re-raise's due date is still the period start** — B-338, next in the block, not touched here.
+- **No confirm step on any of the three corrections** — B-346 under D-145, deliberately last in the block.
+
+**Verification.** Typecheck clean (including `tests/`), lint clean. `tests/void-rebill-db.test.ts`, `ledger-corrections-db`, `ledger-db`, `ledger-exceptions-db` and `transfer-db`: 82 passed. No schema change, so no drift check was needed. The accessibility statement was not re-read: nothing customer-facing shipped — both screens are admin.

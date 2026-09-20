@@ -152,6 +152,17 @@ export async function voidInvoiceAction(
     reasonCode: String(formData.get('reasonCode') ?? ''),
     note: String(formData.get('note') ?? '') || undefined,
   })
+  // B-329. The one refusal that has to name what to do instead: voiding an
+  // invoice money has been taken against would leave that payment allocated to
+  // an invoice that no longer exists, and the period would be billed again at
+  // full rate.
+  if (!result.ok && result.reason === 'partly_paid') {
+    return {
+      status: 'error',
+      message: `${formatCents(result.amountPaidCents)} has already been paid against this invoice, so it cannot be voided. Refund the paid part first and then void it, or post a correction for the difference.`,
+      fieldErrors: {},
+    }
+  }
   if (!result.ok) {
     return refusalState(result, {
       nothingToDo: 'That invoice has already been paid, voided or written off.',

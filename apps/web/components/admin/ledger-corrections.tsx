@@ -188,7 +188,9 @@ export function LedgerCorrections({
             cancels it both stay on the ledger. If the invoice is for the current period and the
             lease is active, the next billing run bills it again at the lease&rsquo;s current rate,
             with any promotion or referral credit this invoice carried. An earlier period is not
-            billed again automatically.
+            billed again automatically. An invoice money has already been paid against is not
+            listed here: refund the paid part first and then void it, or post a correction for
+            the difference.
           </p>
           <ul className="flex flex-col gap-3">
             {voidableInvoices.map((invoice) => (

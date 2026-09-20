@@ -82,7 +82,11 @@ export async function leaseLedger(actor: Actor, leaseId: string): Promise<LeaseL
     }),
     reconciliationInputs({ leaseIds: [leaseId] }),
     prisma.invoice.findMany({
-      where: { leaseId, kind: 'rent', status: { in: ['open', 'partially_paid'] } },
+      // B-329: `partially_paid` is deliberately NOT offered. Voiding an invoice
+      // money has been taken against leaves that payment allocated to an
+      // invoice that no longer exists, and B-327 then re-bills the period at
+      // full rate. `voidRentInvoice` refuses it; this stops asking for it.
+      where: { leaseId, kind: 'rent', status: 'open' },
       orderBy: { periodStart: 'asc' },
       select: { id: true, number: true, periodStart: true, totalCents: true, amountPaidCents: true },
     }),
