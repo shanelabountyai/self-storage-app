@@ -4,12 +4,15 @@
 
 ## Start here
 
-1. **B-329 (`83azza`)**: voiding a partly paid rent invoice double-bills the part already paid. This is a live money defect. **Before building, count in production** every voided rent invoice with money allocated to it since B-327 reached production (2026-09-19), and whether its period was billed again.
+1. **B-338 (`83azzj`)**: a voided rent period is re-billed at the same rate, due on a date already past, and the tenant is told nothing.
 2. Then work down the block. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
+
+**B-329 is built** (2026-09-20, `5a6c9b3`), minus its production count — see Owner actions.
 
 ## Owner actions
 
 - **Delete the Neon backup branch `pre-migrate-2026-09-19`.** Production has been verified.
+- **Run B-329's production count.** Read-only; the sandbox refused it as a production read, so it needs a hand. The query is in the B-329 `PROGRESS.md` entry: every rent invoice with `status = 'void'` and any `PaymentAllocation`, and whether a live rent invoice now exists for the same `(leaseId, periodStart)`. Zero is expected (production holds seeded demo data only). A non-zero row is an owner remedy — a credit and a word to that tenant — not a build one.
 
 ## Worth knowing before the next sweep
 

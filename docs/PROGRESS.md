@@ -10689,7 +10689,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 ## B-329 — a partly paid rent invoice can no longer be voided (2026-09-20)
 
-**Commit:** `PENDING`
+**Commit:** `5a6c9b3`
 
 **What it built.** The refusal the void's own comment had described since B-303 but never tested for.
 
@@ -10706,7 +10706,23 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **What it left behind.**
 
-- **The production count was not taken.** The row asks for every rent invoice with `status = 'void'` and any `PaymentAllocation`, and whether a live rent invoice now exists for the same `(leaseId, periodStart)`. The query is written and read-only, but running it was refused by the sandbox as a production read, so it needs the owner. It is an **owner action in `NEXT.md`**, and it does not gate this build: the fix refuses the void from now on, and a non-zero result is an owner remedy (a credit and a word to each tenant), not a code one. The Ops entry of 2026-09-19 found production holding 12 seeded demo leases, so zero is still expected — it remains counted, not assumed.
+- **The production count was not taken.** The row asks for every rent invoice with `status = 'void'` and any `PaymentAllocation`, and whether a live rent invoice now exists for the same `(leaseId, periodStart)`. The query is read-only, but running it was refused by the sandbox as a production read, so it needs the owner:
+
+  ```sql
+  -- READ ONLY. dotenv -e .env.prod-ops -- psql "$DIRECT_URL" -f b329-count.sql
+  SELECT v."id", v."number", v."leaseId", v."periodStart", v."totalCents", v."amountPaidCents",
+         COALESCE(SUM(a."amountCents"), 0) AS allocated_cents, COUNT(a."id") AS allocation_rows,
+         EXISTS (SELECT 1 FROM "invoice" r
+                 WHERE r."leaseId" = v."leaseId" AND r."kind" = 'rent'
+                   AND r."periodStart" = v."periodStart"
+                   AND r."status" <> 'void' AND r."id" <> v."id") AS rebilled
+  FROM "invoice" v
+  LEFT JOIN "payment_allocation" a ON a."invoiceId" = v."id"
+  WHERE v."kind" = 'rent' AND v."status" = 'void'
+  GROUP BY v."id" HAVING COUNT(a."id") > 0 ORDER BY v."periodStart";
+  ```
+
+  It is an **owner action in `NEXT.md`**, and it does not gate this build: the fix refuses the void from now on, and a non-zero result is an owner remedy (a credit and a word to each tenant), not a code one. The Ops entry of 2026-09-19 found production holding 12 seeded demo leases, so zero is still expected — it remains counted, not assumed.
 - **The re-raise's due date is still the period start** — B-338, next in the block, not touched here.
 - **No confirm step on any of the three corrections** — B-346 under D-145, deliberately last in the block.
 
