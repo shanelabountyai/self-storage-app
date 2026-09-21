@@ -10785,7 +10785,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 ## B-330 — an account payment settles the account's units, never the payer's own (2026-09-21)
 
-**Commit:** `PENDING`
+**Commit:** `d3c23d7`
 
 **What it built.** `applyPayment` takes an `accountId` (`apps/web/lib/billing/allocation.ts`): the payer's claims (`claimsFor`, D-118's union) are filtered to invoices on leases of that account, and only when the account's `payerTenantId` is this payment's tenant. Three callers pass it:
 
