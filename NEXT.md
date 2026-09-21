@@ -11,7 +11,9 @@
 - LinkedIn drafts 25–29 in the Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
 - Technical write-up: `WRITEUP.md` (https://github.com/shanelabountyai/self-storage-app/blob/main/WRITEUP.md), screenshots in `docs/images/`
 
-**Next: B-349** (bare `/portal/pay`), XS, at `83azzu`, written 2026-09-21 from the closure demo walk.
+**Next: no open backlog item.** The only option left is a tenth review block (operator, UX and accessibility reviews over B-329–B-349).
+
+**B-349 is built** (2026-09-21, `67ec7f4`). A bare `/portal/pay` redirects a one-lease tenant to `?lease=`. A tenant with several leases, or none, gets a sentence and a link to `/portal`. The DEMO.md troubleshooting row is removed.
 
 **B-348 is built** (2026-09-21, `b4866f9`). `--font-sans` resolves to Geist, and the body's font is asserted in `a11y.spec.ts`. It also added the `REACH` entry for `/pay/[token]/done` that B-336 left out, with its fixture moved to `e2e/pay-receipt-fixture.ts`.
 
