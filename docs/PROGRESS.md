@@ -11085,3 +11085,22 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.**
 
 - Nothing owned. These are staff screens, so the public accessibility statement was not re-read.
+
+## B-345 — two British phrasings in customer English are now US English (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.**
+
+- "crossed in the post" is now "crossed in the mail" in both English dunning bodies in `packages/db/comms-catalog.ts` (the single-lease one and the account one it was copied into).
+- `cont.addressUpdated` in `apps/web/lib/i18n/en.ts` now reads "anything we mail you".
+- `tests/us-english.test.ts` fails if "in the post", "post to you" or "ring the office" (B-182) appears in the `en` dictionary or in an English template subject or body.
+
+**What it decided.**
+
+- The guard is a pure test on the constants, not on the seeded rows, so it fails on the branch that brings the phrase back, before anyone runs `db:migrate:test`.
+- It is a denylist of known phrases, not a general British-spelling check. The Spanish bodies are out of scope.
+
+**What it left behind.**
+
+- Nothing. `storage_test` was reseeded (`db:migrate:test`). Production gets the new wording at its next seed. Templates are seeded state (B-206).

@@ -1282,7 +1282,7 @@ export const en = {
 
   // --- Contact details: action results (B-310) ----------------------------
   'cont.savedDetails': 'Your contact details are saved.',
-  'cont.addressUpdated': "Your address is updated. We'll use it for anything we post to you.",
+  'cont.addressUpdated': "Your address is updated. We'll use it for anything we mail you.",
   'cont.addressUnchanged': "That's already your address on file.",
   'cont.problem.emailInvalid': 'Enter an email address.',
   'cont.problem.emailUnchanged': "That's already your email address.",
