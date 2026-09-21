@@ -78,7 +78,8 @@ create them — `postinstall`'s `prisma generate` writes into
 
 ## Order to do it in
 
-1. **A separate Neon database for production.** Not the dev one: the test suite
+1. **A separate Neon database for production.** See [`NEON.md`](NEON.md) for the
+   region check and the free-vs-paid decision. Not the dev one: the test suite
    writes to `storage_test` in the same instance, `db:migrate:test` reseeds it,
    and several suites delete freely. Set both `DATABASE_URL` (pooled) and
    `DIRECT_URL` (direct) — migrations need the direct one because Neon's pooler
