@@ -232,6 +232,48 @@ describeDb('receipt balance scope (B-331)', () => {
     })
   })
 
+  // B-353. A member who is not the payer paying their own account unit saw the
+  // company's whole balance, and its name, on every receipt.
+  it('quotes only the unit when a non-payer member pays their own account unit', async () => {
+    const payerId = await tenant('boss')
+    const name = `Acme Members ${suffix}`
+    const account = (
+      await prisma.billingAccount.create({ data: { facilityId, name, payerTenantId: payerId } })
+    ).id
+    const dana = await tenant('dana')
+    const hers = await makeLease(dana, 'C-5', account)
+    await openRent(hers, 8_000)
+    await openRent(await makeLease(await tenant('eli'), 'C-6', account), 50_000)
+
+    const result = await recordCounterPayment(staff(), {
+      facilityId,
+      tenantId: dana,
+      leaseId: hers,
+      restrictToLease: true,
+      method: 'cash',
+      amountCents: 8_000,
+      tenderedCents: 8_000,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const { body } = await emailReceiptParts(result.paymentId)
+    expect(body).toContain('Balance on unit C-5 after this payment: $0.00.')
+    expect(body).not.toContain(name)
+
+    const portal = await paymentReceipt(dana, result.paymentId)
+    expect(portal?.accountName).toBeNull()
+    expect(portal?.balanceCents).toBe(0)
+    expect(receiptBalanceLabel(portal!, t, 'en-US')).toBe('Balance on unit C-5')
+
+    const receipt = (await counterReceipt(staff(), result.paymentId))!
+    expect(receiptRows(receipt).some((row) => row.value === name)).toBe(false)
+    expect(await counterBalanceRow(result.paymentId)).toEqual({
+      label: 'Balance on unit C-5',
+      value: '$0.00',
+    })
+  })
+
   it('names the one unit a directed payment on a two-unit personal tenant covered', async () => {
     const tenantId = await tenant('pat')
     const mine = await makeLease(tenantId, 'P-1')

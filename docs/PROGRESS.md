@@ -11280,3 +11280,18 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - `createChargeIntent`'s allocation insert is not under the invoice lock. An autopay run that read the invoice as open in the milliseconds before a void commits can still write its pending allocation on the void row. When it settles, the (b) lock drops the void invoice and the money goes elsewhere, but the pending row stays behind, harmless to totals because `recomputeInvoices` skips void invoices. No item owns this; it is a narrower version of the same race.
 
 **Verification.** Typecheck is clean. Lint shows the same six warnings as `main`. `npm test -- tests/void-rebill-db.test.ts`: **14 passed**. Full unit sweep: **4686 passed, 8 skipped, 1 failed**, out of 4695. The one failure is `cron-catchup-db > resumes from a partial run` (`expected undefined to be 'partial'`). That is the intermittent already recorded under B-241, in code this row does not touch. It then passed twice alone, and on `main`. No schema change, so there is no drift check to run. The e2e suite was not run: the only UI change is one refusal sentence on the staff ledger, and no spec reaches an in-flight autopay charge.
+
+## B-353 — a non-payer member's receipt quotes their unit, not the company's balance (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.** `paymentCredits` (`lib/billing/allocation.ts`) now takes the account scope only when the payment's `tenantId` is the account's `payerTenantId`, as well as every credited lease being one of its occupying units. Otherwise it falls to unit scope with `accountName: null`. Every receipt surface (the email and its B-343 details table, `/portal/pay/done`, `/pay/[token]/done`, the counter receipt) reads that one function, so one guard covers all of them. A new case in `tests/receipt-balance-scope-db.test.ts` has Dana, a member of an account she does not pay, settle her own $80 unit C-5 at the counter while another member's unit owes $500. Every surface now reads "Balance on unit C-5" at $0.00 with no account name. On the old code the email assertion fails. The payer's existing cases pass unchanged.
+
+**What it decided.**
+
+- **Built without the owner confirmation the row flagged** (do employees pay their own account units in practice?). If they never do, the guard never fires and changes nothing. If they do, showing one company's receivables to an employee is the bug. The fix is right either way, so it did not wait.
+- **The "Account" row drops for a member's payment too.** `receiptRows` and the email's details table both key off `accountName`. A member paying their own unit is not paying on the account's behalf, so the receipt no longer names it.
+
+**What it left behind.** Nothing owned by an item.
+
+**Verification.** Typecheck and lint clean. The 10 suites that touch `paymentCredits`, `paymentReceipt`, `counterReceipt` or `payment.succeeded`: **127 passed**. The new case fails against the old `allocation.ts`. No schema change, so there is no drift check to run. e2e not run: no spec reaches a member-made payment on a business account.

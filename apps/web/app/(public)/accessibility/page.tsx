@@ -2837,6 +2837,11 @@ function reviewedOn(locale: Locale): string {
 // `<h1>` and the same "Back to my account" link to `/portal` the not-found
 // state already had (SC 2.4.4). No new route and nothing the statement claims
 // changes. No visible line changes; `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-21, at B-353. A non-payer member paying their own account
+// unit now sees "Balance on unit C-5" instead of the account's name and total.
+// Same row, same header markup as B-331; only which figure fills it changes.
+// Nothing is added or withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

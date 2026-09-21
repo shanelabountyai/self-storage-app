@@ -494,6 +494,9 @@ export async function postPaymentLedger(
 /// "$0.00" beside a card saying $3,707. Otherwise it is the balance across
 /// exactly the credited leases, and `accountName` is null so the receipt names
 /// those units instead of implying they are everything.
+///
+/// B-353. Only when the payment is the account PAYER's: a member paying their
+/// own unit gets that unit's balance, never the company's receivables.
 export async function paymentCredits(paymentId: string): Promise<{
   lines: { leaseId: string; unitNumber: string; amountCents: number }[]
   balanceCents: number
@@ -507,6 +510,10 @@ export async function paymentCredits(paymentId: string): Promise<{
   const leaseIds = credited.map((row) => row.leaseId)
   if (leaseIds.length === 0) return { lines: [], balanceCents: 0, accountName: null }
 
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: { tenantId: true },
+  })
   const leases = await prisma.lease.findMany({
     where: { id: { in: leaseIds } },
     select: {
@@ -515,6 +522,7 @@ export async function paymentCredits(paymentId: string): Promise<{
       billingAccount: {
         select: {
           name: true,
+          payerTenantId: true,
           leases: {
             where: { status: { in: [...OCCUPYING_LEASE_STATUSES] } },
             select: { id: true },
@@ -528,6 +536,7 @@ export async function paymentCredits(paymentId: string): Promise<{
   const accountLeaseIds = account?.leases.map((lease) => lease.id) ?? []
   const onOneAccount =
     !!account &&
+    account.payerTenantId === payment?.tenantId &&
     leases.length === leaseIds.length &&
     leaseIds.every((id) => accountLeaseIds.includes(id))
   const balances = await balancesFor(onOneAccount ? accountLeaseIds : leaseIds)
