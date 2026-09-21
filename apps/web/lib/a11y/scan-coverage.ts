@@ -890,6 +890,14 @@ export const SCANNED_STATES: readonly ScannedState[] = [
   },
   {
     route: '/admin/tenants/[tenantId]/ledger/[leaseId]',
+    state: 'correction awaiting confirm',
+    spec: 'e2e/admin-ledger-corrections.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'B-346. The echo is AdminForm\u2019s shared confirm box, the same `<dl>` B-237 made wrap at 320px, and every value here is a name, a unit number or an amount; the at-rest route is measured.',
+  },
+  {
+    route: '/admin/tenants/[tenantId]/ledger/[leaseId]',
     state: 'balance written off',
     spec: 'e2e/admin-ledger-corrections.spec.ts',
     layout: 'excepted',

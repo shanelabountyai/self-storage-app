@@ -11104,3 +11104,25 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.**
 
 - Nothing. `storage_test` was reseeded (`db:migrate:test`). Production gets the new wording at its next seed. Templates are seeded state (B-206).
+
+## B-346 — ledger corrections confirm before they post (2026-09-21)
+
+**Commit:** `PENDING`
+
+**What it built.**
+
+- Write-off, rent-invoice void and any non-zero balance adjustment on `/admin/tenants/[tenantId]/ledger/[leaseId]` now return FR-21's confirm-and-echo step (D-145 (A), SC 3.3.4) before writing anything. The echo lists the tenant, unit, amount, direction and balance after, plus the invoice for a void. The tenant, unit and balance are read from the database, not the page.
+- `postLedgerAdjustment`, `writeOffOpenLeaseBalance` and `voidRentInvoice` take `preview: true`. It runs every refusal (reason, authority, nothing to do, part-paid) and returns the result it would post, without writing. So the confirm step is never shown for a post that would then be refused. `voidRentInvoice`'s ok result now carries `leaseId`, so the echo names the invoice's own lease.
+- `AdminForm`'s confirm step gets two opt-in fields on the `confirm` FormState. `confirmValue` sets the value the commit button submits. `cancel` adds an explicit Cancel button, which posts nothing, says its message in the form's status region, and returns focus to the form's own submit button.
+- e2e (`admin-ledger-corrections.spec.ts`): for each of the three, the first press writes no ledger entry, Cancel writes none, and Confirm writes one. An amount edited after the echo is echoed again, not posted. New axe state: `correction awaiting confirm`.
+
+**What it decided.**
+
+- The commit button submits `yes:<echoed amount in cents>`, and the action re-asks unless the press carries back what it echoed. An edited amount therefore gets a fresh echo, and so does a balance that moved before a write-off. This is simpler than B-173's `stalePreview` hidden field, and it re-asks instead of refusing.
+- A zero adjustment does not confirm. It leaves what the tenant owes unchanged, and D-145 scoped the step to non-zero adjustments.
+- Cancel is opt-in per action. The five earlier confirm steps (tax, rate increase and decrease, broadcast, facility, checkout) are unchanged except that their button now sits in a wrapping row.
+- PRD 02 FR-21 now names the ledger corrections.
+
+**What it left behind.**
+
+- The write-off re-reads the balance when it posts, and does not lock the previewed one. A payment landing in the milliseconds between the preview and the write is written off with the rest (ponytail comment in `actions.ts`; unowned).

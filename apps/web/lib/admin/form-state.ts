@@ -69,6 +69,15 @@ export type FormState =
       message: string
       echo: { label: string; value: string }[]
       confirmLabel?: string
+      /// B-346. What the commit button submits as `confirmed`, when `yes` is
+      /// not enough. A ledger correction puts the amount it echoed in here and
+      /// re-asks unless the press carries it back, so an amount edited — or a
+      /// balance that moved — after the echo is never posted unconfirmed.
+      confirmValue?: string
+      /// B-346. An explicit Cancel beside the commit button. It posts nothing:
+      /// it closes the step in the browser, says `message` in the form's
+      /// status region, and puts focus back on the form's own submit button.
+      cancel?: { label: string; message: string }
     }
 
 export const IDLE_FORM_STATE: FormState = { status: 'idle' }

@@ -50,6 +50,7 @@ const SUBJECTS = {
   void: { first: 'Vera', last: 'Voidable', unit: 'B333-V' },
   writeOff: { first: 'Wes', last: 'Writeoff', unit: 'B333-W' },
   acknowledge: { first: 'Anna', last: 'Acknowledged', unit: 'B333-A' },
+  adjust: { first: 'Adam', last: 'Adjusted', unit: 'B333-J' },
 } as const
 
 type Built = { tenantId: string; leaseId: string }
@@ -198,6 +199,7 @@ test.describe('a correction announces itself outside the form it removes (B-333)
       void: await build('void', { rentCents: 15_000, withLedgerCharge: true }),
       writeOff: await build('writeOff', { rentCents: 9_900, withLedgerCharge: true }),
       acknowledge: await build('acknowledge', { rentCents: 7_500, withLedgerCharge: false }),
+      adjust: await build('adjust', { rentCents: 5_000, withLedgerCharge: true }),
     }
   })
 
@@ -214,6 +216,12 @@ test.describe('a correction announces itself outside the form it removes (B-333)
   /// from the control that has just been unmounted.
   function announceRegion(page: Page) {
     return page.locator('p[role="status"][tabindex="-1"]')
+  }
+
+  /// B-346's acceptance: what a correction has written. The fixture posts only
+  /// the rent charge, so anything else on the lease is the correction.
+  function posted(leaseId: string) {
+    return prisma.ledgerEntry.count({ where: { leaseId, type: { not: 'charge' } } })
   }
 
   // a11y-state: /admin/tenants/[tenantId]/ledger/[leaseId] | invoice voided
@@ -234,7 +242,23 @@ test.describe('a correction announces itself outside the form it removes (B-333)
     await expectPreexisting(region)
 
     await item.getByLabel('Reason').selectOption('billing_error')
-    await item.getByRole('button', { name: /^Void/ }).click()
+    const submit = item.getByRole('button', { name: /^Void/ })
+    await submit.click()
+
+    // B-346 / D-145. The first press echoes and writes nothing; Cancel closes
+    // the step, writes nothing, and hands focus back to the press.
+    const confirm = item.getByRole('button', { name: 'Yes, void invoice B333-void' })
+    await expect(confirm).toBeVisible()
+    await expect(item.getByText('Reduces what the tenant owes')).toBeVisible()
+    expect(await posted(leaseId)).toBe(0)
+    await item.getByRole('button', { name: 'Cancel' }).click()
+    await expect(confirm).toHaveCount(0)
+    await expect(submit).toBeFocused()
+    await expect(item.getByRole('status')).toHaveText('Cancelled. Nothing was posted.')
+    expect(await posted(leaseId)).toBe(0)
+
+    await submit.click()
+    await confirm.click()
 
     // The `<li>` — and with it the form, and the old in-form region — is gone.
     await expect(item).toHaveCount(0)
@@ -245,6 +269,7 @@ test.describe('a correction announces itself outside the form it removes (B-333)
     await expectAnnounced(region, /Invoice B333-void voided.*bills it again at the current rate/s, {
       focused: true,
     })
+    expect(await posted(leaseId)).toBe(1)
 
     await assertNoAxeViolations(page, { state: 'invoice voided' })
   })
@@ -265,13 +290,66 @@ test.describe('a correction announces itself outside the form it removes (B-333)
     await expectPreexisting(region)
 
     await form.getByLabel('Reason').selectOption('uncollectible')
-    await form.getByRole('button', { name: /^Write off the balance/ }).click()
+    const submit = form.getByRole('button', { name: /^Write off the balance/ })
+    await submit.click()
+
+    const confirm = form.getByRole('button', { name: 'Yes, write off the balance' })
+    await expect(confirm).toBeVisible()
+    await expect(form.getByText('Wes Writeoff')).toBeVisible()
+    expect(await posted(leaseId)).toBe(0)
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await expect(confirm).toHaveCount(0)
+    expect(await posted(leaseId)).toBe(0)
+
+    await submit.click()
+    await confirm.click()
 
     // The balance is zero, so the form fails its own gate and unmounts.
     await expect(form).toHaveCount(0)
     await expectAnnounced(region, /\$99\.00 written off/s, { focused: true })
+    expect(await posted(leaseId)).toBe(1)
 
     await assertNoAxeViolations(page, { state: 'balance written off' })
+  })
+
+  // a11y-state: /admin/tenants/[tenantId]/ledger/[leaseId] | correction awaiting confirm
+  test('a non-zero correction echoes the tenant, unit, amount, direction and balance before it posts (B-346)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-chrome', ONE_PROJECT)
+    expect(fixture, 'the fixture was built').not.toBeNull()
+    const { tenantId, leaseId } = fixture!.adjust
+
+    await page.goto(`/admin/tenants/${tenantId}/ledger/${leaseId}`)
+    const form = page.getByRole('form', { name: /^Post a ledger correction/ })
+    await form.getByLabel('Change the balance by ($)').fill('-20.00')
+    await form.getByLabel('Reason').selectOption('billing_error')
+    await form.getByRole('button', { name: /^Post correction/ }).click()
+
+    const confirm = form.getByRole('button', { name: 'Yes, post this correction' })
+    await expect(confirm).toBeVisible()
+    for (const value of ['Adam Adjusted', 'B333-J', '$20.00', 'Reduces what the tenant owes', '$30.00']) {
+      await expect(form.getByRole('definition').filter({ hasText: value })).toHaveCount(1)
+    }
+    expect(await posted(leaseId)).toBe(0)
+    await assertNoAxeViolations(page, { state: 'correction awaiting confirm' })
+
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await expect(confirm).toHaveCount(0)
+    expect(await posted(leaseId)).toBe(0)
+
+    // An amount changed after the echo is echoed again, never posted on the
+    // strength of the first one.
+    await form.getByRole('button', { name: /^Post correction/ }).click()
+    await expect(confirm).toBeVisible()
+    await form.getByLabel('Change the balance by ($)').fill('-30.00')
+    await confirm.click()
+    await expect(form.getByRole('definition').filter({ hasText: '$30.00' })).toHaveCount(1)
+    expect(await posted(leaseId)).toBe(0)
+
+    await confirm.click()
+    await expect(form.getByRole('status')).toHaveText(/Balance corrected by -\$30\.00/)
+    expect(await posted(leaseId)).toBe(1)
   })
 
   // a11y-state: /admin/reports/ledger-exceptions | exception acknowledged

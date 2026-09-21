@@ -8,6 +8,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
 } from 'react'
 import { MessageSegments } from '@/components/message-segments'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
@@ -99,7 +100,25 @@ export function AdminForm({
     [action, announce, announceOutside],
   )
 
-  const [state, formAction] = useActionState(rememberSubmission, IDLE_FORM_STATE)
+  const [actionState, formAction] = useActionState(rememberSubmission, IDLE_FORM_STATE)
+
+  // B-346. A Cancel on the confirm step posts nothing, so there is no new
+  // action state to move to; it remembers WHICH confirm it dismissed instead.
+  // Every submission returns a fresh object, so the next press is never
+  // mistaken for the cancelled one.
+  const [cancelled, setCancelled] = useState<FormState | null>(null)
+  const state: FormState = actionState === cancelled ? IDLE_FORM_STATE : actionState
+  const cancelMessage =
+    actionState === cancelled && actionState.status === 'confirm' ? (actionState.cancel?.message ?? '') : ''
+
+  useEffect(() => {
+    // The Cancel button has just unmounted under the cursor (2.4.3). Back to
+    // the press that opened the step, which is where the reader was.
+    if (!cancelled) return
+    formRef.current
+      ?.querySelector<HTMLButtonElement>('button[type="submit"]:not([name="confirmed"])')
+      ?.focus()
+  }, [cancelled])
 
   useEffect(() => {
     // Focus the summary on failure so the user hears the count and can reach
@@ -174,7 +193,7 @@ export function AdminForm({
         <p
           role="status"
           className={
-            state.status === 'confirm'
+            state.status === 'confirm' || cancelMessage
               ? 'col-span-full text-sm font-medium text-pretty'
               : 'col-span-full text-sm font-medium text-green-700'
           }
@@ -194,7 +213,7 @@ export function AdminForm({
           ) : state.status === 'confirm' ? (
             state.message
           ) : (
-            ''
+            cancelMessage
           )}
         </p>
 
@@ -266,14 +285,25 @@ export function AdminForm({
                 {/* The button that actually publishes. It carries the same form
                     data (the fields are still filled in), plus the flag the
                     action looks for. */}
-                <button
-                  type="submit"
-                  name="confirmed"
-                  value="yes"
-                  className="bg-primary text-primary-foreground mt-3 inline-flex h-9 items-center rounded-md px-4 text-sm font-medium"
-                >
-                  {state.confirmLabel ?? 'Yes, add it'}
-                </button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="submit"
+                    name="confirmed"
+                    value={state.confirmValue ?? 'yes'}
+                    className="bg-primary text-primary-foreground inline-flex min-h-9 items-center rounded-md px-4 text-sm font-medium"
+                  >
+                    {state.confirmLabel ?? 'Yes, add it'}
+                  </button>
+                  {state.cancel && (
+                    <button
+                      type="button"
+                      onClick={() => setCancelled(actionState)}
+                      className="border-input hover:bg-accent inline-flex min-h-9 items-center rounded-md border px-4 text-sm font-medium"
+                    >
+                      {state.cancel.label}
+                    </button>
+                  )}
+                </div>
               </>
             )}
           </div>

@@ -40,6 +40,11 @@ const ZERO: ReconciliationInput = {
   uninvoicedChargeCents: 0,
 }
 
+/// B-346 / D-145. Each of the three takes `preview`: every refusal runs, and it
+/// returns the result it WOULD post without writing anything. That is what the
+/// confirm step echoes, so a staffer is never asked to agree to a correction
+/// that would then be refused on authority or on a lease that owes nothing.
+
 export type CorrectionRefusal =
   | { ok: false; reason: 'not_found' }
   | { ok: false; reason: 'missing_reason' }
@@ -129,7 +134,7 @@ export type AdjustResult =
 /// that should never have been raised is `voidRentInvoice` below.
 export async function postLedgerAdjustment(
   actor: Actor,
-  input: { leaseId: string; balanceChangeCents: number; reasonCode: string; note?: string },
+  input: { leaseId: string; balanceChangeCents: number; reasonCode: string; note?: string; preview?: boolean },
 ): Promise<AdjustResult> {
   if (!input.reasonCode?.trim()) return { ok: false, reason: 'missing_reason' }
   if (!Number.isInteger(input.balanceChangeCents)) return { ok: false, reason: 'bad_amount' }
@@ -153,6 +158,7 @@ export async function postLedgerAdjustment(
     Math.max(Math.abs(balanceChange), Math.abs(uninvoicedChange)),
   )
   if (refusal) return refusal
+  if (input.preview) return { ok: true, balanceChangeCents: balanceChange, entries: 0 }
 
   const entries = [
     // Ordinary: counted as a charge with no invoice behind it, so it moves both
@@ -231,7 +237,7 @@ export type WriteOffResult =
 /// write-off against an invoice would invent a third state for it.
 export async function writeOffOpenLeaseBalance(
   actor: Actor,
-  input: { leaseId: string; reasonCode: string; note?: string },
+  input: { leaseId: string; reasonCode: string; note?: string; preview?: boolean },
 ): Promise<WriteOffResult> {
   if (!input.reasonCode?.trim()) return { ok: false, reason: 'missing_reason' }
 
@@ -261,6 +267,7 @@ export async function writeOffOpenLeaseBalance(
     covered.push({ id: invoice.id, number: invoice.number, outstanding })
     remaining -= outstanding
   }
+  if (input.preview) return { ok: true, amountCents: owed, invoicesMarked: covered.length }
 
   await prisma.$transaction(async (tx) => {
     for (const invoice of covered) {
@@ -315,7 +322,7 @@ export async function writeOffOpenLeaseBalance(
 // ---------------------------------------------------------- invoice void ----
 
 export type VoidInvoiceResult =
-  | { ok: true; amountCents: number; number: string }
+  | { ok: true; amountCents: number; number: string; leaseId: string }
   | { ok: false; reason: 'partly_paid'; amountPaidCents: number }
   | CorrectionRefusal
 
@@ -350,7 +357,7 @@ export type VoidInvoiceResult =
 /// a discount: it only returns a period this invoice held.
 export async function voidRentInvoice(
   actor: Actor,
-  input: { invoiceId: string; reasonCode: string; note?: string },
+  input: { invoiceId: string; reasonCode: string; note?: string; preview?: boolean },
 ): Promise<VoidInvoiceResult> {
   if (!input.reasonCode?.trim()) return { ok: false, reason: 'missing_reason' }
 
@@ -386,6 +393,7 @@ export async function voidRentInvoice(
 
   const refusal = await authorize(actor, invoice.facilityId, outstanding)
   if (refusal) return refusal
+  if (input.preview) return { ok: true, amountCents: outstanding, number: invoice.number, leaseId: invoice.leaseId }
 
   const result = await prisma.$transaction(async (tx): Promise<VoidInvoiceResult> => {
     // B-329, the second half. The read above is outside this transaction, so a
@@ -436,7 +444,7 @@ export async function voidRentInvoice(
       tx,
     )
 
-    return { ok: true, amountCents: outstanding, number: invoice.number }
+    return { ok: true, amountCents: outstanding, number: invoice.number, leaseId: invoice.leaseId }
   })
 
   return result

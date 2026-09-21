@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { prisma } from '@storage/db'
 
 import {
   postLedgerAdjustment,
@@ -21,6 +22,53 @@ function revalidateLedger(tenantId: string, leaseId: string): void {
   revalidatePath(`/admin/tenants/${tenantId}`)
   // The whole point of the repair: the lease leaves the exception list.
   revalidatePath('/admin/reports/ledger-exceptions')
+}
+
+/// B-346 / D-145, SC 3.3.4. Nothing reverses a correction, so each one echoes
+/// what it is about to post and waits for the press to come back carrying the
+/// amount it echoed. The domain's `preview` has already run every refusal, and
+/// the echo reads the tenant, unit and balance from the database rather than
+/// from the page — the figure being agreed to is what is true, not what the
+/// browser was showing (B-177's rule).
+///
+/// Returns null when the press carried the echoed amount back, which is the
+/// caller's signal to post for real.
+async function confirmCorrection(
+  formData: FormData,
+  leaseId: string,
+  what: { amountCents: number; confirmLabel: string; rows?: { label: string; value: string }[] },
+): Promise<FormState | null> {
+  const token = `yes:${what.amountCents}`
+  if (formData.get('confirmed') === token) return null
+
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: {
+      unit: { select: { number: true } },
+      tenant: { select: { firstName: true, lastName: true } },
+    },
+  })
+  const balance = await prisma.ledgerEntry.aggregate({ where: { leaseId }, _sum: { amountCents: true } })
+  const balanceCents = balance._sum.amountCents ?? 0
+
+  return {
+    status: 'confirm',
+    message: 'Check this before it is posted. It stays on this tenant\u2019s ledger permanently.',
+    echo: [
+      { label: 'Tenant', value: lease ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : '—' },
+      { label: 'Unit', value: lease?.unit.number ?? '—' },
+      ...(what.rows ?? []),
+      { label: 'Amount', value: formatCents(Math.abs(what.amountCents)) },
+      {
+        label: 'Direction',
+        value: what.amountCents < 0 ? 'Reduces what the tenant owes' : 'Increases what the tenant owes',
+      },
+      { label: 'Balance after', value: formatCents(balanceCents + what.amountCents) },
+    ],
+    confirmLabel: what.confirmLabel,
+    confirmValue: token,
+    cancel: { label: 'Cancel', message: 'Cancelled. Nothing was posted.' },
+  }
 }
 
 /// The refusals the three share, onto the field a reader can actually change.
@@ -90,19 +138,33 @@ export async function adjustLedgerAction(
   })
   if ('error' in amount) return fieldError({ amountDollars: amount.error })
 
-  const result = await postLedgerAdjustment(actor, {
+  const input = {
     leaseId,
     balanceChangeCents: amount.value,
     reasonCode: String(formData.get('reasonCode') ?? ''),
     note: String(formData.get('note') ?? '') || undefined,
-  })
-  if (!result.ok) {
-    return refusalState(result, {
+  }
+  const refused = (result: Exclude<Awaited<ReturnType<typeof postLedgerAdjustment>>, { ok: true }>) =>
+    refusalState(result, {
       amountField: 'amountDollars',
       nothingToDo:
         'Nothing to correct: this lease already agrees with its invoices and you asked for no change to the balance.',
     })
+
+  // D-145: a non-zero change confirms. Zero leaves what the tenant owes where
+  // it is, and only brings the invoices back into line.
+  if (amount.value !== 0) {
+    const preview = await postLedgerAdjustment(actor, { ...input, preview: true })
+    if (!preview.ok) return refused(preview)
+    const confirm = await confirmCorrection(formData, leaseId, {
+      amountCents: amount.value,
+      confirmLabel: 'Yes, post this correction',
+    })
+    if (confirm) return confirm
   }
+
+  const result = await postLedgerAdjustment(actor, input)
+  if (!result.ok) return refused(result)
 
   revalidateLedger(tenantId, leaseId)
   return success(
@@ -120,14 +182,27 @@ export async function writeOffLedgerAction(
   const tenantId = String(formData.get('tenantId') ?? '')
   const leaseId = String(formData.get('leaseId') ?? '')
 
-  const result = await writeOffOpenLeaseBalance(actor, {
+  const input = {
     leaseId,
     reasonCode: String(formData.get('reasonCode') ?? ''),
     note: String(formData.get('note') ?? '') || undefined,
-  })
-  if (!result.ok) {
-    return refusalState(result, { nothingToDo: 'This lease owes nothing, so there is nothing to write off.' })
   }
+  const nothingToDo = 'This lease owes nothing, so there is nothing to write off.'
+
+  const preview = await writeOffOpenLeaseBalance(actor, { ...input, preview: true })
+  if (!preview.ok) return refusalState(preview, { nothingToDo })
+  // The echoed amount is the whole balance, so a payment landing between the
+  // echo and the press changes the token and asks again.
+  const confirm = await confirmCorrection(formData, leaseId, {
+    amountCents: -preview.amountCents,
+    confirmLabel: 'Yes, write off the balance',
+  })
+  if (confirm) return confirm
+
+  // ponytail: the balance is re-read here, not locked from the preview; a
+  // payment in the milliseconds between the two is written off with the rest.
+  const result = await writeOffOpenLeaseBalance(actor, input)
+  if (!result.ok) return refusalState(result, { nothingToDo })
 
   revalidateLedger(tenantId, leaseId)
   return success(
@@ -147,11 +222,27 @@ export async function voidInvoiceAction(
   const tenantId = String(formData.get('tenantId') ?? '')
   const leaseId = String(formData.get('leaseId') ?? '')
 
-  const result = await voidRentInvoice(actor, {
+  const input = {
     invoiceId: String(formData.get('invoiceId') ?? ''),
     reasonCode: String(formData.get('reasonCode') ?? ''),
     note: String(formData.get('note') ?? '') || undefined,
-  })
+  }
+
+  const preview = await voidRentInvoice(actor, { ...input, preview: true })
+  if (preview.ok) {
+    // The invoice's own lease, not the form's hidden one: the echo names whose
+    // ledger this lands on.
+    const confirm = await confirmCorrection(formData, preview.leaseId, {
+      amountCents: -preview.amountCents,
+      confirmLabel: `Yes, void invoice ${preview.number}`,
+      rows: [{ label: 'Invoice', value: preview.number }],
+    })
+    if (confirm) return confirm
+  }
+
+  // A refused preview falls through: the real call refuses the same way, and
+  // the refusals below own the wording.
+  const result = preview.ok ? await voidRentInvoice(actor, input) : preview
   // B-329. The one refusal that has to name what to do instead: voiding an
   // invoice money has been taken against would leave that payment allocated to
   // an invoice that no longer exists, and the period would be billed again at

@@ -466,6 +466,38 @@ describeDb('B-303 — repairing a ledger that cannot be repaired any other way',
     )
   })
 
+  it('B-346 — a preview runs every refusal and returns what it would post, writing nothing', async () => {
+    const lease = await makeLease('PREVIEW')
+    const invoiceId = await openRent(lease.leaseId, 12_900)
+    const before = await prisma.ledgerEntry.count({ where: { leaseId: lease.leaseId } })
+    const audited = () => prisma.auditLog.count({ where: { entityId: { in: [lease.leaseId, invoiceId] } } })
+    const auditBefore = await audited()
+
+    expect(
+      await postLedgerAdjustment(manager(null), {
+        leaseId: lease.leaseId,
+        balanceChangeCents: -4_000,
+        reasonCode: 'billing_error',
+        preview: true,
+      }),
+    ).toMatchObject({ ok: true, balanceChangeCents: -4_000 })
+    expect(
+      await writeOffOpenLeaseBalance(manager(null), { leaseId: lease.leaseId, reasonCode: 'uncollectible', preview: true }),
+    ).toMatchObject({ ok: true, amountCents: 12_900, invoicesMarked: 1 })
+    expect(
+      await voidRentInvoice(manager(null), { invoiceId, reasonCode: 'wrong_period', preview: true }),
+    ).toMatchObject({ ok: true, amountCents: 12_900, leaseId: lease.leaseId })
+    // The refusals still run: the confirm step is never offered for a post
+    // that would then be refused.
+    expect(
+      await writeOffOpenLeaseBalance(manager(null), { leaseId: lease.leaseId, reasonCode: '', preview: true }),
+    ).toMatchObject({ ok: false, reason: 'missing_reason' })
+
+    expect(await prisma.ledgerEntry.count({ where: { leaseId: lease.leaseId } })).toBe(before)
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status).toBe('open')
+    expect(await audited()).toBe(auditBefore)
+  })
+
   it('leaves a healthy lease healthy when a plain adjustment is posted', async () => {
     const lease = await makeLease('PLAIN')
     await openRent(lease.leaseId, 12_900)
