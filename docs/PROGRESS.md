@@ -10981,7 +10981,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-340 — the printed letter gets a print-time pay line, no Print on an incomplete address, and control names that start with their visible text (2026-09-21)
 
-**Commit:** `SHA-PENDING`
+**Commit:** `920fcce`
 
 **What it built.**
 
