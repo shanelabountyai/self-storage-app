@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-355**. Continue down review block 10 in order.
+**Next: B-356**. Continue down review block 10 in order.
+
+**B-355 is built** (2026-09-21, `a70ef4c`). The partly-paid void refusal and the void section's prose put the correction first, then the refund, and warn that a refund can trim another invoice the same payment paid.
 
 **B-354 is built** (2026-09-21, `8eb48d9`). The void's confirm echo shows "Billed again" from `projectRentRebill`, the success message states the re-bill rather than hedging, and a mismatched Confirm re-asks with "nothing was posted" so the status region announces it.
 
