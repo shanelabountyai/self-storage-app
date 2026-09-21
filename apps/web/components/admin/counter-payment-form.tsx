@@ -153,8 +153,11 @@ export function CounterPaymentForm({
         <option value="money_order">Money order</option>
         {!selected.isFormer && <option value="card">Card</option>}
       </Field>
-      {/* B-319. Always mounted so the reset is announced, not just shown. */}
-      <p role="status" className="col-span-2 text-sm font-medium text-pretty empty:hidden">
+      {/* B-319. Always mounted so the reset is announced, not just shown.
+          B-334: `sr-only` while idle, never `empty:hidden` — that is
+          `display:none`, which kept this region out of the accessibility tree
+          until the moment it had text, so the reset was announced to nobody. */}
+      <p role="status" className="col-span-2 text-sm font-medium text-pretty empty:sr-only">
         {methodReset}
       </p>
       <div className="col-span-2 flex flex-wrap items-center gap-3">
@@ -184,18 +187,24 @@ export function CounterPaymentForm({
         value={amount}
         onChange={(event) => setAmount(event.target.value)}
       />
+      {/* B-334. Each tender field shows only for its method. HIDDEN, not
+          unmounted: a number typed under Check still submits after a switch to
+          Cash, so B-319's server refusal ("Method is Cash, but a check number
+          is filled in") catches the mis-pick instead of it booking silently as
+          cash. `hidden` also takes the field out of the tab order and the
+          accessibility tree, so nobody is asked for a number that does not
+          apply. */}
       <Field
         name="tendered"
         label="Cash tendered ($)"
         inputMode="decimal"
-        hint="Cash only — change is worked out for you."
-        className={FIELD_CLASS}
+        hint="Change is worked out for you."
+        className={method === 'cash' ? FIELD_CLASS : 'hidden'}
       />
       <Field
         name="checkNumber"
-        label="Check / money-order number"
-        hint="Required for check and money order."
-        className={`${FIELD_CLASS} col-span-2`}
+        label={method === 'money_order' ? 'Money order number' : 'Check number'}
+        className={method === 'check' || method === 'money_order' ? FIELD_CLASS : 'hidden'}
       />
       <p className="text-muted-foreground col-span-2 text-xs text-pretty">
         {account

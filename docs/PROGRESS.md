@@ -10857,3 +10857,26 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - Tasks raised before this change keep the neutral-or-bouncing label by their detail; no data migration was needed, since `noReachableEmail`'s detail already started with the same words.
 
 **Verification.** `tests/counter-receipt-no-email-db.test.ts` (new, 3): a cash payment for a no-email tenant writes a `failed` receipt with a body and opens no task, and the same day's dunning step then opens one (high, "No email address on file…"); a desk card via the webhook with a `counter:` reference carries `counter: true` and opens no task; an `autopay:` and a `counter-cof:` card each still open one. Run with the guard removed, the first two fail and the probe above showed the collision. `tests/pos-db.test.ts`'s B-313 no-email case now asserts no task. `tests/tasks-catalog.test.ts` covers both label flavours and the default. Typecheck clean, lint clean (6 pre-existing warnings). Full unit suite: **4641 passed + 8 skipped = 4649**, exit 0. No schema change, so no drift check. Staff-facing only, so the accessibility statement needs no change.
+
+## B-334 — the counter's Method-reset region stays in the tree, and the tender fields follow Method (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.**
+
+- `counter-payment-form.tsx`'s B-319 Method-reset `role="status"` is `empty:sr-only`, not `empty:hidden`. It was `display:none` while empty, so it left the accessibility tree until the moment it had text — the Card → Cash reset may have been announced to nobody.
+- "Cash tendered ($)" shows only for Cash; the number field only for Check ("Check number") or Money order ("Money order number"). Both follow the Method select in DOM order.
+- `tests/live-region-display.test.ts` (new): fails on any opening tag under `apps/web/**/*.tsx` that carries `role="status"` or `aria-live` together with `hidden` (any variant, `empty:hidden` included), a `hidden` attribute, or `display:none`. It found exactly the counter form, and nothing else once `announce.tsx`'s in-tag comment (which names the forbidden classes to forbid them) is stripped.
+
+**What it decided.**
+
+- **The fields are HIDDEN, not unmounted.** A number typed under Check still submits after a switch to Cash, so B-319's server refusal ("Method is Cash, but a check number is filled in") still catches the mis-pick rather than it booking silently as cash — which is what the row's "a field hidden after a switch can still carry the value" asks for. The cost: after that refusal the number is in a field the staffer cannot see under Cash; the message tells them to choose Check or Money order, which shows it again.
+- **Two B-319 e2e tests changed, though the row said "unchanged".** They could not pass as written: "Method survives a change of payer" found the field by the old combined label, and "cash with a check number is refused" typed a number with Cash selected — now hidden. The first now uses "Check number"; the second types the number under Check and switches to Cash, which is the mis-pick the refusal exists for. Both assert what they did before.
+
+**What it left behind.**
+
+- The customer counter checkout (`components/checkout/payment-step.tsx`) still shows "Check / money-order number" for every method. Not in this row's scope; not raised.
+- The guard is a regex over opening tags (marked `ponytail:`): a prop containing `=>` before the role ends the match early.
+- VoiceOver/NVDA confirmation of the reset announcement is B-254's (already listed there).
+
+**Verification.** `tests/live-region-display.test.ts` 2/2, failing on `main`'s form before the fix. `npm run test:e2e -- e2e/admin-pos.spec.ts e2e/a11y-own-spec-routes.spec.ts`: **82 passed**, exit 0, including the new "the tender fields follow Method" (all four methods, both viewports) and both specs' axe scans. Typecheck clean, lint clean (6 pre-existing warnings). No schema change. Staff-facing only, so the accessibility statement needs no change.

@@ -106,7 +106,7 @@ test.describe('signed in as the demo owner', () => {
 
     await picker.selectOption(accountValue!)
     await method.selectOption('check')
-    await page.getByLabel('Check / money-order number').fill('1041')
+    await page.getByLabel('Check number').fill('1041')
     await picker.selectOption(unitValue!)
     await expect(method).toHaveValue('check')
     await picker.selectOption(accountValue!)
@@ -123,15 +123,40 @@ test.describe('signed in as the demo owner', () => {
     await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
     await page.getByRole('link', { name: 'Alex Active' }).first().click()
 
+    // B-334 hides the number under Cash, so the number is typed under Check
+    // and then carried across the switch — the mis-pick this refusal exists for.
+    await page.getByLabel('Method').selectOption('check')
+    await page.getByLabel('Check number').fill('1041')
     await page.getByLabel('Method').selectOption('cash')
     await page.getByLabel('Amount ($)').fill('25')
     await page.getByLabel('Cash tendered ($)').fill('25')
-    await page.getByLabel('Check / money-order number').fill('1041')
     await page.getByRole('button', { name: 'Record payment' }).click()
 
     await expect(page.getByRole('main').getByRole('alert')).toContainText(/check number is filled in/i)
     await expect(page.getByLabel('Method')).toHaveAttribute('aria-invalid', 'true')
     await expect(page).toHaveURL(/\/admin\/pos(?!\/done)/)
+  })
+
+  // B-334. Read-only: nothing is submitted.
+  test('the tender fields follow Method', async ({ page }) => {
+    await page.goto(`/admin/pos?q=${DEMO_POS_TENANT_EMAIL}`)
+    await page.getByRole('link', { name: 'Alex Active' }).first().click()
+
+    const form = page.getByRole('form', { name: 'Take a payment' })
+    const cases: [string, string[]][] = [
+      ['cash', ['Cash tendered ($)']],
+      ['check', ['Check number']],
+      ['money_order', ['Money order number']],
+      ['card', []],
+    ]
+    for (const [value, shown] of cases) {
+      await form.getByLabel('Method').selectOption(value)
+      for (const label of ['Cash tendered ($)', 'Check number', 'Money order number']) {
+        await expect(form.getByRole('textbox', { name: label, exact: true })).toHaveCount(
+          shown.includes(label) ? 1 : 0,
+        )
+      }
+    }
   })
 
   test('a check with no number is refused', async ({ page }) => {
