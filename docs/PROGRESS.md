@@ -10831,3 +10831,29 @@ Four receipts read it: the email (`receiptBalanceLine`, `apps/web/lib/comms/pros
 - **The pre-B-330 shape** (an undirected portal payment for one personal unit spreading across the tenant's other personal units) is unchanged; its receipt now names every unit it touched, so it is at least described truthfully.
 
 **Verification.** `tests/receipt-balance-scope-db.test.ts` (new, 2): a $200 counter check on a three-unit $300 account settles two units, and the email, `paymentReceipt` + its label, the counter receipt row and the account card all say $100.00 on the account by name; a directed payment on one of a personal tenant's two units says "Balance on unit P-2" in the email, the portal label (English and Spanish) and the counter row. `tests/comms-billing-db.test.ts`'s receipt assertions moved to the new wording; `tests/i18n.test.ts` gained the scope strings in both languages. Typecheck clean, lint clean (6 pre-existing warnings). Full unit suite: **4635 passed + 8 skipped = 4643**, exit 0.
+
+## B-332 — a receipt in the tenant's hand is not a letter to post (2026-09-21)
+
+**Commit:** `pending`
+
+**What it built.** `noReachableEmail` (`apps/web/lib/comms/service.ts`) still writes the `failed` Message with its rendered body for every template, but no longer opens a `no_reachable_channel` task for a **`payment_receipt` whose payment was taken at the desk** (`receiptHandedOver`):
+
+- **Cash, check or money order** — the payment carries a counter `receiptNumber` (this also covers the counter move-in tender, which numbers its payment the same way).
+- **A card on `/admin/pos/card`'s Payment Element** — the webhook (`apps/web/lib/payments/reconcile.ts`) now puts `counter: true` on `payment.succeeded` when the intent's reference starts `counter:`. That screen lands on the printed receipt (`card/done`).
+
+The task's label now tells the two causes apart per row: `taskLabel(type, detail)` in `packages/core/tasks/catalog.ts` returns "No email address on file — no way to reach this tenant" when the detail starts with `NO_EMAIL_ON_FILE` (which `noReachableEmail` writes), and "Email is bouncing — no way to reach this tenant" otherwise (the bounce path in `lib/comms/delivery.ts` writes no detail). The type's own catalog label, which the `/admin/tasks` filter shows, became the neutral "No way to reach this tenant by email".
+
+**What it decided.**
+
+- **D-111 is not re-opened.** The numbered paper receipt handed over at the desk is the proof of notice for that one message; the failed `Message` stays in the log. Every other template, and a receipt for any payment nobody was handed paper for, keeps the task and B-318's print-to-close.
+- **A card-on-file charge (`counter-cof:`) still raises the task.** The cardholder authorises by voice, often by phone, and that action returns a success message rather than a printed receipt. Autopay, portal and pay-link card receipts are unchanged.
+- **The label is derived from the task's own `detail`, not the tenant's current email**, so a card keeps saying why it was raised after somebody adds an address.
+
+**The dedupe question: confirmed, it was real.** `createTask` keys on `(type, entityId, businessDate)` whatever the status. With the new guard removed, a cash receipt followed by a same-day `dunning_step` for the same no-email tenant left **one** task, whose detail named the receipt — the dunning letter got no card of its own, and printing the receipt's letter would have closed the only card. With the fix, the dunning letter opens the card.
+
+**What it left behind.**
+
+- **The same collision still exists between two genuinely undeliverable non-receipt messages on one day** (a dunning step and an `access_suspended`, say): one card, naming the first, closed by printing that one letter. The item scoped to the receipt; widening the task key (per message) is its own change, not raised as an item here.
+- Tasks raised before this change keep the neutral-or-bouncing label by their detail; no data migration was needed, since `noReachableEmail`'s detail already started with the same words.
+
+**Verification.** `tests/counter-receipt-no-email-db.test.ts` (new, 3): a cash payment for a no-email tenant writes a `failed` receipt with a body and opens no task, and the same day's dunning step then opens one (high, "No email address on file…"); a desk card via the webhook with a `counter:` reference carries `counter: true` and opens no task; an `autopay:` and a `counter-cof:` card each still open one. Run with the guard removed, the first two fail and the probe above showed the collision. `tests/pos-db.test.ts`'s B-313 no-email case now asserts no task. `tests/tasks-catalog.test.ts` covers both label flavours and the default. Typecheck clean, lint clean (6 pre-existing warnings). Full unit suite: **4641 passed + 8 skipped = 4649**, exit 0. No schema change, so no drift check. Staff-facing only, so the accessibility statement needs no change.

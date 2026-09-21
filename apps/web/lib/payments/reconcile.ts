@@ -345,7 +345,14 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
             facilityId: payment.facilityId,
             entityType: 'Payment',
             entityId: payment.id,
-            payload: { amountCents: payment.amountCents, paymentIntentId: intent.id },
+            payload: {
+              amountCents: payment.amountCents,
+              paymentIntentId: intent.id,
+              // B-332. Taken on the counter's card screen, which lands on a
+              // printed receipt — so a no-email tenant's receipt raises no
+              // print-and-mail task. `counter-cof:` (card on file) is not this.
+              ...(intent.metadata?.reference?.startsWith('counter:') ? { counter: true } : {}),
+            },
           },
           tx,
         )

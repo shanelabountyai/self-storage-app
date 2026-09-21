@@ -547,7 +547,9 @@ describeDb('counter payments', () => {
       }
     })
 
-    it('fails the send and raises a task rather than throwing, for a tenant with no email', async () => {
+    // B-332: no task — the tenant is holding the numbered paper receipt.
+    // `counter-receipt-no-email-db.test.ts` covers the rest.
+    it('fails the send rather than throwing, for a tenant with no email, and raises no task', async () => {
       const noEmailTenant = await prisma.tenant.create({
         data: { firstName: 'No', lastName: 'Email' },
       })
@@ -583,10 +585,11 @@ describeDb('counter payments', () => {
       const message = await prisma.message.findFirstOrThrow({ where: { eventId: event.id } })
       expect(message.status).toBe('failed')
 
-      const task = await prisma.task.findFirstOrThrow({
-        where: { facilityId, type: 'no_reachable_channel', entityId: noEmailTenant.id },
-      })
-      expect(task.status).toBe('open')
+      expect(
+        await prisma.task.count({
+          where: { facilityId, type: 'no_reachable_channel', entityId: noEmailTenant.id },
+        }),
+      ).toBe(0)
 
       await prisma.ledgerEntry.deleteMany({ where: { leaseId: lease.id } })
       await prisma.payment.deleteMany({ where: { tenantId: noEmailTenant.id } })

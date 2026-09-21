@@ -175,8 +175,11 @@ export const TASK_TYPES = [
     // No `href`: the letter is per message, which is a URL the catalog cannot
     // name — B-306's case, and the card's subject link already goes to the
     // tenant whose log holds it.
+    //
+    // B-332: the type's label covers both causes (it is what the filter says);
+    // a row is labelled by its own cause — see `taskLabel`.
     type: "no_reachable_channel",
-    label: "Email is bouncing — no way to reach this tenant",
+    label: "No way to reach this tenant by email",
     requiredProofFields: ["note"],
     sensitive: true,
     resolvedByAction: {
@@ -514,6 +517,23 @@ const BY_TYPE = new Map<string, TaskTypeSpec>(
 
 export function taskTypeSpec(type: string): TaskTypeSpec | undefined {
   return BY_TYPE.get(type);
+}
+
+/// B-332. The start of the `detail` a no-address `no_reachable_channel` task
+/// carries (`noReachableEmail` in the comms service writes it). A bounce raises
+/// the same type with no detail.
+export const NO_EMAIL_ON_FILE = "No email address on file";
+
+/// One task row's label. The type's own, except `no_reachable_channel`, whose
+/// two causes want different things done: a renter who never gave an address
+/// needs one asked for; one whose address bounced needs it corrected.
+export function taskLabel(type: string, detail: string | null): string {
+  if (type === "no_reachable_channel") {
+    return detail?.startsWith(NO_EMAIL_ON_FILE)
+      ? `${NO_EMAIL_ON_FILE} — no way to reach this tenant`
+      : "Email is bouncing — no way to reach this tenant";
+  }
+  return taskTypeSpec(type)?.label ?? type;
 }
 
 /// Every type's floor: a note. Used verbatim for a registered type with no

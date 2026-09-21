@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { missingProofFields, taskTypeIsSensitive, taskTypeSpec } from '../packages/core/tasks'
+import { missingProofFields, NO_EMAIL_ON_FILE, taskLabel, taskTypeIsSensitive, taskTypeSpec } from '../packages/core/tasks'
 
 // B-095 / PRD 02 §4.9 US-41. Pure catalog logic — no database.
 
@@ -10,6 +10,24 @@ describe('taskTypeSpec', () => {
 
   it('returns undefined for an unknown type', () => {
     expect(taskTypeSpec('not_a_real_type')).toBeUndefined()
+  })
+})
+
+// B-332. One task type, two causes, two labels — a renter who never gave an
+// address is not "bouncing".
+describe('taskLabel', () => {
+  it('says "no email address on file" for a task raised because there is none', () => {
+    expect(taskLabel('no_reachable_channel', `${NO_EMAIL_ON_FILE} — 'Your receipt' could not be sent.`)).toBe(
+      'No email address on file — no way to reach this tenant',
+    )
+  })
+
+  it('says "bouncing" for the bounce path, which carries no detail', () => {
+    expect(taskLabel('no_reachable_channel', null)).toBe('Email is bouncing — no way to reach this tenant')
+  })
+
+  it('is the catalog label for every other type', () => {
+    expect(taskLabel('move_in_provisioning_failed', 'anything')).toBe('Move-in provisioning failed')
   })
 })
 

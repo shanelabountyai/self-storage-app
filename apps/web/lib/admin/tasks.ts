@@ -6,7 +6,7 @@ import {
   requiredProofFieldsForType,
   taskTypeIsSensitive,
   taskTypeResolvedByAction,
-  taskTypeSpec,
+  taskLabel,
   type TaskType,
   type TaskTypeSpec,
 } from '@storage/core/tasks'
@@ -272,7 +272,7 @@ export async function facilityTasks(
   return tasks.map((task) => ({
     id: task.id,
     type: task.type,
-    label: taskTypeSpec(task.type)?.label ?? task.type,
+    label: taskLabel(task.type, task.detail),
     facilityId: task.facilityId,
     facilityName: facility.name,
     entityType: task.entityType,

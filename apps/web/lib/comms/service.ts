@@ -16,6 +16,7 @@ import { businessDateFor } from '@storage/core/jobs'
 import { balancesFor } from '@/lib/billing/accounts'
 import { restoreShortfallCents } from '@storage/core/access'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { NO_EMAIL_ON_FILE } from '@storage/core/tasks'
 import { isAutoCollecting } from '@storage/core/payment-plans'
 import { formatCalendarDate, formatCents } from '@/lib/format'
 import { paymentCredits } from '@/lib/billing/allocation'
@@ -2004,7 +2005,7 @@ async function noReachableEmail(
   })
 
   const { tenantId, facility } = base.recipient
-  if (tenantId && facility) {
+  if (tenantId && facility && !(await receiptHandedOver(base))) {
     await createTask({
       facilityId: facility.id,
       type: 'no_reachable_channel',
@@ -2018,12 +2019,33 @@ async function noReachableEmail(
       // B-323: named by its rendered subject, never the template key a counter
       // staffer cannot read (D-15). A render failure has no subject to give.
       detail: rendered
-        ? `No email address on file — '${rendered.subject}' could not be sent. Its text is in the message log on their profile, to print and mail.`
-        : `No email address on file — a message could not be sent.`,
+        ? `${NO_EMAIL_ON_FILE} — '${rendered.subject}' could not be sent. Its text is in the message log on their profile, to print and mail.`
+        : `${NO_EMAIL_ON_FILE} — a message could not be sent.`,
     })
   }
 
   return 'failed'
+}
+
+/// B-332. A receipt for a payment taken at the desk, which the tenant walked
+/// out holding: cash, check or money order carry a counter receipt number, and
+/// a card taken on `/admin/pos/card`'s Payment Element lands on a printed
+/// receipt too (`counter` on the event, set by the webhook). The numbered paper
+/// receipt is D-111's proof of notice for this one message, so no print-and-mail
+/// task — and none taking the tenant's one slot for the day (`createTask`
+/// dedupes on type, tenant and business date) from a dunning letter that
+/// genuinely did not arrive. The failed `Message` is still written above.
+///
+/// A card-on-file charge (`counter-cof:`) is NOT this: the cardholder is
+/// authorising by voice, often on the phone, and is handed nothing.
+async function receiptHandedOver(base: { event: DomainEvent; templateKey: string }): Promise<boolean> {
+  if (base.templateKey !== 'payment_receipt' || base.event.entityType !== 'Payment') return false
+  if ((base.event.payload as { counter?: unknown } | null)?.counter === true) return true
+  const payment = await prisma.payment.findUnique({
+    where: { id: base.event.entityId },
+    select: { receiptNumber: true },
+  })
+  return payment?.receiptNumber != null
 }
 
 async function writeMessage(
