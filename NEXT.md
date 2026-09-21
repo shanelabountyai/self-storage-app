@@ -4,8 +4,9 @@
 
 ## Start here
 
-1. **B-339 (`83azzk`)**: next in review block 9 (B-338 is already built). Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
+1. **B-340 (`83azzl`)**: next in review block 9. Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
 
+**B-339 is built** (2026-09-21, `4edca09`). Confirmed the ladder cures per lease and does not net tenant credit, so the full row shipped. On `/admin/pos`, an amount over the picked unit's balance names the tenant's other owing units and offers a `units:` subject that settles them together. Card is not offered on that subject. B-305's single-unit restriction is unchanged.
 **B-337 is built** (2026-09-21, `2760ee2`). The refused-amount message on `/portal/pay` and `/pay/[token]` is now `paypg.refusedChargesBalance`: it says the amount was not accepted and that the card form will charge the full balance of {amount} (`formatRate(amountCents)`, the Payment Element's figure). It no longer claims the box changed.
 **B-336 is built** (2026-09-21, `b129bb7`). A refused token goes through `/pay/<token>/expired`. An expired link on an occupying lease sets `st_locale` to the tenant's language and lands on `/login?from=/portal/pay?lease=…&reason=pay_link_expired`, which shows a message and a `tel:` link. Revoked and unknown tokens are unchanged. `/pay/[token]/done` is now axe-scanned.
 **B-335 is built** (2026-09-21, `a4954a7`). The payer's consolidated dunning email renders from the furthest `position` among the account's same-business-day `delinquency.day_reached` events (read from the outbox), whatever the dispatch order.
