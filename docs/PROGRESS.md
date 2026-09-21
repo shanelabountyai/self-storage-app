@@ -10809,7 +10809,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 ## B-331 — the receipt says what its balance is the balance of (2026-09-21)
 
-**Commit:** `PENDING`
+**Commit:** `13540c3`
 
 **What it built.** `paymentCredits` (`apps/web/lib/billing/allocation.ts`) now returns `accountName` beside `balanceCents`, and decides the scope once for every receipt:
 
