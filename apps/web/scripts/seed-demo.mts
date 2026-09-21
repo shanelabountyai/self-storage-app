@@ -189,6 +189,11 @@ async function teardown() {
   // B-132's auction case: without this the NEXT re-seed dies on a foreign key.
   await prisma.lease.updateMany({ where, data: { billingAccountId: null } })
   await prisma.billingAccount.deleteMany({ where })
+  // A completed move-in writes a `move_in` rate change, and it restricts its
+  // lease — so one card checkout in the demo (docs/DEMO.md stop 2) made the
+  // next re-seed die on `lease_rate_change_leaseId_fkey`. The e2e suite never
+  // finishes a card payment, which is why nothing caught it.
+  await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId: { in: facilityIds } } } })
   await prisma.lease.deleteMany({ where })
   await prisma.unit.deleteMany({ where })
   await prisma.unitTypeRate.deleteMany({ where })
