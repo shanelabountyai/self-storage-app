@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { prisma } from '../packages/db'
 import { mintPayLink } from '../apps/web/lib/portal/pay-links'
-import { hashPassword } from '../apps/web/lib/auth/password'
 import { dictionaryFor, translate, type Locale } from '../apps/web/lib/i18n'
 import { SITE } from '../apps/web/lib/site-config'
 import { assertNoAxeViolations } from './a11y-helpers'
+import { createPayReceiptFixture } from './pay-receipt-fixture'
 
 // PRD 05 CN-4 (B-051). The pay link's boundaries, from the outside.
 //
@@ -74,74 +74,20 @@ test.describe('the receipt screen', () => {
   test.describe.configure({ mode: 'serial' })
   const PASSWORD = 'e2e-pay-link-password'
 
-  let facilityId = ''
   let tenantId = ''
   let leaseId = ''
   let token = ''
   let paymentId = ''
 
+  let cleanup = async () => {}
+
   test.beforeAll(async ({}, testInfo) => {
-    const slug = `e2e-pay-link-${testInfo.project.name}`
-    const facility = await prisma.facility.create({
-      data: {
-        name: 'E2E — Pay Link',
-        slug,
-        addressLine1: '1 Test Way',
-        city: 'Austin',
-        state: 'TX',
-        postalCode: '78704',
-        timezone: 'America/Chicago',
-      },
-    })
-    facilityId = facility.id
-
-    const tenant = await prisma.tenant.create({
-      data: {
-        email: `${slug}@example.com`,
-        firstName: 'Ada',
-        lastName: 'Renter',
-        passwordHash: await hashPassword(PASSWORD),
-        emailVerifiedAt: new Date(),
-      },
-    })
-    tenantId = tenant.id
-
-    const unitType = await prisma.unitType.create({
-      data: { facilityId, name: `10x10 ${slug}`, widthFt: 10, lengthFt: 10 },
-    })
-    const unit = await prisma.unit.create({ data: { facilityId, unitTypeId: unitType.id, number: 'P-1' } })
-    const lease = await prisma.lease.create({
-      data: {
-        facilityId,
-        tenantId,
-        unitId: unit.id,
-        status: 'active',
-        startDate: new Date(),
-        billingDay: 1,
-        monthlyRateCents: 12_900,
-      },
-    })
-    leaseId = lease.id
-
-    const link = await mintPayLink({ tenantId, leaseId })
-    if (!link) throw new Error('mint failed')
-    token = link.token
-
-    const payment = await prisma.payment.create({
-      data: { facilityId, tenantId, amountCents: 12_900, method: 'card', status: 'succeeded' },
-    })
-    paymentId = payment.id
+    const fixture = await createPayReceiptFixture(`e2e-pay-link-${testInfo.project.name}`, PASSWORD)
+    ;({ tenantId, leaseId, token, paymentId, cleanup } = fixture)
   })
 
   test.afterAll(async () => {
-    if (!facilityId) return
-    await prisma.payment.deleteMany({ where: { facilityId } })
-    await prisma.payLink.deleteMany({ where: { leaseId } })
-    await prisma.lease.deleteMany({ where: { facilityId } })
-    await prisma.unit.deleteMany({ where: { facilityId } })
-    await prisma.unitType.deleteMany({ where: { facilityId } })
-    await prisma.tenant.deleteMany({ where: { id: tenantId } })
-    await prisma.facility.delete({ where: { id: facilityId } })
+    await cleanup()
   })
 
   // B-314 finding 1 / SC 2.4.1: `<main>` on this route had no `tabIndex`, so

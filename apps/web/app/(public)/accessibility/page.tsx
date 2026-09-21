@@ -2823,6 +2823,14 @@ function reviewedOn(locale: Locale): string {
 // no late fee is charged. It is wording in the signed document, not markup; no
 // route, control or state changes, and this page makes no claim about the
 // lease's text, so nothing is added or withdrawn.
+//
+// Re-read 2026-09-21, at B-348. Every page had rendered in the browser's
+// default serif, because `--font-sans` referred to itself. It now resolves to
+// Geist. The reflow, 200% zoom and text-spacing claims were re-measured against
+// the new face and still hold. The loops had been measuring Times, so this is
+// the first run that checked the shipped face. `/pay/[token]/done` is now
+// measured by those loops as well as by axe. No visible line changes;
+// `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

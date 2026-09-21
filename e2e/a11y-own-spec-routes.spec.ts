@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { expect, test, type Page } from '@playwright/test'
 import { SCANNED_BY_OWN_SPEC, SCANNED_STATES } from '../apps/web/lib/a11y/scan-coverage'
 import { DEMO_BUSINESS_ACCOUNT_NAME, DEMO_POS_TENANT_EMAIL } from '../apps/web/scripts/demo-credentials'
@@ -9,6 +10,7 @@ import {
   signInAsPlanTenant,
 } from './sign-in'
 import { expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
+import { createPayReceiptFixture } from './pay-receipt-fixture'
 
 // B-201 / PRD 02 §5.5 FR-24 (WCAG 2.1 AA, 1.4.10 Reflow, 1.4.4 Resize text,
 // 1.4.12 Text spacing).
@@ -63,6 +65,11 @@ async function signIn(page: Page, audience: Audience): Promise<void> {
 /// pattern. Every entry in that list must appear here — the loop below asserts
 /// it, so a new own-spec route with no way to reach it is a failing test rather
 /// than a route that quietly drops out of three checks.
+const cleanups: Array<() => Promise<void>> = []
+test.afterAll(async () => {
+  for (const cleanup of cleanups.splice(0)) await cleanup()
+})
+
 const REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<void> }> = {
   '/portal/transfer': {
     audience: 'tenant',
@@ -99,6 +106,19 @@ const REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<vo
   // B-256. A five-column table of money on the page a payer prints for their
   // bookkeeper. Reached the way they reach it: the statements list, then the
   // month under the account's own heading — no id can be written down here.
+  // B-348. B-336 put the receipt in `SCANNED_BY_OWN_SPEC` with no entry here,
+  // so this test failed from that merge, the same gap B-256 left above. The
+  // page needs a payment row and nobody signed in; the fixture is disposable
+  // and removed in `afterAll`, per B-120.
+  '/pay/[token]/done': {
+    audience: 'public',
+    async go(page) {
+      const fixture = await createPayReceiptFixture(`e2e-pay-done-layout-${randomUUID()}`, 'e2e-pay-done-layout')
+      cleanups.push(fixture.cleanup)
+      await page.goto(`/pay/${fixture.token}/done?payment=${fixture.paymentId}`)
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    },
+  },
   '/portal/statements/account/[accountId]/[period]': {
     audience: 'business-payer',
     async go(page) {

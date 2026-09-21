@@ -148,3 +148,12 @@ test('the overflow check fails content only a mouse can scroll to', async ({ pag
   )
   await expectNoHorizontalOverflow(page, 'in a bare wrapper of links')
 })
+
+// B-348. `--font-sans` once referred to itself, resolved to nothing, and every
+// page rendered in the browser's default serif. Text metrics feed every reflow
+// and zoom check above, so they were measuring Times, not the shipped face.
+test('body text renders in Geist, not the default serif', async ({ page }) => {
+  await page.goto('/')
+  const family = await page.evaluate(() => getComputedStyle(document.body).fontFamily)
+  expect(family).toContain('Geist')
+})

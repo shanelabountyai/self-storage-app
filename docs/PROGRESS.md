@@ -11170,3 +11170,25 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 - The `FeeSchedule` `late` fee type still exists; the lease no longer reads it. Whether it should be retired is not owned by any item.
 - The sentence is English only, like the rest of the lease template.
+
+## B-348 — every page renders in Geist, not the browser's default serif (2026-09-21)
+
+**Commit:** `pending`
+
+**What it built.**
+
+- `globals.css`: `--font-sans: var(--font-geist-sans)`. It had read `var(--font-sans)`, which refers to itself and resolves to nothing. `--font-heading` inherits the fix.
+- `e2e/a11y.spec.ts`: the body's computed `font-family` contains `Geist`.
+- `e2e/pay-receipt-fixture.ts`: the disposable pay-link receipt fixture, moved out of `pay-link.spec.ts` so two specs can share it.
+- A `REACH` entry for `/pay/[token]/done` in `e2e/a11y-own-spec-routes.spec.ts`. The receipt is now checked at 320px, at 200% zoom and under forced text spacing. Each run makes its own fixture and removes it in `afterAll`.
+
+**What it decided.**
+
+- The reflow, zoom and text-spacing loops had been measuring Times. This is the first run against the shipped face, and all 318 tests in `a11y.spec.ts`, `a11y-own-spec-routes.spec.ts` and `pay-link.spec.ts` passed on both projects.
+
+**Bug found.** B-336 added `/pay/[token]/done` to `SCANNED_BY_OWN_SPEC` with no `REACH` entry. The layout test for that route has failed on both projects since that merge. It is the same gap B-256 left for `/admin/billing/accounts/[id]`.
+
+**What it left behind.**
+
+- Lighthouse was not re-run locally. CI's e2e lane runs it.
+- The unit suite was not run. The change touches no code it loads.
