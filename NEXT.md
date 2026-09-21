@@ -9,6 +9,7 @@
 - `docs/DEMO.md`: walked end to end against a production build
 - Storage Business in Brief: https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf
 - LinkedIn drafts 25–29 in the Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
+- Technical write-up: `WRITEUP.md` (https://github.com/shanelabountyai/self-storage-app/blob/main/WRITEUP.md), screenshots in `docs/images/`
 
 **Next: B-347** (the lease's late-fee sentence reads `FeeSchedule`, not the ladder), then **B-348** (`--font-sans` refers to itself; one line) and **B-349** (bare `/portal/pay`). All three XS, at `83azzs`–`83azzu`, written 2026-09-21 from the closure demo walk. After those, a tenth review block is the only other open option.
 
