@@ -4,7 +4,7 @@
 
 **Next: B-358**. Continue down review block 10 in order.
 
-**B-357 is built** (2026-09-21). The printed letter's "To pay" line appears only when the template requires `links.pay_now`, and a no-email tenant is sent to the phone or the office, never `/login`.
+**B-357 is built** (2026-09-21, `90c5ecc`). The printed letter's "To pay" line appears only when the template requires `links.pay_now`, and a no-email tenant is sent to the phone or the office, never `/login`.
 
 **B-356 is built** (2026-09-21, `75dc582`). An expired pay link opens `/login`'s magic-link form without a click and says "No password? We can email you a sign-in link." A bare `/login` keeps it closed.
 

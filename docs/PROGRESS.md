@@ -11343,7 +11343,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-357 — the printed letter's pay line asks only when the letter does, and never sends a no-email tenant to sign in (2026-09-21)
 
-**Commit:** `pending`
+**Commit:** `90c5ecc`
 
 **What it built.** `messageForPrint` now returns `asksPayment` and `tenantHasEmail`. `asksPayment` is true when a `message_template` row with the message's key, channel and version requires `links.pay_now`. `tenantHasEmail` is true when the recipient has an email. The print page leaves out the "Printed {date}. To pay…" line when the letter does not ask for payment. For a tenant with no email it uses two new strings, `letter.printedCallOffice` ("To pay, call {phone} or pay in person at the office.") and `letter.printedOffice` ("To pay, visit the office at the address above."), with Spanish versions of both. A tenant with an email keeps B-340's sign-in wording. The stored body is unchanged (CN-18).
 
