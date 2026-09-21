@@ -11238,3 +11238,22 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - The e2e suite was not run. No spec pays an account more than it owes, and the new card-screen branch is staff-only. CI's e2e lane runs it.
 
 **Verification.** Typecheck is clean. Lint shows the same six warnings as before, none in files this row touched. `npm test -- tests/account-payment-scope-db.test.ts` plus the five other counter/account suites and `pos-db.test.ts`: **56 passed**.
+
+## B-351 — late-fee steps are charged once per delinquency episode, not once per lease (2026-09-21)
+
+**Commit:** `PENDING`
+
+**What it built.**
+
+- `chargedSteps` (`apps/web/lib/billing/late-fees.ts`) now counts only fee lines on invoices due on or after `episodeStart`, which is the original due date of the oldest unpaid rent invoice. That is the date `daysPastDue` counts from. A tenant charged step 1 in January, cured, and late again in March is charged step 1 again on March's day 5. Before this, any step ever charged on the lease or its transfer chain was never charged again.
+- The ancestor fee query along the transfer chain now selects `dueDate`, so B-138's protection is scoped the same way.
+- `tests/late-fees-db.test.ts` has two new cases: *charges step 1 again when the tenant is late again after curing* (fails on the old code) and *does not re-charge a step waived in the current episode*.
+
+**What it decided.**
+
+- **A fee in the current episode counts whatever its status.** A waived (void) step is not charged again the next night, and a paid one still holds its step. The transfer (B-138) and returned-payment (B-161) cases keep passing because both keep the rent invoice's original due date, so the earlier fee falls inside the episode.
+- **The episode is the oldest *unpaid* invoice, as the row specifies.** A tenant who pays September but leaves October unpaid starts a new episode on October's due date, so October's lateness earns step 1 again. That is intended: each month the rent is late earns the ladder once.
+
+**What it left behind.** Nothing owned. The e2e suite was not run: no spec reaches a second delinquency, and this change has no UI. CI's e2e lane runs it.
+
+**Verification.** Typecheck is clean. Lint shows the same six warnings as before, none in files this row touched. `npm test -- tests/late-fees-db.test.ts tests/late-fees.test.ts`: **38 passed**. The eight other suites that run the ladder (credit, holds, ACH settlement, job-failure alarm, lease late fee, void/rebill, fee charges, money loop): **69 passed, 8 skipped**. The 8 skips are `integration-money-loop`, which skips as a whole file.

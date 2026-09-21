@@ -168,7 +168,7 @@ export async function assessLateFees(
   const ancestorFeeLines = ancestorIds.length
     ? await prisma.invoice.findMany({
         where: { leaseId: { in: ancestorIds }, kind: 'fee' },
-        select: { leaseId: true, kind: true, lineItems: { select: { description: true } } },
+        select: { leaseId: true, kind: true, dueDate: true, lineItems: { select: { description: true } } },
       })
     : []
   const ancestorFeesByLease = new Map<string, typeof ancestorFeeLines>()
@@ -237,10 +237,10 @@ export async function assessLateFees(
     }
 
     const age = daysPastDue(rentInvoices, businessDate)
-    const alreadyCharged = chargedSteps([
-      ...lease.invoices,
-      ...(chains.get(lease.id) ?? []).flatMap((id) => ancestorFeesByLease.get(id) ?? []),
-    ])
+    const alreadyCharged = chargedSteps(
+      [...lease.invoices, ...(chains.get(lease.id) ?? []).flatMap((id) => ancestorFeesByLease.get(id) ?? [])],
+      episodeStart(rentInvoices),
+    )
     const due = stepsDue(age, steps, alreadyCharged)
     if (due.length === 0) continue
 
@@ -269,23 +269,43 @@ export async function assessLateFees(
   return result
 }
 
-/// Which steps a lease has already been charged.
+/// Which steps a lease has already been charged IN THIS DELINQUENCY EPISODE.
+///
+/// B-351. The episode starts at `since`, the original due date of the oldest
+/// unpaid rent invoice — the same anchor `daysPastDue` counts from. A fee raised
+/// before it belongs to a delinquency the tenant has cured, so a tenant late in
+/// January and again in March is charged step 1 twice. A fee raised on or after
+/// it counts whatever its status: a step waived this episode is not re-charged
+/// the next night, and a paid one left behind by a transfer (B-138) or re-aged
+/// by a returned payment (B-161) still holds its step, because both keep the
+/// rent invoice's original due date.
 ///
 /// Read back from the fee line descriptions, which carry the step number in a
 /// fixed prefix. Held in the description rather than a column because a line
 /// item is generic across every fee type and a `lateFeeStep` column would be
 /// null on every other one — and the description is what a tenant reads on the
 /// invoice anyway, so it has to say which fee this is regardless.
-function chargedSteps(invoices: { kind: string; lineItems: { description: string }[] }[]): number[] {
+function chargedSteps(
+  invoices: { kind: string; dueDate: Date; lineItems: { description: string }[] }[],
+  since: Date,
+): number[] {
   const steps: number[] = []
   for (const invoice of invoices) {
-    if (invoice.kind !== 'fee') continue
+    if (invoice.kind !== 'fee' || invoice.dueDate < since) continue
     for (const line of invoice.lineItems) {
       const match = /^Late fee \(step (\d+)\)/.exec(line.description)
       if (match) steps.push(Number(match[1]))
     }
   }
   return steps
+}
+
+/// The original due date of the oldest unpaid rent invoice. Only called once
+/// something is overdue, so there is always one.
+function episodeStart(rentInvoices: { dueDate: Date; totalCents: number; amountPaidCents: number; status: string }[]): Date {
+  return rentInvoices
+    .filter((invoice) => outstandingCents(invoice) > 0)
+    .reduce((oldest, invoice) => (invoice.dueDate < oldest ? invoice.dueDate : oldest), new Date(8.64e15))
 }
 
 /// One fee invoice per lease per business date, carrying whichever steps came

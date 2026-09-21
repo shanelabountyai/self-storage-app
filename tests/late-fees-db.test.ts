@@ -264,6 +264,36 @@ describeDb('late fees', () => {
       expect(await prisma.invoice.count({ where: { leaseId, kind: 'fee' } })).toBe(1)
     })
 
+    // B-351. At most once per delinquency EPISODE, not per lease life: a fee
+    // raised before the oldest unpaid rent invoice fell due belongs to a
+    // delinquency the tenant has already cured.
+    it('charges step 1 again when the tenant is late again after curing', async () => {
+      await seedSteps()
+      const january = await rentInvoice({ dueDate: d('2026-01-01') })
+      await assessLateFees(facilityId, d('2026-01-06'), recordItem)
+      await prisma.invoice.update({ where: { id: january.id }, data: { amountPaidCents: 12_900, status: 'paid' } })
+
+      await rentInvoice({ dueDate: d('2026-03-01') })
+      await assessLateFees(facilityId, d('2026-03-06'), recordItem)
+      await assessLateFees(facilityId, d('2026-03-07'), recordItem)
+
+      const fees = await prisma.invoice.findMany({ where: { leaseId, kind: 'fee' }, orderBy: { dueDate: 'asc' } })
+      expect(fees.map((fee) => fee.dueDate)).toEqual([d('2026-01-06'), d('2026-03-06')])
+    })
+
+    it('does not re-charge a step waived in the current episode', async () => {
+      await seedSteps()
+      await rentInvoice({ dueDate: d('2026-09-01') })
+      await assessLateFees(facilityId, d('2026-09-06'), recordItem)
+      const fee = await prisma.invoice.findFirstOrThrow({ where: { leaseId, kind: 'fee' } })
+      const waived = await waiveFeeInvoice(actorWith({}), fee.id, { reasonCode: 'customer_goodwill' })
+      expect(waived.ok).toBe(true)
+
+      await assessLateFees(facilityId, d('2026-09-07'), recordItem)
+
+      expect(await prisma.invoice.count({ where: { leaseId, kind: 'fee' } })).toBe(1)
+    })
+
     it('is idempotent on a re-run of the same night', async () => {
       await seedSteps()
       await rentInvoice({ dueDate: d('2026-09-01') })
