@@ -10904,7 +10904,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-336 — an expired pay link says why, in the reminder's language, and signs in to that lease's payment (2026-09-21)
 
-**Commit:** `PENDING`
+**Commit:** `b129bb7`
 
 **What it built.**
 
