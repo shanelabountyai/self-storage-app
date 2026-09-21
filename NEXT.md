@@ -11,7 +11,9 @@
 - LinkedIn drafts 25–29 in the Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
 - Technical write-up: `WRITEUP.md` (https://github.com/shanelabountyai/self-storage-app/blob/main/WRITEUP.md), screenshots in `docs/images/`
 
-**Next: B-348** (`--font-sans` refers to itself; one line, then re-run the axe and 200%-zoom specs), then **B-349** (bare `/portal/pay`). Both XS, at `83azzt`–`83azzu`, written 2026-09-21 from the closure demo walk.
+**Next: B-349** (bare `/portal/pay`), XS, at `83azzu`, written 2026-09-21 from the closure demo walk.
+
+**B-348 is built** (2026-09-21, `b4866f9`). `--font-sans` resolves to Geist, and the body's font is asserted in `a11y.spec.ts`. It also added the `REACH` entry for `/pay/[token]/done` that B-336 left out, with its fixture moved to `e2e/pay-receipt-fixture.ts`.
 
 **B-347 is built** (2026-09-21, `720a7c4`). The lease's late-fee sentence reads `lateFeeStepsFor`, not `FeeSchedule`: no ladder says no late fee is charged; otherwise every step's day and amount. `describeLateFee` now lives in `lib/billing/late-fees.ts`. Signed leases are not re-rendered. After those, a tenth review block is the only other open option.
 

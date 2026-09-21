@@ -11173,7 +11173,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-348 — every page renders in Geist, not the browser's default serif (2026-09-21)
 
-**Commit:** `pending`
+**Commit:** `b4866f9`
 
 **What it built.**
 
