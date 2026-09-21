@@ -10728,6 +10728,8 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 **Verification.** Typecheck clean (including `tests/`), lint clean. `tests/void-rebill-db.test.ts`, `ledger-corrections-db`, `ledger-db`, `ledger-exceptions-db` and `transfer-db`: 82 passed. No schema change, so no drift check was needed. The accessibility statement was not re-read: nothing customer-facing shipped — both screens are admin.
 
+**Correction (2026-09-21, the review block over B-329–B-349, operator finding O4).** Item 1 above says a payment that waits on the void's row lock "lands on an invoice already voided (where `recomputeInvoices` leaves it voided, by its own rule)", as though that were the safe outcome. **It is not.** `applyPayment` reads its targets through `claimsFor` without a lock, so its allocation insert still goes through once the void commits; the payment is then allocated to a void invoice and B-327 re-bills the period in full, which is the double bill this item exists to stop. A pending or processing charge also does not raise `amountPaidCents`, so it does not block the void. **B-352** owns both fixes and the comment in `corrections.ts`.
+
 ## B-333 — a correction now announces itself outside the form it removes (2026-09-20)
 
 **Commit:** `af32799`

@@ -1,6 +1,8 @@
 # Next
 
-**Review block 9 is written** (2026-09-19, `072becd` + `ab39408`): B-329–B-346 at `83azza`–`83azzr`, from the operator, UX and accessibility reviews over B-301–B-328. 31 refusals are recorded in the numbering note.
+**Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
+
+**Next: B-350** — refuse an account overpayment at the counter (cash/check/money order, counter card, card-on-file) above the account's open balance. Then B-351 (late-fee steps once per delinquency episode, not per lease life), then down the block in order.
 
 ## Start here
 
@@ -11,13 +13,11 @@
 - LinkedIn drafts 25–29 in the Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
 - Technical write-up: `WRITEUP.md` (https://github.com/shanelabountyai/self-storage-app/blob/main/WRITEUP.md), screenshots in `docs/images/`
 
-**Next: no open backlog item.** The only option left is a tenth review block (operator, UX and accessibility reviews over B-329–B-349).
-
 **B-349 is built** (2026-09-21, `67ec7f4`). A bare `/portal/pay` redirects a one-lease tenant to `?lease=`. A tenant with several leases, or none, gets a sentence and a link to `/portal`. The DEMO.md troubleshooting row is removed.
 
 **B-348 is built** (2026-09-21, `b4866f9`). `--font-sans` resolves to Geist, and the body's font is asserted in `a11y.spec.ts`. It also added the `REACH` entry for `/pay/[token]/done` that B-336 left out, with its fixture moved to `e2e/pay-receipt-fixture.ts`.
 
-**B-347 is built** (2026-09-21, `720a7c4`). The lease's late-fee sentence reads `lateFeeStepsFor`, not `FeeSchedule`: no ladder says no late fee is charged; otherwise every step's day and amount. `describeLateFee` now lives in `lib/billing/late-fees.ts`. Signed leases are not re-rendered. After those, a tenth review block is the only other open option.
+**B-347 is built** (2026-09-21, `720a7c4`). The lease's late-fee sentence reads `lateFeeStepsFor`, not `FeeSchedule`: no ladder says no late fee is charged; otherwise every step's day and amount. `describeLateFee` now lives in `lib/billing/late-fees.ts`. Signed leases are not re-rendered.
 
 **B-346 is built** (2026-09-21, `ef3c813`). Write-off, void and non-zero adjustment on the ledger screen echo tenant, unit, amount, direction and balance after, and post only on a press that carries back `yes:<echoed cents>`. Cancel posts nothing. Each domain function takes `preview: true`, which runs every refusal and writes nothing. `AdminForm`'s confirm state has opt-in `confirmValue` and `cancel`.
 **B-345 is built** (2026-09-21, `a63a737`). "crossed in the mail" and "anything we mail you". `tests/us-english.test.ts` guards the en dictionary and the English catalog.
