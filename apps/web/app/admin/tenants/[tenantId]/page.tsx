@@ -3,6 +3,7 @@ import { LOCALES, LOCALE_NAMES } from "@/lib/i18n";
 import { ApplyCreditForm } from "@/components/admin/apply-credit-form";
 import Link from "next/link";
 import { getAdminActor } from "@/lib/admin/context";
+import { printForMailingName } from "@/lib/admin/message-print";
 import {
   tenantMessageLimit,
   TENANT_MESSAGE_MAX,
@@ -315,7 +316,7 @@ export default async function TenantProfilePage({
               <Link
                 href={`/admin/messages/${entry.message.id}/print`}
                 className="underline underline-offset-2"
-                aria-label={`Print ${entry.message.subjectSnapshot ?? entry.message.templateKey} for mailing`}
+                aria-label={printForMailingName(entry.message.subjectSnapshot)}
               >
                 Print this for mailing
               </Link>

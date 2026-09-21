@@ -29,6 +29,9 @@ export function PrintLetterButton({
   /// as closing something.
   closesTask: boolean
 }) {
+  // SC 2.5.3: the accessible name starts with the visible words, so "click
+  // Print it" works for a voice-control user; the tenant's name is context after.
+  const visible = closesTask ? 'Print it, and close the task' : 'Print this letter'
   return (
     <AdminForm
       action={printLetterAction}
@@ -39,14 +42,10 @@ export function PrintLetterButton({
       <button
         type="submit"
         onClick={() => window.print()}
-        aria-label={
-          closesTask
-            ? `Print this letter for ${tenantName} and close the task`
-            : `Print this letter for ${tenantName}`
-        }
+        aria-label={`${visible} — the letter for ${tenantName}`}
         className="border-input hover:bg-accent inline-flex min-h-11 w-fit items-center rounded-md border px-4 text-sm font-medium"
       >
-        {closesTask ? 'Print it, and close the task' : 'Print this letter'}
+        {visible}
       </button>
     </AdminForm>
   )

@@ -31,7 +31,7 @@
       "@/*": ["./apps/web/*"]
     }
   },
-  "include": ["tests/**/*.ts", "e2e/**/*.ts", "scripts/**/*.mts", "apps/web/types/**/*.d.ts"],
+  "include": ["tests/**/*.ts", "tests/**/*.tsx", "e2e/**/*.ts", "scripts/**/*.mts", "apps/web/types/**/*.d.ts"],
   "exclude": [
     "node_modules",
     // Same iCloud conflict-copy problem the app's config documents.

@@ -61,7 +61,7 @@ export default defineConfig({
     // stalling it.
     testTimeout: 20_000,
     hookTimeout: 30_000,
-    include: ['tests/**/*.test.ts', 'apps/**/*.test.ts', 'packages/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,tsx}', 'apps/**/*.test.ts', 'packages/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/.next/**', 'e2e/**'],
   },
 })

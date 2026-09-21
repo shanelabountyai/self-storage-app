@@ -27,6 +27,8 @@ export type MessagePrint = {
   facilityId: string
   tenantName: string
   facilityName: string
+  /// B-340. The number the print-time line tells a paper reader to call.
+  facilityPhone: string | null
   timezone: string
   subject: string | null
   /// The stored render, verbatim. Never a re-render: templates are versioned
@@ -44,6 +46,13 @@ export type MessagePrint = {
   /// printing closes. False once it is closed, so a reprint does not offer to
   /// complete a task that is already done.
   openTaskId: string | null
+}
+
+/// B-340 / SC 2.5.3. The accessible name of the profile log's "Print this for
+/// mailing" link: it starts with the visible words, and never falls back to the
+/// template key (D-15) — with no subject, the visible text is the whole name.
+export function printForMailingName(subject: string | null): string | undefined {
+  return subject ? `Print this for mailing: ${subject}` : undefined
 }
 
 /// The letter, the two addresses and the task it closes.
@@ -65,6 +74,7 @@ export async function messageForPrint(actor: Actor, messageId: string): Promise<
       facility: {
         select: {
           name: true,
+          phone: true,
           timezone: true,
           addressLine1: true,
           addressLine2: true,
@@ -112,6 +122,7 @@ export async function messageForPrint(actor: Actor, messageId: string): Promise<
     facilityId: message.facilityId,
     tenantName,
     facilityName: message.facility.name,
+    facilityPhone: message.facility.phone,
     timezone: message.facility.timezone,
     subject: message.subjectSnapshot,
     body: message.bodySnapshot,

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getAdminActor } from '@/lib/admin/context'
 import { messageForPrint } from '@/lib/admin/message-print'
 import { PrintLetterButton } from '@/components/admin/print-letter-button'
+import { siteOrigin } from '@/lib/marketing/origin'
 
 export const metadata = {
   title: 'Letter',
@@ -45,6 +46,13 @@ export default async function MessagePrintPage({
   const letter = await messageForPrint(actor, messageId)
   if (!letter) notFound()
 
+  // B-340. The body's pay link is 43 case-sensitive characters, valid seven
+  // days (D-30) from when it was COMPOSED — nobody types it from paper, and the
+  // letter may go out after it lapsed. The body stays verbatim (CN-18); this
+  // line is added at print time, outside it, with routes a paper reader can use.
+  const printedOn = formatLetterDate(new Date(), letter.timezone)
+  const signIn = `${siteOrigin().replace(/^https?:\/\//, '')}/login`
+
   return (
     <div className="flex max-w-2xl flex-col gap-6 print:max-w-none">
       <div className="flex flex-col gap-2 print:hidden">
@@ -80,7 +88,7 @@ export default async function MessagePrintPage({
               className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 text-pretty print:hidden"
             >
               This tenant&apos;s address of record is missing its {letter.to.missing.join(', ')}, so
-              the envelope block below is incomplete and this cannot be recorded as mailed. Add the
+              the envelope block below is incomplete and there is nothing here to print yet. Add the
               address on their account first — a letter posted without it comes back after the
               deadline it sets.
             </p>
@@ -154,11 +162,23 @@ export default async function MessagePrintPage({
             <div className="font-sans whitespace-pre-wrap">{letter.body}</div>
           </article>
 
-          <PrintLetterButton
-            messageId={letter.messageId}
-            tenantName={letter.tenantName}
-            closesTask={letter.openTaskId !== null}
-          />
+          {/* Outside the <article> so it is not read as part of the letter
+              (SC 1.3.1), but not `print:hidden` — it goes on the paper. */}
+          <p className="text-sm text-pretty">
+            Printed {printedOn}. To pay,{' '}
+            {letter.facilityPhone ? `call ${letter.facilityPhone} or ` : ''}sign in at {signIn}.
+          </p>
+
+          {/* The server refuses to record a letter with no address, so the
+              button would print one that cannot be mailed. The note above
+              names what is missing instead. */}
+          {letter.to.ok && (
+            <PrintLetterButton
+              messageId={letter.messageId}
+              tenantName={letter.tenantName}
+              closesTask={letter.openTaskId !== null}
+            />
+          )}
         </>
       )}
     </div>

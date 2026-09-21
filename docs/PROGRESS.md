@@ -10978,3 +10978,28 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - The ladder still doesn't net tenant credit. That is the per-lease design, and this row warns about it rather than changing it.
 
 **Verification.** Unit: 4656 passed, 8 skipped (282 files; 281 passed, 1 skipped). `tests/counter-overflow-db.test.ts` was run twice against the same database, green both times. Typecheck clean. Lint: 0 errors (6 pre-existing warnings). The accessibility statement was re-read. It makes no claims about `/admin`, so it was not edited. No migration.
+
+## B-340 — the printed letter gets a print-time pay line, no Print on an incomplete address, and control names that start with their visible text (2026-09-21)
+
+**Commit:** `SHA-PENDING`
+
+**What it built.**
+
+- `app/admin/messages/[messageId]/print/page.tsx`: a line after the `<article>` reads *"Printed {date}. To pay, call {facility phone} or sign in at {host}/login."*. The date is the render date in the facility's timezone. With no facility phone, the line offers sign-in only. The host comes from `siteOrigin()` without its scheme. The line is outside the article, so it is not read as part of the letter (SC 1.3.1). It is not `print:hidden`, so it prints. The stored body and the composed date inside the letter are unchanged (CN-18).
+- The same page: `PrintLetterButton` is not rendered while the address of record is incomplete. The existing red note names the missing parts and now says there is nothing to print yet. Before this, `window.print()` ran first and the server then refused to record the letter.
+- `components/admin/print-letter-button.tsx`: the accessible name is `{visible label} — the letter for {tenant}` (SC 2.5.3).
+- `lib/admin/message-print.ts`: `MessagePrint.facilityPhone`, and `printForMailingName(subject)` for the tenant profile's "Print this for mailing" link. The name is `Print this for mailing: {subject}`. With no subject there is no `aria-label`, so the name is the visible text alone. It no longer falls back to the template key (D-15).
+- `tests/message-print-page.test.tsx`: the repo's first component render test. It uses `react-dom/server` in the node environment, with the actor, the loader and the server action mocked. It asserts that the print-time line sits outside the article, the printed date, the unchanged body, the phone-less variant, that there is no `<button>` and a named gap for an incomplete address, and that every `aria-label` starts with its element's visible text. `vitest.config.ts` and `tsconfig.tests.json` now include `tests/**/*.test.tsx` and `tests/**/*.tsx`.
+
+**What it decided.**
+
+- The body's `{{links.pay_now}}` stays in the stored text (CN-18). The print-time line is the paper reader's route, and it does not rewrite the body.
+- The letter's own date is still the composed date. The print date appears only in the print-time line.
+
+**What it left behind.**
+
+- The print-time line is English only. Its language, and that of the printed date, belong to B-341 (`lang` on Spanish text, and the letter date that is always English).
+- The Voice Control check on the print controls is B-254's.
+- No e2e spec covers the print page, and none did before this item.
+
+**Verification.** Unit: 4661 passed, 8 skipped (283 files: 282 passed, 1 skipped). That is B-339's 4656 plus these 5. `tests/message-print-db.test.ts` is still green. Typecheck is clean, including the new `.tsx` test. Lint: 0 errors (6 pre-existing warnings). No migration. I re-read the accessibility statement. It makes no claim about the `/admin` print page or printed letters, so I did not edit it.
