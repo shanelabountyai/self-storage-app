@@ -299,6 +299,10 @@ export const SCANNED_BY_OWN_SPEC = [
   // scanned the page it redirects to. Reached the way a renter reaches it: a
   // click on "Reserve for free" from a unit card.
   { route: '/storage/[state]/[city]/[slug]/reserve', spec: 'e2e/smoke.spec.ts' },
+  // B-336. The receipt only needs a payment row to read back, not a live
+  // PaymentIntent, so its spec builds a disposable one — the exception this
+  // replaced said it needed the same live link the pay screen does.
+  { route: '/pay/[token]/done', spec: 'e2e/pay-link.spec.ts' },
 ] as const
 
 /// Who the page is for. The public statement lists the first two and not
@@ -348,13 +352,6 @@ export const SCAN_EXCEPTIONS: readonly ScanException[] = [
       'the one-tap payment screen a reminder links to, which needs a live link issued against a real balance',
     reasonEs:
       'la pantalla de pago de un toque a la que lleva un recordatorio, que necesita un enlace vivo emitido contra un saldo real',
-  },
-  {
-    route: '/pay/[token]/done',
-    audience: 'public',
-    reason: 'the receipt shown after paying from that link, for the same reason',
-    reasonEs:
-      'el recibo que se muestra después de pagar desde ese enlace, por la misma razón',
   },
   {
     route: '/checkout/resume/[token]',

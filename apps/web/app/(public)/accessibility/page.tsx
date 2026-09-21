@@ -2795,6 +2795,14 @@ function reviewedOn(locale: Locale): string {
 // (SC 1.3.1), and the scope is in the words, not in styling. Neither receipt is
 // scanned (no demo payment exists, see B-278), and this page makes no claim
 // about receipts or email, so nothing is added or withdrawn.
+//
+// Re-read 2026-09-21, at B-336. `/pay/[token]/done` is now axe-scanned by
+// `e2e/pay-link.spec.ts` against a disposable payment, so its line leaves the
+// generated list of unscanned routes — a correction, true in the direction of
+// more coverage. An expired pay link now reaches `/login` with a sentence and a
+// `tel:` link in the reminder's language (SC 3.1.1); it is page text, not a
+// second `role="alert"`. No other visible line changes; `LAST_REVIEWED` is not
+// bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

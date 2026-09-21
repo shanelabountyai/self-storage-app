@@ -1744,6 +1744,7 @@ export const es: Dictionary = {
   'login.title': 'Iniciar sesión',
   'login.error.magicLinkInvalid':
     'Ese enlace para iniciar sesión ya no es válido. Puede haber vencido o haberse usado ya.',
+  'login.payLinkExpired': 'Ese enlace de pago ha vencido. Inicie sesión para pagar, o llame al',
   'login.staffCodeHint':
     'Solo para el personal: el código de 6 dígitos de su aplicación de autenticación, o un código de recuperación. Déjelo en blanco si es cliente, o si aún no ha configurado la autenticación de dos factores.',
   'login.code': 'Código de autenticación',

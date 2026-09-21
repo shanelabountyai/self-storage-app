@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { prisma } from '../packages/db'
 import { mintPayLink } from '../apps/web/lib/portal/pay-links'
+import { hashPassword } from '../apps/web/lib/auth/password'
+import { dictionaryFor, translate, type Locale } from '../apps/web/lib/i18n'
+import { SITE } from '../apps/web/lib/site-config'
 import { assertNoAxeViolations } from './a11y-helpers'
 
 // PRD 05 CN-4 (B-051). The pay link's boundaries, from the outside.
@@ -66,6 +69,11 @@ test('a mixed-case token reaches the pay route instead of being lower-cased away
 // facility and tenant, created here and deleted in `afterAll`, never the
 // shared demo lease the other tests in this file deliberately avoid touching.
 test.describe('the receipt screen', () => {
+  // B-336. More than one test shares this fixture now, and under
+  // `fullyParallel` each worker would run `beforeAll` and collide on the slug.
+  test.describe.configure({ mode: 'serial' })
+  const PASSWORD = 'e2e-pay-link-password'
+
   let facilityId = ''
   let tenantId = ''
   let leaseId = ''
@@ -88,7 +96,13 @@ test.describe('the receipt screen', () => {
     facilityId = facility.id
 
     const tenant = await prisma.tenant.create({
-      data: { email: `${slug}@example.com`, firstName: 'Ada', lastName: 'Renter' },
+      data: {
+        email: `${slug}@example.com`,
+        firstName: 'Ada',
+        lastName: 'Renter',
+        passwordHash: await hashPassword(PASSWORD),
+        emailVerifiedAt: new Date(),
+      },
     })
     tenantId = tenant.id
 
@@ -141,4 +155,43 @@ test.describe('the receipt screen', () => {
     await page.keyboard.press('Enter')
     await expect(page.locator('#main')).toBeFocused()
   })
+
+  // B-336. Covered by an exception until now, whose reason — "needs a live
+  // link" — was never true of this route: it needs only the payment row above.
+  test('the receipt has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto(`/pay/${token}/done?payment=${paymentId}`)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await assertNoAxeViolations(page)
+  })
+
+  // B-336. A reminder opened after its seven days used to land on a bare,
+  // English `/login` bound for `/portal`. It now says why, in the reminder's
+  // language, and signs the tenant in to pay the same lease (CN-4).
+  for (const locale of ['en', 'es'] as const satisfies readonly Locale[]) {
+    test(`an expired link explains itself in ${locale} and signs in to that lease's payment`, async ({
+      page,
+    }) => {
+      const dict = dictionaryFor(locale)
+      await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: locale } })
+      const expired = await mintPayLink({ tenantId, leaseId, ttlDays: -1 })
+      if (!expired) throw new Error('mint failed')
+
+      await page.goto(`/pay/${expired.token}`)
+      await expect(page).toHaveURL(
+        `/login?from=${encodeURIComponent(`/portal/pay?lease=${leaseId}`)}&reason=pay_link_expired`,
+      )
+      await expect(page.locator('html')).toHaveAttribute('lang', locale)
+      const message = page.getByText(translate(dict, 'login.payLinkExpired'))
+      await expect(message).toBeVisible()
+      await expect(message.getByRole('link', { name: SITE.phone.display })).toHaveAttribute(
+        'href',
+        `tel:${SITE.phone.href}`,
+      )
+
+      await page.getByLabel(translate(dict, 'auth.email')).first().fill(`e2e-pay-link-${test.info().project.name}@example.com`)
+      await page.getByLabel(translate(dict, 'auth.password')).fill(PASSWORD)
+      await page.getByRole('button', { name: translate(dict, 'login.submit') }).click()
+      await expect(page).toHaveURL(`/portal/pay?lease=${leaseId}`)
+    })
+  }
 })

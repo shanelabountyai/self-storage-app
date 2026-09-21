@@ -5,6 +5,7 @@ import {
   PAY_LINK_TTL_DAYS,
   attributePayment,
   checkPayLink,
+  expiredPayLink,
   mintPayLink,
   payLinkLocale,
   payLinkUrl,
@@ -248,6 +249,41 @@ describeDb('pay links', () => {
       await payLinkLocale(token)
       const row = await prisma.payLink.findFirstOrThrow({ where: { leaseId } })
       expect(row.clickCount).toBe(0)
+    })
+  })
+
+  describe('telling an expired link apart (B-336)', () => {
+    afterEach(async () => {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: null } })
+    })
+
+    async function mintExpired() {
+      const link = await mintPayLink({ tenantId, leaseId, ttlDays: -1 })
+      if (!link) throw new Error('mint failed')
+      return link.token
+    }
+
+    it('names the lease and the language the reminder was written in', async () => {
+      await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: 'es' } })
+      expect(await expiredPayLink(await mintExpired())).toEqual({ leaseId, locale: 'es' })
+    })
+
+    it('leaves the language to the visitor when the tenant never stated one', async () => {
+      expect(await expiredPayLink(await mintExpired())).toEqual({ leaseId, locale: null })
+    })
+
+    it('says nothing for a live, revoked, ended or unknown link', async () => {
+      const live = await mint()
+      expect(await expiredPayLink(live.token)).toBeNull()
+
+      const expired = await mintExpired()
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'ended' } })
+      expect(await expiredPayLink(expired)).toBeNull()
+      await prisma.lease.update({ where: { id: leaseId }, data: { status: 'active' } })
+
+      await revokePayLinksForLease(leaseId)
+      expect(await expiredPayLink(expired)).toBeNull()
+      expect(await expiredPayLink('not-a-real-token')).toBeNull()
     })
   })
 })

@@ -22,9 +22,9 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; error?: string }>
+  searchParams: Promise<{ from?: string; error?: string; reason?: string }>
 }) {
-  const { from, error } = await searchParams
+  const { from, error, reason } = await searchParams
   const audience = audienceFor(from)
   // B-108(3). What we actually know, which at a bare `/login` is NOTHING —
   // `audienceFor` defaults to tenant because a redirect target must exist, and
@@ -40,6 +40,23 @@ export default async function LoginPage({
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6 py-12">
       <h1 className="text-xl font-semibold">{t('login.title')}</h1>
+
+      {/* B-336. Set by `/pay/<token>/expired` only for a link that ran out of
+          time, never for a revoked or unknown one. Plain page text, not an
+          alert: B-314's carried gap is the one page-load `role="alert"` here,
+          and this must not add a second. */}
+      {reason === 'pay_link_expired' && (
+        <p className="border-input rounded-md border p-3 text-sm text-pretty">
+          {t('login.payLinkExpired')}{' '}
+          <a
+            href={`tel:${SITE.phone.href}`}
+            className="inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+          >
+            {SITE.phone.display}
+          </a>
+          .
+        </p>
+      )}
 
       {error && ERROR_COPY[error] && (
         <p role="alert" className="border-input rounded-md border p-3 text-sm text-pretty">

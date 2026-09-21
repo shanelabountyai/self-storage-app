@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { cache } from 'react'
 import { prisma, type Prisma } from '@storage/db'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
-import type { Locale } from '@/lib/i18n'
+import { isLocale, type Locale } from '@/lib/i18n'
 import { writingLocale } from '@/lib/i18n/server'
 
 // PRD 05 CN-4 / FR-12, FR-13 (B-051). The one-tap way to pay from a reminder.
@@ -101,9 +101,10 @@ export async function mintPayLink(input: {
 
 export type PayLinkCheck =
   | { ok: true; payLinkId: string; tenantId: string; leaseId: string }
-  /// One reason for every failure mode, deliberately. An expired link, a
-  /// revoked one and a token that never existed are indistinguishable from
-  /// outside — there is nothing to enumerate and no reason to help someone try.
+  /// One reason for every failure mode, deliberately. A revoked link and a
+  /// token that never existed are indistinguishable from outside — there is
+  /// nothing to enumerate and no reason to help someone try. (B-336: an expired
+  /// one is told apart afterwards, by `expiredPayLink`, for the token's holder.)
   | { ok: false }
 
 /// Verifies a token and records the click.
@@ -168,6 +169,33 @@ export const payLinkLocale = cache(async (token: string): Promise<Locale> => {
     : null
   return writingLocale(link?.tenant.preferredLocale)
 })
+
+/// B-336. The one refusal that gets told apart: a link that simply ran out of
+/// time on a lease that is still occupied. That tenant is sent to sign in and
+/// pay the same lease, in the language the reminder was written in. Revoked
+/// (D-30, move-out), ended and never-existed stay indistinguishable — null.
+///
+/// Only somebody holding the token learns the lease id this returns, and a
+/// 256-bit token is not something anyone stumbles on while enumerating.
+export async function expiredPayLink(
+  token: string,
+): Promise<{ leaseId: string; locale: Locale | null } | null> {
+  if (!token) return null
+  const link = await prisma.payLink.findUnique({
+    where: { tokenHash: hashToken(token) },
+    select: {
+      leaseId: true,
+      expiresAt: true,
+      revokedAt: true,
+      lease: { select: { status: true } },
+      tenant: { select: { preferredLocale: true } },
+    },
+  })
+  if (!link || link.revokedAt || link.expiresAt.getTime() > Date.now()) return null
+  if (!OCCUPYING_LEASE_STATUSES.includes(link.lease.status as never)) return null
+  const stated = link.tenant.preferredLocale
+  return { leaseId: link.leaseId, locale: isLocale(stated) ? stated : null }
+}
 
 /// Attributes a payment to the link that produced it (CN-4, PRD 05 §7).
 ///

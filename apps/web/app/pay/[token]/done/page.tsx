@@ -52,7 +52,7 @@ export default async function PayLinkDonePage({
   const { payment: paymentId } = await searchParams
 
   const link = await checkPayLink(token)
-  if (!link.ok) redirect('/login?from=/portal&reason=pay_link_expired')
+  if (!link.ok) redirect(`/pay/${token}/expired`)
 
   const locale = await payLinkLocale(token)
   const dict = dictionaryFor(locale)

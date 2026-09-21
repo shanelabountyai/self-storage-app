@@ -58,13 +58,14 @@ export default async function PayLinkPage({
   const link = await checkPayLink(token)
   if (!link.ok) {
     // CN-4: "an expired link lands on the portal login with the payment screen
-    // as post-login destination — never a dead end." Expired, revoked and
-    // never-existed all land in the same place, so nothing can be enumerated.
-    redirect('/login?from=/portal&reason=pay_link_expired')
+    // as post-login destination — never a dead end." B-336: the route below
+    // tells an expired link apart for its holder; revoked and never-existed
+    // still land in the same place, so nothing can be enumerated.
+    redirect(`/pay/${token}/expired`)
   }
 
   const lease = await payableLease(link.tenantId, link.leaseId)
-  if (!lease) redirect('/login?from=/portal&reason=pay_link_expired')
+  if (!lease) redirect('/login?from=/portal')
 
   const locale = await payLinkLocale(token)
   const dict = dictionaryFor(locale)
@@ -82,7 +83,11 @@ export default async function PayLinkPage({
           {t('plink.paidUp', { unit: lease.unitNumber, facility: lease.facilityName })}
         </p>
         <p className="text-muted-foreground text-sm text-pretty">
-          {t('chrome.questionsCall')} {phone}.
+          {t('chrome.questionsCall')}{' '}
+          <a href={`tel:${phone.replace(/[^0-9+]/g, '')}`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-4">
+            {phone}
+          </a>
+          .
         </p>
       </Shell>
     )

@@ -10901,3 +10901,30 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - The lien engine's own `delinquency.day_reached` (`delinquency/engine.ts`) carries no `position`, so it counts as rung 1 in the comparison — the same default the extender already applied to it.
 
 **Verification.** `tests/comms-billing-account-db.test.ts` 8/8; comms, dunning, delinquency and merge-field suites 540/540; typecheck clean; lint 0 errors (6 pre-existing warnings). No migration, no UI — the accessibility statement is unaffected.
+
+## B-336 — an expired pay link says why, in the reminder's language, and signs in to that lease's payment (2026-09-21)
+
+**Commit:** `PENDING`
+
+**What it built.**
+
+- `expiredPayLink(token)` in `apps/web/lib/portal/pay-links.ts`: returns `{ leaseId, locale }` only for a link that is unrevoked, past `expiresAt`, and on an occupying lease; `locale` is the tenant's stated `preferredLocale` or null. Everything else (revoked, ended lease, unknown token) returns null.
+- New route handler `app/pay/[token]/expired/route.ts`. `/pay/[token]` and `/pay/[token]/done` now redirect every refused token there. For an expired link it redirects to `/login?from=/portal/pay?lease=<id>&reason=pay_link_expired` (from URI-encoded) and sets `st_locale` to the tenant's language when one is stated; otherwise to `/login?from=/portal`, with no reason.
+- `/login` renders `login.payLinkExpired` ("That payment link has expired. Sign in to pay, or call {phone}.") as plain page text with a 44px `tel:` link when `reason=pay_link_expired`. EN and ES keys added.
+- The paid-up state on `/pay/[token]` shows its phone number as a `tel:` link.
+- `/pay/[token]/done` moved from `SCAN_EXCEPTIONS` to `SCANNED_BY_OWN_SPEC` (`e2e/pay-link.spec.ts`). The statement's generated list of unscanned routes drops one line; a re-read note was added to `accessibility/page.tsx`, and `LAST_REVIEWED` is not bumped (D-115).
+- Tests: three DB tests for `expiredPayLink` in `tests/pay-links-db.test.ts`. In `e2e/pay-link.spec.ts`, an axe scan of the receipt, plus an expired link in `en` and `es` that asserts the URL, `<html lang>`, the message, the `tel:` href, and a real password sign-in landing on `/portal/pay?lease=<id>`. That describe is now `serial`, because under `fullyParallel` each worker would run its `beforeAll` and collide on the facility slug.
+
+**What it decided.**
+
+- **The language rides a cookie, not a query parameter.** `/login`'s `<html lang>` (root layout), its `(auth)` layout and the page body all read `st_locale`. A route handler can set that cookie where a page cannot, and it carries on into `/portal/pay` after sign-in. It is written only when the tenant stated a language, so a visitor's own choice is never overwritten with a guess.
+- **Only "expired" is told apart.** Revoked (D-30), ended and unknown tokens still land on the same URL, so nothing can be enumerated. The lease id is revealed only to whoever holds a 256-bit token.
+- **A valid link whose lease `payableLease` refuses** now goes to `/login?from=/portal` without `reason`. `/login` now reads `reason`, so leaving it in place would claim an expiry that did not happen.
+- The phone on `/login` is the site line (`SITE.phone`), not the facility's. A facility lookup keyed by an unauthenticated query parameter was not worth it for a line the page already shows.
+
+**What it left behind.**
+
+- `/login`'s page-load `role="alert"` stays under B-314's carried gap. This row adds no second alert.
+- B-331's re-read note in `accessibility/page.tsx` says neither receipt is scanned. That was true when it was written. The B-336 note below it supersedes it for `/pay/[token]/done`.
+
+**Verification.** `e2e/pay-link.spec.ts`: 20/20 across both projects (0 failed, skipped or flaky). Unit suites: pay-links, scan-coverage, accessibility-statement, i18n, login-flow and live-region, 77/77. Typecheck clean. Lint: 0 errors (6 pre-existing warnings). No migration.
