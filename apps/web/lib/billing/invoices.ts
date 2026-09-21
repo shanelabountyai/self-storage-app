@@ -4,9 +4,14 @@ import { applyCreditToInvoice } from '@/lib/billing/credit'
 import { emitEvent } from '@storage/core/events'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { businessDateFor } from '@storage/core/jobs'
 import { nextInvoiceNumber } from '@/lib/billing/numbering'
 import { discountForLeasePeriod, markDiscountApplied } from '@/lib/promotions/billing'
-import { markReferralRewardApplied, referralRewardsForLease } from '@/lib/referrals/billing'
+import {
+  markReferralRewardApplied,
+  REFERRAL_DISCOUNT_PREFIX,
+  referralRewardsForLease,
+} from '@/lib/referrals/billing'
 import { leaseChainIds } from '@/lib/billing/transfer-chain'
 import {
   billingPeriodFor,
@@ -123,9 +128,7 @@ export async function generateInvoices(
 
   // Effective as of the business date being run, not today's date — a
   // catch-up run for last Tuesday must use last Tuesday's tax rates (FR-9).
-  const taxRates = [...effectiveByGroup(taxRows, businessDate, (row) => row.jurisdiction).values()]
-    .map((row) => ({ jurisdiction: row.jurisdiction, rateBasisPoints: row.rateBasisPoints }))
-    .sort((a, b) => a.jurisdiction.localeCompare(b.jurisdiction))
+  const taxRates = taxRatesAt(taxRows, businessDate)
 
   let created = 0
   let skipped = 0
@@ -211,6 +214,14 @@ export async function generateInvoices(
   return { created, skipped }
 }
 
+type TaxRow = { jurisdiction: string; rateBasisPoints: number; effectiveFrom: Date }
+
+function taxRatesAt(taxRows: readonly TaxRow[], date: Date) {
+  return [...effectiveByGroup(taxRows, date, (row) => row.jurisdiction).values()]
+    .map((row) => ({ jurisdiction: row.jurisdiction, rateBasisPoints: row.rateBasisPoints }))
+    .sort((a, b) => a.jurisdiction.localeCompare(b.jurisdiction))
+}
+
 function startOfDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
 }
@@ -289,8 +300,27 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
   // place a discount legitimately equals the charges.
   if (built.subtotalCents === 0) return 'skipped'
 
+  // B-338 (PRD 02 §4.10). Due no earlier than the day it is raised.
+  //
+  // In the ordinary course this is `period.start` — the invoice is raised
+  // `invoiceLeadDays` ahead of it. It is only ever later for an invoice raised
+  // INSIDE its own period, which since B-327 means a voided period being billed
+  // again: dated `period.start`, it was already overdue the moment it existed,
+  // no due-date reminder ever matched it, and the late-fee ladder counted from
+  // a date the tenant could not have paid by. Its first sign of the corrected
+  // bill was a fee on it.
+  const dueDate = period.start.getTime() < businessDate.getTime() ? businessDate : period.start
+
   try {
     return await prisma.$transaction(async (tx) => {
+      // B-338. Whether this period was billed before and voided. Read inside
+      // the transaction so it describes the same state the insert lands on.
+      const replaced = await tx.invoice.findFirst({
+        where: { leaseId: lease.id, kind: 'rent', periodStart: period.start, status: 'void' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, number: true },
+      })
+
       const sequence = await nextInvoiceNumber(tx, facilityId)
       const number = formatInvoiceNumber(sequence)
 
@@ -304,7 +334,7 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
           // B-042 already built against real invoices.
           status: 'open',
           issueDate: businessDate,
-          dueDate: period.start,
+          dueDate,
           periodStart: period.start,
           periodEnd: period.end,
           subtotalCents: built.subtotalCents,
@@ -370,11 +400,37 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
             leaseId: lease.id,
             number,
             totalCents: built.totalCents,
-            dueDate: iso(period.start),
+            dueDate: iso(dueDate),
           },
         },
         tx,
       )
+
+      // B-338. The tenant is told. `invoice.created` has no comms rule — an
+      // ordinary invoice is announced by its due-date reminders — and a
+      // reissue's reminders are what it was missing, so it gets its own event
+      // rather than a rule on the shared one (`fee-invoice.ts` emits
+      // `invoice.created` too). Tenant-only by D-136's default: it is not on
+      // `PAYER_EVENTS`.
+      if (replaced) {
+        await emitEvent(
+          {
+            name: 'invoice.reissued',
+            entityType: 'Invoice',
+            entityId: invoice.id,
+            facilityId,
+            payload: {
+              leaseId: lease.id,
+              number,
+              totalCents: built.totalCents,
+              dueDate: iso(dueDate),
+              replacesInvoiceId: replaced.id,
+              replacesNumber: replaced.number,
+            },
+          },
+          tx,
+        )
+      }
 
       // Inside the transaction, so a rolled-back invoice never leaves a
       // promotion looking spent — and a re-run of the nightly job then cannot
@@ -406,6 +462,77 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
 
 function isUniqueConstraintError(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'P2002')
+}
+
+/// B-338 (1). What the next run will bill if this rent invoice is voided, or
+/// null when it will not bill the period again at all.
+///
+/// The void form states this BEFORE submit, because B-327 re-bills at the
+/// lease's CURRENT rate and a void for "rate was never agreed" with the rate
+/// unchanged re-bills exactly what it cancelled. Built by the same
+/// `chargesFor` + `buildInvoice` the run uses, so it cannot quote a figure the
+/// run would not charge.
+///
+/// The discount lines are the VOIDED invoice's own, not a fresh lookup: before
+/// the void, the promotion period and the referral rewards are still marked
+/// spent by it, and `discountForLeasePeriod` would answer "already given". The
+/// void hands exactly those back (`releaseRentInvoiceCredits`) and the reissue
+/// spends them again at the same snapshotted amounts — B-327's own guarantee —
+/// so reading them off the invoice is reading what the reissue will carry.
+///
+/// Null mirrors the run's own refusals: a lease that no longer occupies, a
+/// period that is not the current one (D-142 — only the period containing
+/// today + lead days is billed), or a move-out on or before it.
+export async function projectRentRebill(invoiceId: string, asOf: Date = new Date()): Promise<number | null> {
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      facilityId: true,
+      periodStart: true,
+      lineItems: { where: { type: 'discount' }, select: { description: true, amountCents: true } },
+      lease: {
+        select: {
+          status: true,
+          startDate: true,
+          billingDay: true,
+          monthlyRateCents: true,
+          protectionCents: true,
+          protectionPlanName: true,
+          moveOutDate: true,
+          facility: {
+            select: { billingPolicy: true, invoiceLeadDays: true, prorateOnMoveOut: true, timezone: true },
+          },
+        },
+      },
+    },
+  })
+  if (!invoice) return null
+  const { lease } = invoice
+  const { facility } = lease
+  if (!OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) return null
+
+  const businessDate = businessDateFor(asOf, facility.timezone)
+  const through = new Date(businessDate.getTime() + facility.invoiceLeadDays * 86_400_000)
+  const period = billingPeriodFor(facility.billingPolicy as BillingPolicy, lease.billingDay, through)
+  if (period.start.getTime() !== invoice.periodStart.getTime()) return null
+  if (period.start.getTime() <= startOfDay(lease.startDate).getTime()) return null
+
+  const moveOut = lease.moveOutDate ? startOfDay(lease.moveOutDate) : null
+  if (moveOut && moveOut.getTime() <= period.start.getTime()) return null
+  const prorateTo = facility.prorateOnMoveOut && moveOut && moveOut.getTime() < period.end.getTime() ? moveOut : null
+
+  const taxRows = await prisma.taxComponent.findMany({ where: { facilityId: invoice.facilityId } })
+  const promotion = invoice.lineItems.find((line) => !line.description.startsWith(REFERRAL_DISCOUNT_PREFIX))
+  const referrals = invoice.lineItems.filter((line) => line.description.startsWith(REFERRAL_DISCOUNT_PREFIX))
+
+  return buildInvoice({
+    period,
+    charges: chargesFor(lease),
+    taxRates: taxRatesAt(taxRows, businessDate),
+    ...(prorateTo ? { prorateFrom: period.start, prorateTo } : {}),
+    ...(promotion ? { discountCents: promotion.amountCents, discountDescription: promotion.description } : {}),
+    ...(referrals.length > 0 ? { extraDiscounts: referrals } : {}),
+  }).totalCents
 }
 
 /// US-17's "notify the tenant" side and PRD 05 CN-1/CN-2's reminders.

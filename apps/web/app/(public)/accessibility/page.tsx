@@ -2777,6 +2777,12 @@ function reviewedOn(locale: Locale): string {
 // Re-read 2026-09-18, at B-325. The business-account access email is now short
 // sentences with one conditional each, in both languages. This page makes no
 // claim about email (see B-198), so nothing is added or withdrawn.
+//
+// Re-read 2026-09-20, at B-338. The one customer-facing change is a new email
+// (`invoice_reissued`, English and Spanish) telling a tenant a voided rent
+// invoice was replaced. This page makes no claim about email (see B-198), and
+// the rest of the item is admin screens and billing, so nothing is added or
+// withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

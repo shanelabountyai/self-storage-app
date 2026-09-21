@@ -56,7 +56,7 @@ async function tenantStates(facilityId: string, asOf: Date): Promise<TenantState
         // what a tenant is "days past due" on, and letting one drive the clock
         // would suspend access over a $20 fee raised this morning.
         where: { kind: 'rent' },
-        select: { dueDate: true, totalCents: true, amountPaidCents: true },
+        select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true },
       },
     },
   })

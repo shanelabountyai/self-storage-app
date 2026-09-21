@@ -968,7 +968,7 @@ export async function counterPayableLeases(
       unit: { select: { number: true } },
       invoices: {
         where: { kind: "rent" },
-        select: { dueDate: true, totalCents: true, amountPaidCents: true },
+        select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true },
       },
     },
   });
@@ -1069,7 +1069,7 @@ export async function counterPayableAccounts(
           unit: { select: { number: true } },
           invoices: {
             where: { kind: "rent" },
-            select: { dueDate: true, totalCents: true, amountPaidCents: true },
+            select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true },
           },
         },
       },

@@ -86,6 +86,7 @@ export async function assessLateFees(
           dueDate: true,
           totalCents: true,
           amountPaidCents: true,
+          status: true,
           lineItems: { select: { description: true } },
         },
       },

@@ -198,6 +198,14 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'invoice.due_date', description: 'When it is due', sample: 'Tuesday, September 1' },
     { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
   ],
+  // B-338. A voided rent period billed again — same figures as the reminders.
+  'invoice.reissued': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'invoice.number', description: 'Invoice number', sample: '000142' },
+    { field: 'invoice.amount', description: 'Amount outstanding on the updated invoice', sample: '$129.00' },
+    { field: 'invoice.due_date', description: 'When the updated invoice is due', sample: 'Tuesday, September 1' },
+    { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
+  ],
   'payment.succeeded': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
     { field: 'payment.amount', description: 'Amount received', sample: '$129.00' },

@@ -106,6 +106,8 @@ export const CONSUMERS: readonly Consumer[] = [
       'invoice.created',
       'invoice.due_soon',
       'invoice.due_today',
+      // B-338. A voided rent period billed again.
+      'invoice.reissued',
       'delinquency.day_reached',
       'delinquency.stage_changed',
       'access.restored',

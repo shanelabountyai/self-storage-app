@@ -14,14 +14,37 @@
 // simply stop being visible to the system that is supposed to escalate.
 
 export type UnpaidInvoice = {
-  /// When this invoice was ORIGINALLY due. Never a retry date, never a
-  /// re-issue date, never "last touched".
+  /// When this invoice was ORIGINALLY due. Never a retry date, never "last
+  /// touched". A REISSUE is a different invoice row with its own original due
+  /// date — B-338 gives it the date it was raised, so the ladder counts from a
+  /// date the tenant could have paid by.
   dueDate: Date
   totalCents: number
   amountPaidCents: number
+  /// B-338. A cancelled invoice is not owed, whatever its figures still say.
+  status: string
 }
 
+/// B-338. A voided or written-off invoice owes NOTHING, and this is the only
+/// place that can be said once.
+///
+/// `void` and `uncollectible` leave `totalCents` and `amountPaidCents` exactly
+/// as they were — the row stays as evidence, which is `voidRentInvoice`'s and
+/// `writeOffOpenLeaseBalance`'s whole design — so the subtraction alone reads a
+/// cancelled charge as still outstanding. Every delinquency consumer routes
+/// through here, and each was reading its own unfiltered `lease.invoices`: the
+/// late-fee ladder charged steps on a voided invoice and `daysPastDue` anchored
+/// to it, so B-338's "the reissue is due today" would have changed nothing —
+/// the ORIGINAL still set the clock. A `rent_only` timeline dunned on it too.
+/// The write-off case is the same defect with the same shape: the ledger entry
+/// zeroes the balance, the invoice figures do not.
+///
+/// One guard here rather than a status filter in each of a dozen queries, which
+/// is what let them drift apart in the first place. `paid` and `draft` are left
+/// to the arithmetic: a paid invoice already nets to zero, and nothing in this
+/// codebase issues a draft.
 export function outstandingCents(invoice: UnpaidInvoice): number {
+  if (invoice.status === 'void' || invoice.status === 'uncollectible') return 0
   return Math.max(0, invoice.totalCents - invoice.amountPaidCents)
 }
 

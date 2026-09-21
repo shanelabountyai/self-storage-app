@@ -964,7 +964,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const invoices = recipient.lease
       ? await prisma.invoice.findMany({
           where: { leaseId: recipient.lease.id, kind: 'rent' },
-          select: { dueDate: true, totalCents: true, amountPaidCents: true },
+          select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true },
         })
       : []
     return {
@@ -989,7 +989,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const invoices = recipient.lease
       ? await prisma.invoice.findMany({
           where: { leaseId: recipient.lease.id, kind: 'rent' },
-          select: { dueDate: true, totalCents: true, amountPaidCents: true },
+          select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true },
         })
       : []
     return {
@@ -1226,6 +1226,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
 
   'invoice.due_soon': invoiceContext,
   'invoice.due_today': invoiceContext,
+  'invoice.reissued': invoiceContext,
 
   // CN-6's receipt. The amount comes off the Payment row rather than the event
   // payload for the same reason — a partial refund between the charge and the

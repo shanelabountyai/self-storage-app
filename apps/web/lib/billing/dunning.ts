@@ -90,7 +90,7 @@ export async function runDunning(
         // is raised, and letting one anchor the ladder would send a day-1
         // chase for a late fee assessed this morning.
         where: { kind: 'rent' },
-        select: { id: true, dueDate: true, totalCents: true, amountPaidCents: true },
+        select: { id: true, dueDate: true, totalCents: true, amountPaidCents: true, status: true },
       },
     },
   })

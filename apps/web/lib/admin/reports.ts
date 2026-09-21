@@ -752,7 +752,7 @@ export async function agingForFacility(
     where: { facilityId },
     select: {
       id: true,
-      invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true } },
+      invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true } },
     },
   })
   if (leases.length === 0) {

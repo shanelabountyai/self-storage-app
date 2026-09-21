@@ -87,7 +87,7 @@ export async function runDelinquencyTimeline(
         // day it is raised, and letting one anchor the clock would fire a day-1
         // step for a late fee assessed this morning.
         where: { kind: 'rent' },
-        select: { dueDate: true, totalCents: true, amountPaidCents: true },
+        select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true },
       },
     },
   })

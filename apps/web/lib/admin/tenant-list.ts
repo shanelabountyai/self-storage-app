@@ -105,7 +105,7 @@ export async function listTenants(
       tenant: { select: { firstName: true, lastName: true } },
       facility: { select: { name: true } },
       unit: { select: { number: true } },
-      invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true } },
+      invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true } },
     },
   })
   if (leases.length === 0) {

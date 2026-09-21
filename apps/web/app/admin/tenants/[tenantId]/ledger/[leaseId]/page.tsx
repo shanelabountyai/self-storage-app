@@ -118,6 +118,8 @@ export default async function LedgerPage({
               number: invoice.number,
               outstanding: formatCents(invoice.outstandingCents),
               period: formatWhen(invoice.periodStart),
+              rebill: invoice.rebillCents === null ? null : formatCents(invoice.rebillCents),
+              rebillIsSame: invoice.rebillCents === invoice.outstandingCents,
             }))}
           />
         </section>

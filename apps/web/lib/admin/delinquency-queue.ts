@@ -47,7 +47,7 @@ export async function delinquencyQueue(actor: Actor, facilityId: string): Promis
     }),
     prisma.lease.findMany({
       where: { id: { in: leaseIds } },
-      select: { id: true, invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true } } },
+      select: { id: true, invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true } } },
     }),
   ])
   const balanceByLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))

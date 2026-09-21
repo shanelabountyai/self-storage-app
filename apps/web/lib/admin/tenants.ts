@@ -24,7 +24,7 @@ import {
   type FieldProblems,
 } from "@/lib/portal/contact";
 import { maskAddress } from "@storage/core/comms";
-import { daysPastDue } from "@storage/core/metrics";
+import { daysPastDue, outstandingCents } from "@storage/core/metrics";
 import { tenantAccessHistory } from "@/lib/access/event-log";
 import { logManualDocument, type DocumentType } from "@/lib/documents/store";
 import { createTask } from "@/lib/admin/tasks";
@@ -630,18 +630,21 @@ export async function tenantProfile(
       dueDate: true,
       totalCents: true,
       amountPaidCents: true,
+      status: true,
     },
   });
   const openByLease = new Map<string, TenantLeaseSummary["openInvoices"]>();
   for (const invoice of openInvoiceRows) {
-    const outstandingCents = invoice.totalCents - invoice.amountPaidCents;
-    if (outstandingCents <= 0) continue;
+    // B-338: through the shared guard, not a local subtraction — a voided or
+    // written-off invoice still carries its figures and was listed here as open.
+    const outstanding = outstandingCents(invoice);
+    if (outstanding <= 0) continue;
     openByLease.set(invoice.leaseId, [
       ...(openByLease.get(invoice.leaseId) ?? []),
       {
         id: invoice.id,
         number: invoice.number,
-        outstandingCents,
+        outstandingCents: outstanding,
         dueDate: invoice.dueDate,
       },
     ]);

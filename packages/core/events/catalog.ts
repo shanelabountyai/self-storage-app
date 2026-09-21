@@ -51,6 +51,10 @@ export const EVENT_NAMES = [
   "invoice.created",
   "invoice.due_soon",
   "invoice.due_today",
+  /// B-338. A voided rent period billed again. Its own name rather than a
+  /// flavour of `invoice.created`, which fee invoices emit too and which has
+  /// no comms rule: this one tells the tenant.
+  "invoice.reissued",
   "payment.succeeded",
   /// B-103. A bank debit has been submitted and is settling — money taken but
   /// not arrived. Only ACH ever emits it; a card is approved or declined in

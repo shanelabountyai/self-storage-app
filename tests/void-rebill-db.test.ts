@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
 import { voidRentInvoice } from '../apps/web/lib/billing/corrections'
 import { recomputeInvoices } from '../apps/web/lib/billing/allocation'
 import { generateInvoices } from '../apps/web/lib/billing/invoices'
 import { leaseLedger } from '../apps/web/lib/admin/ledger'
+import { assessLateFees } from '../apps/web/lib/billing/late-fees'
+import { processCommsEvent } from '../apps/web/lib/comms/service'
+import * as provider from '../apps/web/lib/comms/provider'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
 
@@ -46,10 +49,19 @@ function manager(maxCreditCents: number | null = null): Actor {
   }
 }
 
-async function makeLease(startDate: Date, transferredFromLeaseId?: string) {
+async function makeLease(
+  startDate: Date,
+  transferredFromLeaseId?: string,
+  extra: { preferredLocale?: string; billingAccountId?: string } = {},
+) {
   unitCounter += 1
   const tenant = await prisma.tenant.create({
-    data: { email: `vr-${unitCounter}-${suffix}@example.com`, firstName: 'Vera', lastName: `Rebill${unitCounter}` },
+    data: {
+      email: `vr-${unitCounter}-${suffix}@example.com`,
+      firstName: 'Vera',
+      lastName: `Rebill${unitCounter}`,
+      preferredLocale: extra.preferredLocale,
+    },
   })
   tenantIds.push(tenant.id)
   const unit = await prisma.unit.create({ data: { facilityId, unitTypeId, number: `VR-${unitCounter}` } })
@@ -63,6 +75,7 @@ async function makeLease(startDate: Date, transferredFromLeaseId?: string) {
       billingDay: 1,
       monthlyRateCents: 12_900,
       transferredFromLeaseId,
+      billingAccountId: extra.billingAccountId,
     },
   })
   return { leaseId: lease.id, tenantId: tenant.id }
@@ -127,6 +140,8 @@ describeDb('B-327 — re-billing a voided rent period', () => {
         postalCode: '78704',
         timezone: 'America/Chicago',
         billingPolicy: 'first_of_month',
+        // B-338: the reissue message, like every billing template, names it.
+        phone: '512-555-0100',
       },
     })
     facilityId = facility.id
@@ -144,6 +159,11 @@ describeDb('B-327 — re-billing a voided rent period', () => {
     if (!hasDatabase) return
     // The facility and the staff user stay: `audit_log` RESTRICTs both and
     // refuses its own deletion (B-185), and `voidRentInvoice` audits.
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    await prisma.message.deleteMany({ where: { facilityId } })
+    await prisma.payLink.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.lateFeeRule.deleteMany({ where: { facilityId } })
     await prisma.referral.deleteMany({ where: { facilityId } })
     await prisma.referralInvite.deleteMany({ where: { facilityId } })
     await prisma.promoRedemption.deleteMany({ where: { facilityId } })
@@ -156,6 +176,7 @@ describeDb('B-327 — re-billing a voided rent period', () => {
     await prisma.domainEvent.deleteMany({ where: { facilityId } })
     await prisma.lease.deleteMany({ where: { facilityId, transferredFromLeaseId: { not: null } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
+    await prisma.billingAccount.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
     await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } })
@@ -359,5 +380,102 @@ describeDb('B-327 — re-billing a voided rent period', () => {
       expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe('open')
       expect(await prisma.ledgerEntry.count({ where: { leaseId, type: 'adjustment' } })).toBe(0)
     })
+  })
+
+  // ── B-338 ────────────────────────────────────────────────────────────────
+
+  it('B-338: the void form states what the next run re-bills, and says when it is the same amount', async () => {
+    // `projectRentRebill` reads the real clock for "which period is current"
+    // (D-142), so the clock is pinned — Date only, since faking timers wholesale
+    // hangs the Prisma round trips.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-09-03T17:00:00Z'))
+      const { leaseId } = await makeLease(d('2026-08-01'))
+      await generateInvoices(facilityId, d('2026-08-28'), noop)
+      const original = await liveRent(leaseId, '2026-09-01')
+
+      // Rate unchanged: a "rate was never agreed" void would re-bill exactly
+      // what it cancels. That equality is what the form warns about.
+      const [unchanged] = (await leaseLedger(manager(), leaseId))!.voidableInvoices
+      expect(unchanged).toMatchObject({
+        id: original.id,
+        outstandingCents: original.totalCents,
+        rebillCents: original.totalCents,
+      })
+
+      // Rate corrected first: the preview follows the lease, as the run will.
+      await prisma.lease.update({ where: { id: leaseId }, data: { monthlyRateCents: 9_900 } })
+      const [corrected] = (await leaseLedger(manager(), leaseId))!.voidableInvoices
+      expect(corrected.rebillCents).toBe(9_900)
+
+      // A month on, September is not the current period and D-142 will not
+      // bill it again — the form says nothing rather than quote a figure.
+      vi.setSystemTime(new Date('2026-10-03T17:00:00Z'))
+      const [stale] = (await leaseLedger(manager(), leaseId))!.voidableInvoices
+      expect(stale).toMatchObject({ id: original.id, rebillCents: null })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('B-338: the reissue is due the day it is raised, draws no late fee that night, and tells the tenant once', async () => {
+    const sent: string[] = []
+    vi.spyOn(provider, 'selectProvider').mockImplementation(() => ({
+      name: 'test',
+      async sendEmail(email) {
+        sent.push(email.to)
+        return { ok: true, providerMessageId: `test_${sent.length}` }
+      },
+    }))
+    vi.spyOn(provider, 'commsEnabled').mockReturnValue(true)
+    vi.spyOn(provider, 'effectiveRecipient').mockImplementation((address: string) => address)
+
+    // A step that fires one day late, so a ladder still counting from the
+    // voided original's 1 September would charge on the 3rd.
+    await prisma.lateFeeRule.create({
+      data: { facilityId, step: 1, daysPastDue: 1, amountCents: 2_500, effectiveFrom: d('2026-01-01') },
+    })
+
+    // A Spanish-speaking tenant on a business account, so "tenant-only" and
+    // "in their language" are both measured, not assumed.
+    const payer = await prisma.tenant.create({
+      data: { email: `vr-payer-${suffix}@example.com`, firstName: 'Pat', lastName: 'Payables' },
+    })
+    tenantIds.push(payer.id)
+    const account = await prisma.billingAccount.create({
+      data: { facilityId, name: `Rebill Co ${suffix}`, payerTenantId: payer.id },
+    })
+    const { leaseId, tenantId } = await makeLease(d('2026-08-01'), undefined, {
+      preferredLocale: 'es',
+      billingAccountId: account.id,
+    })
+
+    await generateInvoices(facilityId, d('2026-08-28'), noop)
+    const original = await liveRent(leaseId, '2026-09-01')
+    expect(original.dueDate).toEqual(d('2026-09-01'))
+    await voidIt(original.id)
+
+    await generateInvoices(facilityId, d('2026-09-03'), noop)
+    const reissue = await liveRent(leaseId, '2026-09-01')
+    expect(reissue.id).not.toBe(original.id)
+    expect(reissue.dueDate).toEqual(d('2026-09-03'))
+
+    await assessLateFees(facilityId, d('2026-09-03'), noop)
+    expect(await prisma.invoice.count({ where: { leaseId, kind: 'fee' } })).toBe(0)
+
+    const events = await prisma.domainEvent.findMany({ where: { name: 'invoice.reissued', entityId: reissue.id } })
+    expect(events).toHaveLength(1)
+    expect(events[0].payload).toMatchObject({ replacesInvoiceId: original.id, dueDate: '2026-09-03' })
+    // An ordinary first issue is not a reissue.
+    expect(await prisma.domainEvent.count({ where: { name: 'invoice.reissued', entityId: original.id } })).toBe(0)
+
+    await processCommsEvent(events[0])
+    const messages = await prisma.message.findMany({ where: { eventId: events[0].id } })
+    expect(messages).toHaveLength(1)
+    expect(messages[0].error).toBeNull()
+    expect(messages[0]).toMatchObject({ recipientTenantId: tenantId, templateKey: 'invoice_reissued', status: 'sent' })
+    expect(messages[0].subjectSnapshot).toContain('corregida')
+    expect(messages[0].bodySnapshot).toContain('$129.00')
   })
 })

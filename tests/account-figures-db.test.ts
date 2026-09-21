@@ -234,6 +234,7 @@ describe('accountLateness', () => {
     dueDate: d(due),
     totalCents,
     amountPaidCents,
+    status: 'open',
   })
 
   it('counts from the oldest unpaid rent across every unit, ignoring settled ones', () => {

@@ -96,11 +96,11 @@ export type AccountSummary = {
   stage: string | null
 }
 
-type RentInvoice = { dueDate: Date; totalCents: number; amountPaidCents: number }
+type RentInvoice = { dueDate: Date; totalCents: number; amountPaidCents: number; status: string }
 
 const RENT_INVOICES = {
   where: { kind: 'rent' },
-  select: { dueDate: true, totalCents: true, amountPaidCents: true },
+  select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true },
 } as const
 
 /// B-315. How late an account is, from its units' rent invoices — the ONE

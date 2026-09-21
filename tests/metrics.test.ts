@@ -5,6 +5,7 @@ import {
   arBucketFor,
   attachRate,
   daysPastDue,
+  outstandingCents,
   economicOccupancy,
   isOccupied,
   isRentable,
@@ -283,7 +284,7 @@ describe('wholeMonthsBetween', () => {
 describe('daysPastDue', () => {
   it('measures from the ORIGINAL due date', () => {
     expect(
-      daysPastDue([{ dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 0 }], d('2026-08-15')),
+      daysPastDue([{ dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 0, status: 'open' }], d('2026-08-15')),
     ).toBe(14)
   })
 
@@ -292,8 +293,8 @@ describe('daysPastDue', () => {
     // months behind. Anchoring to the newest unpaid would reset them.
     const days = daysPastDue(
       [
-        { dueDate: d('2026-06-01'), totalCents: 10_000, amountPaidCents: 0 },
-        { dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 0 },
+        { dueDate: d('2026-06-01'), totalCents: 10_000, amountPaidCents: 0, status: 'open' },
+        { dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 0, status: 'open' },
       ],
       d('2026-08-15'),
     )
@@ -303,8 +304,8 @@ describe('daysPastDue', () => {
   it('ignores fully-paid invoices', () => {
     const days = daysPastDue(
       [
-        { dueDate: d('2026-06-01'), totalCents: 10_000, amountPaidCents: 10_000 },
-        { dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 0 },
+        { dueDate: d('2026-06-01'), totalCents: 10_000, amountPaidCents: 10_000, status: 'paid' },
+        { dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 0, status: 'open' },
       ],
       d('2026-08-15'),
     )
@@ -313,16 +314,32 @@ describe('daysPastDue', () => {
 
   it('still counts a partially-paid invoice as unpaid', () => {
     const days = daysPastDue(
-      [{ dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 9_999 }],
+      [{ dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 9_999, status: 'partially_paid' }],
       d('2026-08-15'),
     )
     expect(days).toBe(14)
   })
 
+  it('ignores a voided or written-off invoice, whose figures still read as unpaid (B-338)', () => {
+    // Both leave totalCents and amountPaidCents untouched — the row is kept as
+    // evidence — so the subtraction alone would anchor the clock to a charge
+    // that was cancelled. The late-fee ladder charged on exactly this.
+    const days = daysPastDue(
+      [
+        { dueDate: d('2026-06-01'), totalCents: 10_000, amountPaidCents: 0, status: 'void' },
+        { dueDate: d('2026-07-01'), totalCents: 10_000, amountPaidCents: 0, status: 'uncollectible' },
+        { dueDate: d('2026-08-01'), totalCents: 10_000, amountPaidCents: 0, status: 'open' },
+      ],
+      d('2026-08-15'),
+    )
+    expect(days).toBe(14)
+    expect(outstandingCents({ dueDate: d('2026-06-01'), totalCents: 10_000, amountPaidCents: 0, status: 'void' })).toBe(0)
+  })
+
   it('is 0 when nothing is outstanding, and never negative before the due date', () => {
     expect(daysPastDue([], d('2026-08-15'))).toBe(0)
     expect(
-      daysPastDue([{ dueDate: d('2026-09-01'), totalCents: 10_000, amountPaidCents: 0 }], d('2026-08-15')),
+      daysPastDue([{ dueDate: d('2026-09-01'), totalCents: 10_000, amountPaidCents: 0, status: 'open' }], d('2026-08-15')),
     ).toBe(0)
   })
 })

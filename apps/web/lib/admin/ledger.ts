@@ -11,6 +11,7 @@ import {
 } from '@storage/core/billing'
 import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { SETTLING_STATUSES } from '@/lib/billing/allocation'
+import { projectRentRebill } from '@/lib/billing/invoices'
 import { financialFacilities } from '@/lib/admin/reports'
 import { createTask } from '@/lib/admin/tasks'
 import { recordAudit } from '@storage/core/audit'
@@ -37,7 +38,16 @@ export type LeaseLedger = {
   /// B-303. The rent invoices on this lease that `voidRentInvoice` would
   /// accept, so the screen offers the control only where it would work rather
   /// than rendering a button that refuses.
-  voidableInvoices: { id: string; number: string; outstandingCents: number; periodStart: Date }[]
+  ///
+  /// B-338: `rebillCents` is what the next run bills if it is voided, or null
+  /// where the period will not be billed again (`projectRentRebill`).
+  voidableInvoices: {
+    id: string
+    number: string
+    outstandingCents: number
+    periodStart: Date
+    rebillCents: number | null
+  }[]
   /// Whether this actor may post a correction at this facility at all
   /// (`credits:manual`). The amount limit is still `postLedgerAdjustment`'s —
   /// this only decides whether the section is drawn.
@@ -104,6 +114,11 @@ export async function leaseLedger(actor: Actor, leaseId: string): Promise<LeaseL
   const lines = runningBalance(rows)
   const totals = ledgerTotals(rows)
 
+  // ponytail: one projection per voidable invoice, a few queries each — a lease
+  // carries one or two open rent invoices; batch it if that stops being true.
+  const voidable = invoices.filter((invoice) => invoice.totalCents - invoice.amountPaidCents > 0)
+  const rebills = await Promise.all(voidable.map((invoice) => projectRentRebill(invoice.id)))
+
   return {
     leaseId: lease.id,
     facilityId: lease.facilityId,
@@ -114,14 +129,13 @@ export async function leaseLedger(actor: Actor, leaseId: string): Promise<LeaseL
     lines,
     totals,
     reconciliation: reconcile(inputs.get(leaseId) ?? NO_MONEY),
-    voidableInvoices: invoices
-      .map((invoice) => ({
-        id: invoice.id,
-        number: invoice.number,
-        periodStart: invoice.periodStart,
-        outstandingCents: invoice.totalCents - invoice.amountPaidCents,
-      }))
-      .filter((invoice) => invoice.outstandingCents > 0),
+    voidableInvoices: voidable.map((invoice, index) => ({
+      id: invoice.id,
+      number: invoice.number,
+      periodStart: invoice.periodStart,
+      outstandingCents: invoice.totalCents - invoice.amountPaidCents,
+      rebillCents: rebills[index],
+    })),
     canCorrect: can(actor, 'credits:manual', lease.facilityId),
   }
 }

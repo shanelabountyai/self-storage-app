@@ -708,6 +708,55 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     },
     requiredMergeFields: ['invoice.amount', 'unit.number', 'facility.name', 'links.pay_now'],
   },
+  // ── B-338: a voided rent period, billed again ──────────────────────────────
+  //
+  // The reissue is raised INSIDE its own period, after the invoice-lead-days
+  // window the due-soon reminder keys off, so without this the tenant's first
+  // word of the corrected bill was the bill going overdue. Says what changed
+  // (the earlier invoice is cancelled, this one replaces it), the amount and
+  // the date as text, and one link. Email only: a correction is something to
+  // read and keep, not a nudge.
+  {
+    key: 'invoice_reissued',
+    classification: 'transactional',
+    subject: 'Updated rent invoice for unit {{unit.number}}: {{invoice.amount}} due {{invoice.due_date}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'We corrected your rent invoice for unit {{unit.number}} at {{facility.name}}. The earlier invoice is cancelled, and this one replaces it.',
+      '',
+      'Amount: {{invoice.amount}}',
+      'Due: {{invoice.due_date}}',
+      '',
+      'Pay online: {{links.pay_now}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    es: {
+      subject: 'Factura de renta corregida de la unidad {{unit.number}}: {{invoice.amount}} con vencimiento el {{invoice.due_date}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Corregimos su factura de renta de la unidad {{unit.number}} en {{facility.name}}. La factura anterior quedó cancelada y esta la reemplaza.',
+        '',
+        'Monto: {{invoice.amount}}',
+        'Vence: {{invoice.due_date}}',
+        '',
+        'Pague en línea: {{links.pay_now}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'invoice.amount',
+      'invoice.due_date',
+      'links.pay_now',
+      'facility.phone',
+    ],
+  },
   // ── B-309: the same three messages, said once to a business account's payer ─
   //
   // Not a translation of the three above — a different message to a different
@@ -2231,6 +2280,17 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     channel: 'sms',
     channelPolicy: 'sms_preferred_email_fallback',
     category: 'payment_reminders',
+  },
+  {
+    // B-338. No `autopay_covers_it`: an autopay tenant is still owed word that
+    // the bill their card is about to pay has changed. `invoice_paid` stays —
+    // credit on account swept onto the reissue can settle it outright, and then
+    // there is nothing to tell. No category, like `payment_failed`: a corrected
+    // bill is not something a tenant can opt out of hearing about.
+    event: 'invoice.reissued',
+    templateKey: 'invoice_reissued',
+    classification: 'transactional',
+    skipConditions: ['invoice_paid', 'tenant_moved_out'],
   },
   {
     // CN-6. No autopay skip: a receipt is exactly what an autopay tenant should

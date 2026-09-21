@@ -132,7 +132,7 @@ export async function delinquencyDetail(
       tenantId: true,
       tenant: { select: { firstName: true, lastName: true } },
       unit: { select: { number: true } },
-      invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true } },
+      invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true } },
     },
   })
 

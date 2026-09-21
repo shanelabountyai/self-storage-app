@@ -99,7 +99,18 @@ export function LedgerCorrections({
   /// Pre-formatted by the server component — `formatCents` and the facility's
   /// own date formatting both live there, and a client bundle does not need a
   /// second copy of either.
-  voidableInvoices: { id: string; number: string; outstanding: string; period: string }[]
+  ///
+  /// B-338: `rebill` is what the next run bills for the period once it is
+  /// voided, or null where it will not bill it again; `rebillIsSame` is whether
+  /// that equals the amount being voided.
+  voidableInvoices: {
+    id: string
+    number: string
+    outstanding: string
+    period: string
+    rebill: string | null
+    rebillIsSame: boolean
+  }[]
 }) {
   // What to type if the disagreement is the BALANCE's fault: the difference,
   // negated. Deriving it is the step a person gets wrong, so the hint says it
@@ -235,7 +246,27 @@ export function LedgerCorrections({
                   <input type="hidden" name="invoiceId" value={invoice.id} />
                   <ReasonField reasons={VOID_REASONS} />
                   <Field name="note" label="Note (optional)" />
-                  <button type="submit" className={BUTTON}>
+                  {/* B-338. Pre-submit, so it lives INSIDE the form — the
+                      region above is for what happened, this is what will.
+                      Text tied to the submit rather than a colour (1.4.1): a
+                      "rate was never agreed" void with the rate unchanged
+                      re-bills exactly what it cancels, and the only place to
+                      catch that is before the press. */}
+                  {invoice.rebill && (
+                    <p id={`rebill-${invoice.id}`} className="basis-full max-w-prose text-xs text-pretty">
+                      {invoice.rebillIsSame && <strong>Same amount. </strong>}
+                      The next billing run bills this period again at {invoice.rebill}
+                      {invoice.rebillIsSame
+                        ? ' — exactly what you are voiding. If the rate is what was wrong, change the lease\u2019s rate first.'
+                        : ', due the day it is raised.'}{' '}
+                      The tenant is sent the updated invoice.
+                    </p>
+                  )}
+                  <button
+                    type="submit"
+                    className={BUTTON}
+                    aria-describedby={invoice.rebill ? `rebill-${invoice.id}` : undefined}
+                  >
                     Void
                     <span className="sr-only"> invoice {invoice.number}</span>
                   </button>
