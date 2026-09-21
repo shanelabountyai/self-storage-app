@@ -1256,19 +1256,9 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
         : recipient.lease?.unit
           ? [{ unitNumber: recipient.lease.unit.number, amountCents: payment.amountCents }]
           : []
-    // Named for the account only when every credited unit is on the same one.
-    const accounts =
-      units.length > 0
-        ? await prisma.lease.findMany({
-            where: { id: { in: credits.lines.map((line) => line.leaseId) } },
-            select: { billingAccountId: true, billingAccount: { select: { name: true } } },
-          })
-        : []
-    const accountName =
-      accounts[0]?.billingAccountId &&
-      accounts.every((lease) => lease.billingAccountId === accounts[0].billingAccountId)
-        ? (accounts[0].billingAccount?.name ?? null)
-        : null
+    // Named for the account only when every credited unit is on the same one
+    // (B-331: `paymentCredits` decides, so the balance and the name agree).
+    const accountName = credits.accountName
     const say = proseFor(recipient.locale)
     const balanceCents =
       units.length > 0 ? credits.balanceCents : await leaseBalanceCents(recipient.lease?.id ?? null)
@@ -1299,7 +1289,13 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       // read "giro postal".
       'payment.method': proseFor(recipient.locale).paymentMethods[payment.method],
       // B-317. Negative is credit, said in words — not clamped to "$0.00".
-      'payment.balance_line': say.receiptBalanceLine(formatCents(Math.abs(balanceCents), tag), balanceCents < 0),
+      // B-331. The line names what the balance covers — the account, or the units.
+      'payment.balance_line': say.receiptBalanceLine(
+        formatCents(Math.abs(balanceCents), tag),
+        balanceCents < 0,
+        accountName,
+        lines.map((line) => line.unitNumber),
+      ),
     }
   },
 

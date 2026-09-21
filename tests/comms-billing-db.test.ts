@@ -287,8 +287,8 @@ describeDb('billing notices', () => {
       expect(sends).toHaveLength(1)
       expect(sends[0].subject).toBe('Receipt: $129.00 for unit C-7')
       // The balance is read from the ledger at send time, not the event.
-      expect(sends[0].body).toContain('Balance on the account after this payment: $0.00.')
-      expect(sends[0].body).not.toContain('Credit on your account')
+      expect(sends[0].body).toContain('Balance on unit C-7 after this payment: $0.00.')
+      expect(sends[0].body).not.toContain('Credit on')
     })
 
     // B-317. An overpayment is credit, said in words — not clamped to "$0.00".
@@ -311,15 +311,15 @@ describeDb('billing notices', () => {
       })
 
       await emit('payment.succeeded', 'Payment', payment.id)
-      expect(sends[0].body).toContain('Credit on your account: $500.00. It comes off your next bill.')
-      expect(sends[0].body).not.toContain('Balance on the account')
+      expect(sends[0].body).toContain('Credit on unit C-7: $500.00. It comes off your next bill.')
+      expect(sends[0].body).not.toContain('Balance on')
 
       sends.length = 0
       await prisma.message.deleteMany({ where: { facilityId } })
       await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: 'es' } })
       try {
         await emit('payment.succeeded', 'Payment', payment.id)
-        expect(sends[0].body).toContain('Saldo a favor: $500.00. Se aplicará a su próxima factura.')
+        expect(sends[0].body).toContain('Saldo a favor de la unidad C-7: $500.00. Se aplicará a su próxima factura.')
       } finally {
         await prisma.tenant.update({ where: { id: tenantId }, data: { preferredLocale: null } })
       }

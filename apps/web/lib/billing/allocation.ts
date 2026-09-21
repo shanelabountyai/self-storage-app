@@ -9,7 +9,8 @@ import {
   type AllocationLine,
   type AllocationTarget,
 } from '@storage/core/billing'
-import { payableLeaseFilter } from './accounts'
+import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { balancesFor, payableLeaseFilter } from './accounts'
 
 // PRD 02 US-22 (B-048). Applying a payment across what a lease owes.
 //
@@ -458,16 +459,24 @@ export async function postPaymentLedger(
 }
 
 /// B-278. What one payment credited, per lease, read back from the entries
-/// `postPaymentLedger` wrote — and the balance now across exactly those leases.
+/// `postPaymentLedger` wrote — and the balance now, with the scope it covers.
 ///
-/// The receipt screen and the emailed receipt both read this, so the two cannot
-/// name different units for one payment. Only `type: 'payment'`: a returned
-/// payment's `adjustment` carries the same `paymentId` (`reversals.ts`) and is
-/// not what the receipt is about. Sorted by unit number the way the account
-/// card sorts its units, so two reads of one receipt list them in one order.
+/// Every receipt reads this — the receipt screens, the emailed receipt and the
+/// counter — so none of them can name different units or a different balance
+/// for one payment. Only `type: 'payment'`: a returned payment's `adjustment`
+/// carries the same `paymentId` (`reversals.ts`) and is not what the receipt is
+/// about. Sorted by unit number the way the account card sorts its units.
+///
+/// B-331. `balanceCents` is the ACCOUNT's balance when every credited lease is
+/// an occupying unit of one business account — the figure the account card
+/// shows, so a partial payment that settles two of five units does not read
+/// "$0.00" beside a card saying $3,707. Otherwise it is the balance across
+/// exactly the credited leases, and `accountName` is null so the receipt names
+/// those units instead of implying they are everything.
 export async function paymentCredits(paymentId: string): Promise<{
   lines: { leaseId: string; unitNumber: string; amountCents: number }[]
   balanceCents: number
+  accountName: string | null
 }> {
   const credited = await prisma.ledgerEntry.groupBy({
     by: ['leaseId'],
@@ -475,19 +484,32 @@ export async function paymentCredits(paymentId: string): Promise<{
     _sum: { amountCents: true },
   })
   const leaseIds = credited.map((row) => row.leaseId)
-  if (leaseIds.length === 0) return { lines: [], balanceCents: 0 }
+  if (leaseIds.length === 0) return { lines: [], balanceCents: 0, accountName: null }
 
-  const [leases, balance] = await Promise.all([
-    prisma.lease.findMany({
-      where: { id: { in: leaseIds } },
-      select: { id: true, unit: { select: { number: true } } },
-    }),
-    prisma.ledgerEntry.aggregate({
-      where: { leaseId: { in: leaseIds } },
-      _sum: { amountCents: true },
-    }),
-  ])
+  const leases = await prisma.lease.findMany({
+    where: { id: { in: leaseIds } },
+    select: {
+      id: true,
+      unit: { select: { number: true } },
+      billingAccount: {
+        select: {
+          name: true,
+          leases: {
+            where: { status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+            select: { id: true },
+          },
+        },
+      },
+    },
+  })
   const unitOf = new Map(leases.map((lease) => [lease.id, lease.unit.number]))
+  const account = leases[0]?.billingAccount
+  const accountLeaseIds = account?.leases.map((lease) => lease.id) ?? []
+  const onOneAccount =
+    !!account &&
+    leases.length === leaseIds.length &&
+    leaseIds.every((id) => accountLeaseIds.includes(id))
+  const balances = await balancesFor(onOneAccount ? accountLeaseIds : leaseIds)
 
   return {
     lines: credited
@@ -503,7 +525,8 @@ export async function paymentCredits(paymentId: string): Promise<{
           a.unitNumber.localeCompare(b.unitNumber, undefined, { numeric: true }) ||
           a.leaseId.localeCompare(b.leaseId),
       ),
-    balanceCents: balance._sum.amountCents ?? 0,
+    balanceCents: [...balances.values()].reduce((sum, cents) => sum + cents, 0),
+    accountName: account && onOneAccount ? account.name : null,
   }
 }
 

@@ -1043,8 +1043,11 @@ export const en = {
   'rcpt.unit': 'Unit',
   'rcpt.unitValue': '{facility} — {unit}',
   'rcpt.date': 'Date',
-  'rcpt.balanceNow': 'Balance now',
-  'rcpt.creditOnAccount': 'Credit on your account',
+  // B-331. What the balance covers is in the words, never only in styling.
+  'rcpt.balanceOn': 'Balance on {scope}',
+  'rcpt.creditOn': 'Credit on {scope}',
+  'rcpt.scopeUnit': 'unit {units}',
+  'rcpt.scopeUnits': 'units {units}',
   'rcpt.creditNextBill': 'It comes off your next bill.',
   'rcpt.creditsCaption': 'Applied to units at {facility}',
   'rcpt.creditsRegion': 'Units paid',

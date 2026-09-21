@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requireTenantActor } from '@/lib/rbac/session'
-import { paymentReceipt } from '@/lib/portal/payment'
+import { paymentReceipt, receiptBalanceLabel } from '@/lib/portal/payment'
 import { formatCents, formatRate } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 import { SITE } from '@/lib/site-config'
@@ -130,7 +130,7 @@ export default async function PaymentDonePage({
           <div className="flex justify-between gap-4 border-t pt-2 font-medium">
             {/* B-317. A negative balance is credit, said so — the counter
                 receipt already does, and "$0.00" told an overpayer it was gone. */}
-            <dt>{t(receipt.balanceCents < 0 ? 'rcpt.creditOnAccount' : 'rcpt.balanceNow')}</dt>
+            <dt>{receiptBalanceLabel(receipt, t, LOCALE_TAG[locale])}</dt>
             <dd className="text-right">
               <span className="tabular-nums">{formatRate(Math.abs(receipt.balanceCents))}</span>
               {receipt.balanceCents < 0 && (

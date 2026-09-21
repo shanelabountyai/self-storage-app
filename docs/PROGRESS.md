@@ -10806,3 +10806,28 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - **A portal payment for ONE personal unit is still undirected on the webhook** — it can spread across the tenant's other personal units at the site. Not this row's scope (it is about the account/personal boundary); B-331's second acceptance touches the wording of the same shape.
 
 **Verification.** `tests/account-payment-scope-db.test.ts` (new, 5): the payer has an older personal unit owing $100 and an account unit owing $100; a $100 account payment settles the account unit and leaves the personal invoice open and its ledger at $100 — for counter cash, for a counter card through `applyStripeEvent`, and for the portal account payment through `applyStripeEvent`; a $150 account payment leaves $50 credit on the account unit and still does not touch the personal one; the counter receipt's credits name only the account unit; a cash payment directed at the payer's own unit still settles it. **With the `allocation.ts` change stashed, 4 of the 5 fail** (the own-name case passes both ways, as it should). `counter-card-account-db` and `counter-account-payment-db` still pass. Typecheck and lint clean (6 pre-existing warnings). Full unit suite: **4632 passed + 8 skipped = 4640** (B-338's 4635 plus these 5), exit 0 — after one earlier attempt was SIGKILLed at startup, zero tests run, by countertop's concurrent sweep. No schema change, so no drift check. Accessibility statement re-read: no rendered change, note added.
+
+## B-331 — the receipt says what its balance is the balance of (2026-09-21)
+
+**Commit:** `PENDING`
+
+**What it built.** `paymentCredits` (`apps/web/lib/billing/allocation.ts`) now returns `accountName` beside `balanceCents`, and decides the scope once for every receipt:
+
+- **Every credited lease is an occupying unit of one business account** → `balanceCents` is the account's balance (the same sum over the same leases `portalAccountsFor` shows on the account card) and `accountName` is its name.
+- **Otherwise** → the balance across exactly the credited leases, as before, and `accountName` is null.
+
+Four receipts read it: the email (`receiptBalanceLine`, `apps/web/lib/comms/prose.ts` — "Balance on Acme Crews after this payment", "Balance on units C-3 and C-7 …", "Credit on unit C-7: …"), `/portal/pay/done` and `/pay/[token]/done` (one helper, `receiptBalanceLabel` in `apps/web/lib/portal/payment.ts`, new `rcpt.balanceOn` / `rcpt.creditOn` / `rcpt.scopeUnit(s)` keys replacing `rcpt.balanceNow` / `rcpt.creditOnAccount`), and the counter receipt row (`receiptRows`, `apps/web/lib/admin/pos.ts`). The email's and counter's own account-name lookups were deleted in favour of `paymentCredits`' — the counter's used a `Set` of names, which could name an account while the balance covered only its credited units.
+
+**What it decided.**
+
+- **One decision, in `paymentCredits`.** The name and the figure come from the same place, so a receipt cannot name the account while quoting the units' sum, or the reverse.
+- **An ended lease on the account falls back to unit scope.** The account card lists occupying leases only; quoting the account's figure for a payment that credited an ended one would be a number the card does not add up to.
+- **B-317's credit wording now carries the scope too** ("Credit on unit C-7"), so it can no longer read as account-wide credit while another unit owes.
+- Staff screens' "Balance now" (`/admin/billing/accounts/[id]`) is not a receipt and is unchanged.
+
+**What it left behind.**
+
+- **Neither tenant receipt is axe-scanned** — the demo seed makes no payments (B-278's standing reason). The `<dt>` row header is unchanged markup.
+- **The pre-B-330 shape** (an undirected portal payment for one personal unit spreading across the tenant's other personal units) is unchanged; its receipt now names every unit it touched, so it is at least described truthfully.
+
+**Verification.** `tests/receipt-balance-scope-db.test.ts` (new, 2): a $200 counter check on a three-unit $300 account settles two units, and the email, `paymentReceipt` + its label, the counter receipt row and the account card all say $100.00 on the account by name; a directed payment on one of a personal tenant's two units says "Balance on unit P-2" in the email, the portal label (English and Spanish) and the counter row. `tests/comms-billing-db.test.ts`'s receipt assertions moved to the new wording; `tests/i18n.test.ts` gained the scope strings in both languages. Typecheck clean, lint clean (6 pre-existing warnings). Full unit suite: **4635 passed + 8 skipped = 4643**, exit 0.

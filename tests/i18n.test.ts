@@ -614,3 +614,18 @@ describe('translateSegments (B-272)', () => {
     expect(segmentsText(translateSegments(dict, key, {}))).toContain('{terms}')
   })
 })
+
+// B-331. The receipt's balance row says what it is the balance OF, in words, in
+// both languages — a bare "Balance now" read as the whole account.
+describe('receipt balance scope (B-331)', () => {
+  it('names the scope in both languages', () => {
+    const say = (locale: 'en' | 'es', key: keyof typeof en, vars: Record<string, string>) =>
+      translate(dictionaryFor(locale), key, vars)
+    expect(say('en', 'rcpt.balanceOn', { scope: say('en', 'rcpt.scopeUnits', { units: 'C-3 and C-7' }) })).toBe(
+      'Balance on units C-3 and C-7',
+    )
+    expect(say('es', 'rcpt.creditOn', { scope: say('es', 'rcpt.scopeUnit', { units: 'C-3' }) })).toBe(
+      'Saldo a favor de la unidad C-3',
+    )
+  })
+})

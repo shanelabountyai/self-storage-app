@@ -386,9 +386,31 @@ export type PaymentReceipt = {
   /// B-278. One row per lease this payment credited, in unit order. Empty
   /// until the webhook has posted it.
   credits: { leaseId: string; unitNumber: string; amountCents: number }[]
-  /// Across exactly the leases in `credits`; null while there are none.
+  /// `paymentCredits`' figure — the account's when `accountName` is set,
+  /// otherwise across exactly the leases in `credits`; null while there are none.
   balanceCents: number | null
+  /// B-331. The account the balance is quoted for, or null when it covers units.
+  accountName: string | null
   failureReason: string | null
+}
+
+/// B-331. The receipt's balance row header, naming what the balance covers —
+/// the account, or the credited units — so "$0.00" on a partial account
+/// payment is never read as the whole account. One helper for the portal and
+/// the pay-link receipts so the two cannot word it differently.
+export function receiptBalanceLabel(
+  receipt: Pick<PaymentReceipt, 'accountName' | 'credits' | 'balanceCents'>,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+  localeTag: string,
+): string {
+  const scope =
+    receipt.accountName ??
+    t(receipt.credits.length === 1 ? 'rcpt.scopeUnit' : 'rcpt.scopeUnits', {
+      units: new Intl.ListFormat(localeTag, { type: 'conjunction' }).format(
+        receipt.credits.map((credit) => credit.unitNumber),
+      ),
+    })
+  return t((receipt.balanceCents ?? 0) < 0 ? 'rcpt.creditOn' : 'rcpt.balanceOn', { scope })
 }
 
 /// The receipt for a payment the tenant just made.
@@ -440,6 +462,7 @@ export async function paymentReceipt(
     facilityName: payment.facility.name,
     credits: credits.lines,
     balanceCents: credits.lines.length > 0 ? credits.balanceCents : null,
+    accountName: credits.accountName,
     failureReason: payment.failureReason,
   }
 }

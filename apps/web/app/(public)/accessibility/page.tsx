@@ -2787,6 +2787,14 @@ function reviewedOn(locale: Locale): string {
 // Re-read 2026-09-21, at B-330. `/portal/pay?account=` now settles only the
 // account's units. That is where the money lands, not what the page renders:
 // no markup, string or flow changed, so nothing is added or withdrawn.
+//
+// Re-read 2026-09-21, at B-331. The balance row on both payment receipts
+// (`/portal/pay/done`, `/pay/[token]/done`) and the receipt email now names
+// what it covers ("Balance on Acme Crews", "Balance on unit C-7") in the row
+// header's own text, in both languages. The `<dt>` stays the row's header
+// (SC 1.3.1), and the scope is in the words, not in styling. Neither receipt is
+// scanned (no demo payment exists, see B-278), and this page makes no claim
+// about receipts or email, so nothing is added or withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

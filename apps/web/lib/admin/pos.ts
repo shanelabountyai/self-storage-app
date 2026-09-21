@@ -1178,18 +1178,13 @@ export async function counterReceipt(
   }
 
   const credits = await paymentCredits(paymentId);
-  const accounts = await prisma.lease.findMany({
-    where: { id: { in: credits.lines.map((line) => line.leaseId) } },
-    select: { billingAccount: { select: { name: true } } },
-  });
-  const accountNames = new Set(accounts.map((lease) => lease.billingAccount?.name ?? null));
   return {
     receiptNumber: payment.receiptNumber,
     facilityName: payment.facility.name,
     timezone: payment.facility.timezone,
     tenantId: payment.tenant.id,
     tenantName: `${payment.tenant.firstName} ${payment.tenant.lastName}`,
-    accountName: accountNames.size === 1 ? [...accountNames][0] : null,
+    accountName: credits.accountName,
     method: payment.method as CounterReceipt["method"],
     status: payment.status,
     checkNumber: payment.checkNumber,
@@ -1261,7 +1256,13 @@ export function receiptRows(receipt: CounterReceipt): ReceiptRow[] {
         ]
       : []),
     {
-      label: receipt.balanceCents < 0 ? "Credit on account" : "Balance now",
+      // B-331. Names what the balance covers, the way the tenant's receipts do.
+      label: `${receipt.balanceCents < 0 ? "Credit on" : "Balance on"} ${
+        receipt.accountName ??
+        (receipt.credits.length === 0
+          ? "account"
+          : `${receipt.credits.length === 1 ? "unit" : "units"} ${new Intl.ListFormat("en-US", { type: "conjunction" }).format(receipt.credits.map((credit) => credit.unitNumber))}`)
+      }`,
       value: formatCents(Math.abs(receipt.balanceCents)),
     },
     ...(receipt.takenBy ? [{ label: "Taken by", value: receipt.takenBy }] : []),

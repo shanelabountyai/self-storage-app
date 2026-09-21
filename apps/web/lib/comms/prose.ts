@@ -145,7 +145,9 @@ export type CommsProse = {
   receiptUnitLine: (unit: string, amount: string) => string
   /// B-317. The balance after the payment, or — when it went negative — the
   /// credit in words. A clamped "$0.00" told an overpayer the money was gone.
-  receiptBalanceLine: (amount: string, inCredit: boolean) => string
+  /// B-331. Always says what it is the balance OF: the account when
+  /// `paymentCredits` quoted the account's figure, otherwise the units.
+  receiptBalanceLine: (amount: string, inCredit: boolean, account: string | null, units: string[]) => string
 
   // ── referral (PRD 10 §6.3) ────────────────────────────────────────────────
   referralRewardReferee: (amount: string) => string
@@ -254,10 +256,16 @@ const en: CommsProse = {
         ? `for unit ${units[0]}`
         : `— ${units.length} units at ${facility}`,
   receiptUnitLine: (unit, amount) => `- Unit ${unit}: ${amount}`,
-  receiptBalanceLine: (amount, inCredit) =>
-    inCredit
-      ? `Credit on your account: ${amount}. It comes off your next bill.`
-      : `Balance on the account after this payment: ${amount}.`,
+  receiptBalanceLine: (amount, inCredit, account, units) => {
+    const scope =
+      account ??
+      (units.length === 0
+        ? 'your account'
+        : `${units.length === 1 ? 'unit' : 'units'} ${new Intl.ListFormat('en-US', { type: 'conjunction' }).format(units)}`)
+    return inCredit
+      ? `Credit on ${scope}: ${amount}. It comes off your next bill.`
+      : `Balance on ${scope} after this payment: ${amount}.`
+  },
 
   referralRewardReferee: (amount) => `${amount} comes off your first invoice.`,
   referralRewardReferrer: (amount) => `${amount} comes off your next invoice.`,
@@ -421,10 +429,16 @@ const es: CommsProse = {
         ? `por la unidad ${units[0]}`
         : `— ${units.length} unidades en ${facility}`,
   receiptUnitLine: (unit, amount) => `- Unidad ${unit}: ${amount}`,
-  receiptBalanceLine: (amount, inCredit) =>
-    inCredit
-      ? `Saldo a favor: ${amount}. Se aplicará a su próxima factura.`
-      : `Saldo de la cuenta después de este pago: ${amount}.`,
+  receiptBalanceLine: (amount, inCredit, account, units) => {
+    const scope =
+      account ??
+      (units.length === 0
+        ? 'su cuenta'
+        : `${units.length === 1 ? 'la unidad' : 'las unidades'} ${new Intl.ListFormat('es', { type: 'conjunction' }).format(units)}`)
+    return inCredit
+      ? `Saldo a favor de ${scope}: ${amount}. Se aplicará a su próxima factura.`
+      : `Saldo de ${scope} después de este pago: ${amount}.`
+  },
 
   referralRewardReferee: (amount) => `Se le descontarán ${amount} de su primera factura.`,
   referralRewardReferrer: (amount) => `Se le descontarán ${amount} de su próxima factura.`,

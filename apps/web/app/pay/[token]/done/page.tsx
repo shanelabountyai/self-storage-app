@@ -4,7 +4,7 @@ import { formatCents, formatRate } from '@/lib/format'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 import { dictionaryFor, LOCALE_TAG, translate, type Locale, type MessageKey } from '@/lib/i18n'
 import { checkPayLink, payLinkLocale } from '@/lib/portal/pay-links'
-import { paymentReceipt } from '@/lib/portal/payment'
+import { paymentReceipt, receiptBalanceLabel } from '@/lib/portal/payment'
 import { SITE } from '@/lib/site-config'
 
 export async function generateMetadata({
@@ -107,7 +107,7 @@ export default async function PayLinkDonePage({
               {receipt.balanceCents !== null && receipt.status === 'succeeded' && (
                 <div className="mt-2 flex justify-between gap-4 border-t pt-2 font-medium">
                   {/* B-317. Same credit wording as the portal receipt. */}
-                  <dt>{t(receipt.balanceCents < 0 ? 'rcpt.creditOnAccount' : 'rcpt.balanceNow')}</dt>
+                  <dt>{receiptBalanceLabel(receipt, t, LOCALE_TAG[locale])}</dt>
                   <dd className="text-right">
                     <span className="tabular-nums">{formatRate(Math.abs(receipt.balanceCents))}</span>
                     {receipt.balanceCents < 0 && (
