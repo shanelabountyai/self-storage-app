@@ -11028,7 +11028,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-342 — the business-account access email no longer reads like a password reset (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `03ea9ac`
 
 **What it built.**
 
