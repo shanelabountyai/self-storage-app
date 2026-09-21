@@ -107,7 +107,9 @@ export function CounterPaymentForm({
 
   // Card is the one method a subject can rule out: the card screen needs an
   // open lease, and takes one unit (or, since B-320, one account) at a time.
-  function chooseSubject(next: string) {
+  // `note` is B-358's confirmation after "Pay … together", held in the same
+  // region as the reset until the next subject or method change.
+  function chooseSubject(next: string, note = '') {
     setSubject(next)
     if (leases.some((l) => l.leaseId === next)) setAnchorId(next)
     const nextAccount = accounts.find((a) => `${ACCOUNT}${a.accountId}` === next)
@@ -116,12 +118,17 @@ export function CounterPaymentForm({
     if (method === 'card' && (nextFormer || nextSeveral)) {
       setMethod('cash')
       setMethodReset(
-        nextSeveral
-          ? 'Method changed from Card to Cash: the card screen takes one unit at a time.'
-          : `Method changed from Card to Cash: ${nextAccount ? 'every unit on this account' : 'this unit'} has been moved out of, and a card needs an open lease.`,
+        [
+          nextSeveral
+            ? 'Method changed from Card to Cash: the card screen takes one unit at a time.'
+            : `Method changed from Card to Cash: ${nextAccount ? 'every unit on this account' : 'this unit'} has been moved out of, and a card needs an open lease.`,
+          note,
+        ]
+          .filter(Boolean)
+          .join(' '),
       )
     } else {
-      setMethodReset('')
+      setMethodReset(note)
     }
   }
 
@@ -209,7 +216,14 @@ export function CounterPaymentForm({
       {warning && (
         <button
           type="button"
-          onClick={() => chooseSubject(togetherValue)}
+          // B-358. Pressing this unmounts it (the `units:` subject has no
+          // warning), so focus goes to the Unit select that now holds the
+          // choice rather than falling to <body>.
+          onClick={(event) => {
+            const select = event.currentTarget.form?.elements.namedItem('leaseId')
+            chooseSubject(togetherValue, `Now paying ${togetherUnits} together.`)
+            if (select instanceof HTMLSelectElement) select.focus()
+          }}
           className="border-input hover:bg-accent col-span-2 inline-flex min-h-11 items-center justify-self-start rounded-md border px-3 text-sm font-medium"
         >
           Pay {togetherUnits} together — {formatCents(togetherCents)} due

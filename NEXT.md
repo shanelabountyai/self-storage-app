@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-358**. Continue down review block 10 in order.
+**Next: the design-system import (D-146).** The owner asked (2026-09-21) that the design match the claude.ai design system `84b81ef9-747f-4042-8f27-c32a0e41d567` ("Storage business design system", read through `DesignSync`), starting with `ui_kits/website/index.html` together with `card-helper.js` and `styles.css` (tokens in `tokens/*.css`, components in `components/**`). D-146 settles that the kit's COPY is adopted along with its visuals. Before building: raise the open halves of D-146 (how far beyond the website it reaches, and claims the demo data cannot back up), write the backlog row, then build. After that, continue review block 10 at **B-359**.
+
+**B-358 is built** (2026-09-21, SHA in PROGRESS). "Pay … together" focuses the Unit select and announces "Now paying {units} together."; the overflow warning names the lockout when another owing unit is past due.
 
 **B-357 is built** (2026-09-21, `90c5ecc`). The printed letter's "To pay" line appears only when the template requires `links.pay_now`, and a no-email tenant is sent to the phone or the office, never `/login`.
 

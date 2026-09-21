@@ -103,13 +103,27 @@ const invoiceStatus = async (leaseId: string) =>
   (await prisma.invoice.findFirstOrThrow({ where: { leaseId }, select: { status: true } })).status
 
 describe('counter overflow warning (B-339)', () => {
-  const a = { unitNumber: 'A-1', balanceCents: 16_100 }
-  const b = { unitNumber: 'B-2', balanceCents: 16_100 }
+  const a = { unitNumber: 'A-1', balanceCents: 16_100, daysPastDue: 0 }
+  const b = { unitNumber: 'B-2', balanceCents: 16_100, daysPastDue: 0 }
 
   it('names the other owing unit and its balance when the amount is over the picked unit’s', () => {
     const warning = overflowWarning(a, [b], '322')
     expect(warning).toContain('Unit B-2 also owes $161.00')
     expect(warning).toContain('stays as credit on A-1 and B-2 stays unpaid')
+  })
+
+  // B-358. The ladder qualifies per lease, so a past-due B-2 is still on its
+  // schedule however much credit sits on A-1; a current one is not warned about.
+  it('adds the lockout sentence only when another owing unit is past due', () => {
+    expect(overflowWarning(a, [b], '322')).not.toContain('locked out')
+    expect(overflowWarning(a, [{ ...b, daysPastDue: 12 }], '322')).toContain(
+      'Credit on A-1 does not take B-2 off its past-due schedule, so B-2 can still be locked out.',
+    )
+    const c = { unitNumber: 'C-3', balanceCents: 5_000, daysPastDue: 3 }
+    expect(overflowWarning(a, [{ ...b, daysPastDue: 12 }, c], '322')).toContain(
+      'does not take B-2 and C-3 off their past-due schedule, so B-2 and C-3 can still be locked out.',
+    )
+    expect(overflowWarning(a, [b, c], '322')).toContain('take C-3 off its')
   })
 
   it('says nothing at or under the balance, with no other owing unit, or on an unparseable amount', () => {

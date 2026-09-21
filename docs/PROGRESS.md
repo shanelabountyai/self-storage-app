@@ -11355,3 +11355,19 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** Nothing owned by an item.
 
 **Verification.** Typecheck and lint clean. The full unit suite: **4695 passed, 8 skipped**. `message-print-page` covers a receipt letter with no pay line, a dunning letter to a no-email tenant with no "/login", and a no-phone letter that names the office, each in EN and ES. `message-print-db` checks that `dunning_step` is read as asking for payment and `payment_receipt` is not, against the seeded catalog. No schema change. The accessibility statement was re-read and a note added; no visible line changes.
+
+## B-358 — "Pay A-1 and B-2 together" hands focus to the Unit select, and the warning names the lockout (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.** In `counter-payment-form.tsx`, pressing "Pay … together" moves focus to the Unit select, which now holds the `units:` value. Before this, the button unmounted itself and focus fell to `<body>`. The form's existing status region now says "Now paying {units} together." until the next subject or method change. It is carried through `chooseSubject`'s new `note` argument into B-319's `methodReset` state, so there is still only one region. If the method was Card, the Card-to-Cash reset and the note are announced together. `overflowWarning` now adds "Credit on A-1 does not take B-2 off its past-due schedule, so B-2 can still be locked out." when any other owing unit has `daysPastDue > 0`, and pluralises for several units.
+
+**What it decided.**
+
+- **Focus is found through `form.elements.namedItem('leaseId')`, not a ref.** `Field` owns the select's id, and adding a ref to `Field` for one caller was not worth it.
+- **No late-fee claim in the sentence.** Late fees net credit per tenant, so only the lockout is true.
+- **The e2e fixture is found-or-rebuilt by slug** (`e2e-b358-counter-together`), per B-120 discipline (1). Nothing in the spec posts a payment, so reruns do not depend on earlier state. The facility stays resident in `storage_test`'s `public` schema, like B-333's.
+
+**What it left behind.** Nothing owned by an item.
+
+**Verification.** Typecheck and lint clean. The full unit suite: **4696 passed, 8 skipped**. `counter-overflow-db` covers the sentence both present and absent, for one past-due unit and for two. `e2e/admin-pos-together.spec.ts` (production build, desktop-chrome) asserts the warning and the amount field's `aria-describedby` on the region, then after the press: the confirmation in the pre-existing region, focus on the select holding `units:`, and a clean axe scan. That closes B-339's "no e2e coverage" gap. The scan is registered in `SCANNED_STATES` as `/admin/pos | several units paid together`. The change is staff-facing only, so the public accessibility statement is not affected. No schema change.

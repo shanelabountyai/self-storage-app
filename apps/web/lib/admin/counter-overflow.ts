@@ -16,7 +16,7 @@ export function unitList(numbers: string[]): string {
     : `${numbers.slice(0, -1).join(', ')} and ${numbers.at(-1)}`
 }
 
-type Unit = { unitNumber: string; balanceCents: number }
+type Unit = { unitNumber: string; balanceCents: number; daysPastDue: number }
 
 /// Late fees net credit per TENANT, but the delinquency ladder qualifies per
 /// LEASE (`lib/delinquency/engine.ts`), so a surplus parked on the picked unit
@@ -29,5 +29,11 @@ export function overflowWarning(picked: Unit, others: Unit[], amount: string): s
     .map((l) => `Unit ${l.unitNumber} also owes ${formatCents(l.balanceCents)}`)
     .join('; ')
   const rest = unitList(others.map((l) => l.unitNumber))
-  return `${owes}. This amount is more than ${picked.unitNumber} owes, so as it stands the rest stays as credit on ${picked.unitNumber} and ${rest} ${others.length === 1 ? 'stays' : 'stay'} unpaid.`
+  const warning = `${owes}. This amount is more than ${picked.unitNumber} owes, so as it stands the rest stays as credit on ${picked.unitNumber} and ${rest} ${others.length === 1 ? 'stays' : 'stay'} unpaid.`
+  // B-358. The harm B-339 confirmed, said out loud. No late-fee claim: late
+  // fees DO net credit per tenant, so only the lockout is true here.
+  const late = others.filter((l) => l.daysPastDue > 0)
+  if (late.length === 0) return warning
+  const lateList = unitList(late.map((l) => l.unitNumber))
+  return `${warning} Credit on ${picked.unitNumber} does not take ${lateList} off ${late.length === 1 ? 'its' : 'their'} past-due schedule, so ${lateList} can still be locked out.`
 }

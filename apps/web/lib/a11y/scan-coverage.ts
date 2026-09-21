@@ -880,6 +880,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
   // layout claim is carried by the at-rest routes, which ARE measured: what
   // each success adds is one paragraph of text in the page's existing single
   // column, above content already measured at 320px.
+  // B-358. Staff-facing; scanned because the state swaps the warning and its
+  // button for a confirmation in the same region and moves focus.
+  {
+    route: '/admin/pos',
+    state: 'several units paid together',
+    spec: 'e2e/admin-pos-together.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'B-358. The state replaces the overflow warning and its button with one shorter sentence in the same always-mounted region, in a form the at-rest /admin/pos scan already measures at 320px.',
+  },
   {
     route: '/admin/tenants/[tenantId]/ledger/[leaseId]',
     state: 'invoice voided',
