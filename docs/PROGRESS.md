@@ -11107,7 +11107,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-346 — ledger corrections confirm before they post (2026-09-21)
 
-**Commit:** `PENDING`
+**Commit:** `ef3c813`
 
 **What it built.**
 

@@ -4,8 +4,12 @@
 
 ## Start here
 
-1. **B-346 (`83azzr`)**: last in review block 9. **D-145** was settled (A), so write-off, void and non-zero adjustment on the ledger corrections page all get FR-21's confirm-and-echo step on the shared `AdminForm`. The echo lands in B-333's status region.
+**Review block 9 is finished.** Every open row left is on the blocked list below. The next session picks one of:
 
+1. **A tenth review block** (operator, UX and accessibility agents over B-329–B-346), the way blocks 1–9 were raised.
+2. **Project closure deliverables** (global CLAUDE.md, *Definition of done*). None exist yet: `docs/DEMO.md`, the *Storage Business in Brief* exec-brief artifact, and the LinkedIn drafts in the Ledger. Record each URL in the repo.
+
+**B-346 is built** (2026-09-21, `ef3c813`). Write-off, void and non-zero adjustment on the ledger screen echo tenant, unit, amount, direction and balance after, and post only on a press that carries back `yes:<echoed cents>`. Cancel posts nothing. Each domain function takes `preview: true`, which runs every refusal and writes nothing. `AdminForm`'s confirm state has opt-in `confirmValue` and `cancel`.
 **B-345 is built** (2026-09-21, `a63a737`). "crossed in the mail" and "anything we mail you". `tests/us-english.test.ts` guards the en dictionary and the English catalog.
 **B-344 is built** (2026-09-21, `924cdd5`). For a business account, the counter card screens say "payer" instead of "tenant", and the card-on-file line names whose card it is. The done page links `/admin/billing/accounts/[id]`, and a declined card links back to `/admin/pos/card` with the same subject and amount.
 **B-343 is built** (2026-09-21, `47e106b`). The receipt email has a `{{payment.details}}` table (receipt number when there is one, the account, and *Paid by* with the check or money-order number). It reads the same columns `receiptRows` does, in both languages. Templates are seeded state, so run `db:migrate:test` when you switch branches.
