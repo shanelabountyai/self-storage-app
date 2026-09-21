@@ -846,6 +846,8 @@ export const es: Dictionary = {
   'paypg.notFoundAccount': 'No encontramos esa cuenta entre las suyas.',
   'paypg.notFoundUnit': 'No encontramos esa unidad en su cuenta.',
   'paypg.backToAccount': 'Volver a mi cuenta',
+  'paypg.chooseUnit': 'Tiene más de una unidad. Elija cuál pagar desde la página de su cuenta.',
+  'paypg.noUnits': 'No hay unidades en su cuenta por las que pagar.',
   'paypg.allPaidAccount': 'Está al corriente en {name} — no hay nada que pagar en este momento.',
   'paypg.allPaidUnit':
     'Está al corriente en la unidad {unit} — no hay nada que pagar en este momento.',

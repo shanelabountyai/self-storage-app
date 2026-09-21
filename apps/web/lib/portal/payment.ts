@@ -161,6 +161,19 @@ export function prepayCeilingFor(lease: { monthlyRateCents: number }): number {
 /// and a version that returned the lease first and checked ownership second is
 /// the shape that eventually ships with the check dropped. `tenantId` comes
 /// from the session (`requireTenantActor`), never from the request.
+/// B-349. Up to two payable leases, which is all a bare `/portal/pay` needs to
+/// tell "exactly one" (redirect to it) from "none" or "several" (send the
+/// tenant to `/portal` to choose). Same fence as `payableLease`.
+export async function payableLeaseIds(tenantId: string): Promise<string[]> {
+  const leases = await prisma.lease.findMany({
+    where: { ...payableLeaseWhere(tenantId), status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+    take: 2,
+  })
+  return leases.map((l) => l.id)
+}
+
 export async function payableLease(tenantId: string, leaseId: string): Promise<PayableLease | null> {
   const lease = await prisma.lease.findFirst({
     // B-256. `payableLeaseWhere` rather than a bare `tenantId`, so the front

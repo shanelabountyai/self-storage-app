@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { requireTenantActor } from '@/lib/rbac/session'
 import {
   MIN_PAYMENT_CENTS,
   payableAccount,
   payableLease,
+  payableLeaseIds,
   startPortalPayment,
   validatePaymentAmount,
   prepayCeilingFor,
@@ -56,6 +58,25 @@ export default async function PortalPayPage({
   const dict = dictionaryFor(await getLocale())
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
+
+  // B-349. A bare URL — typed or bookmarked — names no subject. One payable
+  // lease is unambiguous, so go there; otherwise the tenant picks on /portal,
+  // where every unit's Pay link lives.
+  if (!accountId && !leaseId) {
+    const ids = await payableLeaseIds(actor.tenantId)
+    if (ids.length === 1) redirect(`/portal/pay?lease=${encodeURIComponent(ids[0])}`)
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-xl font-semibold">{t('paypg.title')}</h1>
+        <p className="text-sm text-pretty">
+          {t(ids.length ? 'paypg.chooseUnit' : 'paypg.noUnits')}
+        </p>
+        <Link href="/portal" className="text-sm underline underline-offset-4">
+          {t('paypg.backToAccount')}
+        </Link>
+      </div>
+    )
+  }
 
   // B-256. One unit, or a whole business account. `account` wins if both are
   // present — a link carries one or the other, and picking the larger subject

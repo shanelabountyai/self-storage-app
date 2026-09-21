@@ -2831,6 +2831,12 @@ function reviewedOn(locale: Locale): string {
 // the first run that checked the shipped face. `/pay/[token]/done` is now
 // measured by those loops as well as by axe. No visible line changes;
 // `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-21, at B-349. A bare `/portal/pay` redirects a one-lease
+// tenant to `?lease=`; otherwise it renders one sentence under the page's
+// `<h1>` and the same "Back to my account" link to `/portal` the not-found
+// state already had (SC 2.4.4). No new route and nothing the statement claims
+// changes. No visible line changes; `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

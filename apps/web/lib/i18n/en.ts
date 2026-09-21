@@ -933,6 +933,8 @@ export const en = {
   'paypg.notFoundAccount': "We couldn't find that account on your account.",
   'paypg.notFoundUnit': "We couldn't find that unit on your account.",
   'paypg.backToAccount': 'Back to my account',
+  'paypg.chooseUnit': 'You have more than one unit. Choose which one to pay from your account page.',
+  'paypg.noUnits': 'There are no units on your account to pay for.',
   'paypg.allPaidAccount': "You're all paid up on {name} — there's nothing to pay right now.",
   'paypg.allPaidUnit': "You're all paid up on unit {unit} — there's nothing to pay right now.",
   'paypg.subheadAccount': '{facility} — {account}',

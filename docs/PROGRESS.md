@@ -11192,3 +11192,23 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 - Lighthouse was not re-run locally. CI's e2e lane runs it.
 - The unit suite was not run. The change touches no code it loads.
+
+## B-349 — a bare `/portal/pay` goes to the tenant's unit, or says to choose one (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.**
+
+- `payableLeaseIds(tenantId)` in `lib/portal/payment.ts`: up to two occupying leases under `payableLeaseWhere`, the same limits `payableLease` uses.
+- `/portal/pay` with neither `?lease=` nor `?account=`: one payable lease redirects to `?lease=<id>`. Several show *"You have more than one unit. Choose which one to pay from your account page."* None shows *"There are no units on your account to pay for."* Each message sits under the `<h1>` with a "Back to my account" link to `/portal`. Both messages are in English and Spanish.
+- `e2e/portal.spec.ts`: Dana (one lease) is redirected, and Pia (two leases) gets the choose message, not `notFoundUnit`.
+- `docs/DEMO.md`: the troubleshooting row for this case is removed.
+
+**What it decided.**
+
+- A bad `?lease=` still gets `notFoundUnit`, so "not yours" and "does not exist" still look the same.
+- A business payer's account units count as payable leases, as they do on the money path. A payer with exactly one such unit is redirected to it.
+
+**What it left behind.**
+
+- The unit suite was not run in full; only `i18n.test.ts` was, because the change adds one query, which the e2e tests cover.

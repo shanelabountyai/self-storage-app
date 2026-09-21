@@ -266,6 +266,13 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.getByText(/couldn.t find that unit/i)).toBeVisible()
   })
 
+  // B-349. Dana holds exactly one lease, so a bare (bookmarked) URL goes to it.
+  test('a bare /portal/pay goes straight to the one unit there is', async ({ page }) => {
+    await page.goto('/portal/pay')
+    await expect(page).toHaveURL(/\/portal\/pay\?lease=/)
+    await expect(page.getByText(/couldn.t find that unit/i)).toHaveCount(0)
+  })
+
   test('/portal/pay has no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto('/portal')
     await page.getByRole('link', { name: /pay \$.* now/i }).first().click()
@@ -562,6 +569,15 @@ test.describe('the account nav (B-117, B-239)', () => {
 test.describe('signed in as the tenant on a payment plan', () => {
   test.beforeEach(async ({ page }) => {
     await signInAsPlanTenant(page)
+  })
+
+  // B-349. Pia holds two leases, so a bare URL cannot pick one for her.
+  test('a bare /portal/pay asks a two-unit tenant to choose, not "not found"', async ({ page }) => {
+    await page.goto('/portal/pay')
+    await expect(page.getByText(/more than one unit/i)).toBeVisible()
+    await expect(page.getByText(/couldn.t find that unit/i)).toHaveCount(0)
+    await page.getByRole('link', { name: 'Back to my account' }).click()
+    await expect(page).toHaveURL(/\/portal$/)
   })
 
   // a11y-state: /portal/payment-plan | active plan schedule

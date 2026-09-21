@@ -205,7 +205,6 @@ kept, because a stranger working through numbers is a pattern worth seeing.
 | Checkout stays on **Payment** after *Pay and complete move-in* | `stripe listen` is not running, or its secret differs from `STRIPE_WEBHOOK_SECRET` | Start it (setup step 3). Compare the secret it prints with `.env.local`, then restart the server if you changed it |
 | Staff sign-in refused with the right password | The TOTP code was already used in this 30-second window, or it expired | Wait for the next code |
 | Dana's portal still says the gate is off after paying | No scheduler runs locally | Run the `curl … /api/cron` command in stop 3 |
-| `/portal/pay` says *"We couldn't find that unit on your account"* | The URL was typed without `?lease=` | Use the *Pay $161 now* button on `/portal` |
 | Dana owes $0 or the wrong amount before you start | A previous run or an e2e sweep paid her balance | `npm run db:migrate:e2e`, then `rm -rf apps/web/.next/cache/fetch-cache` |
 | Reserve or checkout shows a unit or id that no longer exists | Cached page from before a reseed | `rm -rf apps/web/.next/cache/fetch-cache` and restart the server |
 | Every page fails in about a second, or the server exits | Something else holds :3000, or memory pressure killed it | `lsof -ti :3000`, `sysctl -n kern.memorystatus_level`; stop other projects' dev servers |
