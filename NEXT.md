@@ -4,10 +4,13 @@
 
 ## Start here
 
-**Review block 9 is finished.** Every open row left is on the blocked list below. **Owner chose (2026-09-21): closure deliverables next** (item 2). Item 1 comes after, if ever:
+**Project closure is done** (2026-09-21). All three deliverables exist, and their URLs are in the closure entry at the end of `docs/PROGRESS.md`:
 
-1. **A tenth review block** (operator, UX and accessibility agents over B-329–B-346), the way blocks 1–9 were raised.
-2. **Project closure deliverables** (global CLAUDE.md, *Definition of done*). None exist yet: `docs/DEMO.md`, the *Storage Business in Brief* exec-brief artifact, and the LinkedIn drafts in the Ledger. Record each URL in the repo.
+- `docs/DEMO.md`: walked end to end against a production build
+- Storage Business in Brief: https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf
+- LinkedIn drafts 25–29 in the Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
+
+**Next:** turn the three defects the demo walk found into backlog rows (closure entry, *What it left behind*): the lease's late-fee sentence, the self-referencing `--font-sans`, and bare `/portal/pay`. After that, a tenth review block is the only other open option.
 
 **B-346 is built** (2026-09-21, `ef3c813`). Write-off, void and non-zero adjustment on the ledger screen echo tenant, unit, amount, direction and balance after, and post only on a press that carries back `yes:<echoed cents>`. Cancel posts nothing. Each domain function takes `preview: true`, which runs every refusal and writes nothing. `AdminForm`'s confirm state has opt-in `confirmValue` and `cancel`.
 **B-345 is built** (2026-09-21, `a63a737`). "crossed in the mail" and "anything we mail you". `tests/us-english.test.ts` guards the en dictionary and the English catalog.

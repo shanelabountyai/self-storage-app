@@ -11126,3 +11126,26 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.**
 
 - The write-off re-reads the balance when it posts, and does not lock the previewed one. A payment landing in the milliseconds between the preview and the write is written off with the rest (ponytail comment in `actions.ts`; unowned).
+
+## Closure — demo script, exec brief, LinkedIn drafts (2026-09-21)
+
+**Commit:** `631a2de` (demo script and seed fix)
+
+**What it built.** The three closure deliverables from the global *Definition of done*.
+
+- `docs/DEMO.md`: a 20–25 minute walkthrough (public search, online move-in, a past-due tenant paying, the operator's admin, the gate simulator), with setup, accounts, troubleshooting and concessions. Every stop was walked in a real browser against a production build (`build:test` + `start:test`) on 2026-09-21. That walk included a complete card checkout with `stripe listen` forwarding, a portal payment, a manual cron tick, and the keypad granting the new code and denying `1234`.
+- **Storage Business in Brief**: https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf
+- **LinkedIn drafts 25–29** in the Lab Intelligence Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i), tagged Storage Business, queued after the Countertop posts as Impact, Scale, AI, MarTech, Impact.
+
+**A real bug, found walking the demo.** A completed move-in writes a `lease_rate_change` row that restricts its lease, so after one card checkout on a demo facility the next `db:migrate:e2e` died on `lease_rate_change_leaseId_fkey`. `seed-demo.mts`'s teardown now deletes those rows first. The e2e suite never finishes a card payment, which is why nothing caught it.
+
+**What it decided.**
+
+- The demo runs locally. The deployment is password-gated and seeded `--no-logins`, so none of the published credentials work there.
+- The brief's numbers are measured on the day: 4,685 unit tests (4,677 passed, 8 skipped), 1,614 e2e tests listed by `playwright test --list` (not re-run), 150 rows in `07-decisions.md`.
+
+**What it left behind.** These were found during the walk and not fixed. Each needs a backlog row:
+
+- **The lease quotes a late fee the product never charges.** `apps/web/lib/lease/build.ts` reads the lease's late-fee sentence from `FeeSchedule` (`feeType: 'late'`). Late fees are assessed from the late-fee ladder. At Austin South the lease says *"we charge a late fee of $20"* while the readiness banner says no late fee is ever charged.
+- **Every page renders in the browser's default serif.** `globals.css` sets `--font-sans: var(--font-sans)`, which refers to itself, so it resolves empty. The layout loads Geist as `--font-geist-sans` and nothing uses it. Measured: body `font-family` computes to `Times`.
+- **A bare `/portal/pay` (no `?lease=`) says "We couldn't find that unit on your account"** even for a tenant with one unit. It is reachable only by typing the URL. DEMO.md's troubleshooting table names it.
