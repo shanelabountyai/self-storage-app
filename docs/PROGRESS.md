@@ -10860,7 +10860,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-334 — the counter's Method-reset region stays in the tree, and the tender fields follow Method (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `aa79dd7`
 
 **What it built.**
 
