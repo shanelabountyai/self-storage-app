@@ -9,6 +9,7 @@ import {
   writeOffOpenLeaseBalance,
   type CorrectionRefusal,
 } from '@/lib/billing/corrections'
+import { projectRentRebill } from '@/lib/billing/invoices'
 import { fieldError, parseScaled, success, type FormState } from '@/lib/admin/form-state'
 import { formatCents } from '@/lib/format'
 import { requireStaffActor } from '@/lib/rbac/session'
@@ -36,10 +37,17 @@ function revalidateLedger(tenantId: string, leaseId: string): void {
 async function confirmCorrection(
   formData: FormData,
   leaseId: string,
-  what: { amountCents: number; confirmLabel: string; rows?: { label: string; value: string }[] },
+  what: {
+    amountCents: number
+    confirmLabel: string
+    rows?: { label: string; value: string }[]
+    balanceLabel?: string
+    rowsAfter?: { label: string; value: string }[]
+  },
 ): Promise<FormState | null> {
   const token = `yes:${what.amountCents}`
-  if (formData.get('confirmed') === token) return null
+  const pressed = formData.get('confirmed')
+  if (pressed === token) return null
 
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
@@ -53,7 +61,13 @@ async function confirmCorrection(
 
   return {
     status: 'confirm',
-    message: 'Check this before it is posted. It stays on this tenant\u2019s ledger permanently.',
+    // B-354. A re-ask needs different words, or the pre-mounted status region
+    // is handed the same text and announces nothing — and a manager who
+    // pressed Confirm believes it posted.
+    message:
+      typeof pressed === 'string' && pressed.startsWith('yes:')
+        ? 'The amount changed since you last checked, so nothing was posted. Check it again before it is posted.'
+        : 'Check this before it is posted. It stays on this tenant\u2019s ledger permanently.',
     echo: [
       { label: 'Tenant', value: lease ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : '—' },
       { label: 'Unit', value: lease?.unit.number ?? '—' },
@@ -63,7 +77,8 @@ async function confirmCorrection(
         label: 'Direction',
         value: what.amountCents < 0 ? 'Reduces what the tenant owes' : 'Increases what the tenant owes',
       },
-      { label: 'Balance after', value: formatCents(balanceCents + what.amountCents) },
+      { label: what.balanceLabel ?? 'Balance after', value: formatCents(balanceCents + what.amountCents) },
+      ...(what.rowsAfter ?? []),
     ],
     confirmLabel: what.confirmLabel,
     confirmValue: token,
@@ -229,6 +244,9 @@ export async function voidInvoiceAction(
   }
 
   const preview = await voidRentInvoice(actor, { ...input, preview: true })
+  // B-354. B-338's projection, read before the void: the echo and the success
+  // message state what the next run does rather than hedging on it.
+  const rebillCents = preview.ok ? await projectRentRebill(input.invoiceId) : null
   if (preview.ok) {
     // The invoice's own lease, not the form's hidden one: the echo names whose
     // ledger this lands on.
@@ -236,6 +254,16 @@ export async function voidInvoiceAction(
       amountCents: -preview.amountCents,
       confirmLabel: `Yes, void invoice ${preview.number}`,
       rows: [{ label: 'Invoice', value: preview.number }],
+      balanceLabel: 'Balance after the void',
+      rowsAfter: [
+        {
+          label: 'Billed again',
+          value:
+            rebillCents === null
+              ? 'No'
+              : `${formatCents(rebillCents)} on the next run, due the day it is raised. The tenant is emailed the updated invoice.`,
+        },
+      ],
     })
     if (confirm) return confirm
   }
@@ -270,6 +298,8 @@ export async function voidInvoiceAction(
 
   revalidateLedger(tenantId, leaseId)
   return success(
-    `Invoice ${result.number} voided and ${formatCents(result.amountCents)} taken off the ledger. If it was for the current period and the lease is active, the next billing run bills it again at the current rate.`,
+    rebillCents === null
+      ? `Invoice ${result.number} voided. This period will not be billed again.`
+      : `Invoice ${result.number} voided. The next billing run bills this period again at ${formatCents(rebillCents)} and emails the tenant.`,
   )
 }

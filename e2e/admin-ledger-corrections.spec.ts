@@ -242,6 +242,10 @@ test.describe('a correction announces itself outside the form it removes (B-333)
     await expectPreexisting(region)
 
     await item.getByLabel('Reason').selectOption('billing_error')
+    // B-354. Whether the period is billed again depends on today's date against
+    // the fixture's September invoice, so read B-338's own pre-submit sentence
+    // and hold the echo and the success message to the same answer.
+    const rebills = (await item.getByText(/bills this period again at \$150\.00/).count()) > 0
     const submit = item.getByRole('button', { name: /^Void/ })
     await submit.click()
 
@@ -250,6 +254,8 @@ test.describe('a correction announces itself outside the form it removes (B-333)
     const confirm = item.getByRole('button', { name: 'Yes, void invoice B333-void' })
     await expect(confirm).toBeVisible()
     await expect(item.getByText('Reduces what the tenant owes')).toBeVisible()
+    await expect(item.getByText('Balance after the void')).toBeVisible()
+    await expect(item.getByRole('definition').filter({ hasText: rebills ? /^\$150\.00 on the next run/ : /^No$/ })).toHaveCount(1)
     expect(await posted(leaseId)).toBe(0)
     await item.getByRole('button', { name: 'Cancel' }).click()
     await expect(confirm).toHaveCount(0)
@@ -266,9 +272,14 @@ test.describe('a correction announces itself outside the form it removes (B-333)
     // B-327/B-328's re-bill sentence, which is the one line that tells a
     // manager what the void does NEXT, and which nobody sighted or otherwise
     // ever saw before this row.
-    await expectAnnounced(region, /Invoice B333-void voided.*bills it again at the current rate/s, {
-      focused: true,
-    })
+    await expectAnnounced(
+      region,
+      rebills
+        ? /Invoice B333-void voided\. The next billing run bills this period again at \$150\.00/
+        : /Invoice B333-void voided\. This period will not be billed again\./,
+      { focused: true },
+    )
+    await expect(region).not.toContainText('If it was for')
     expect(await posted(leaseId)).toBe(1)
 
     await assertNoAxeViolations(page, { state: 'invoice voided' })
@@ -344,6 +355,9 @@ test.describe('a correction announces itself outside the form it removes (B-333)
     await expect(confirm).toBeVisible()
     await form.getByLabel('Change the balance by ($)').fill('-30.00')
     await confirm.click()
+    // B-354. The re-ask says so, or the status region repeats itself and
+    // announces nothing.
+    await expect(form.getByRole('status')).toContainText('nothing was posted')
     await expect(form.getByRole('definition').filter({ hasText: '$30.00' })).toHaveCount(1)
     expect(await posted(leaseId)).toBe(0)
 

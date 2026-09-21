@@ -11295,3 +11295,18 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** Nothing owned by an item.
 
 **Verification.** Typecheck and lint clean. The 10 suites that touch `paymentCredits`, `paymentReceipt`, `counterReceipt` or `payment.succeeded`: **127 passed**. The new case fails against the old `allocation.ts`. No schema change, so there is no drift check to run. e2e not run: no spec reaches a member-made payment on a business account.
+
+## B-354 — the void's confirm step states the re-bill, and a re-ask says nothing was posted (2026-09-21)
+
+**Commit:** `PENDING`
+
+**What it built.** `voidInvoiceAction` reads B-338's `projectRentRebill` once, before the void, and uses it twice. The confirm echo relabels "Balance after" as "Balance after the void" and adds a "Billed again" row: either "{amount} on the next run, due the day it is raised. The tenant is emailed the updated invoice." or "No". The success message follows the same projection. It reads "Invoice {n} voided. The next billing run bills this period again at {rebill} and emails the tenant." or "Invoice {n} voided. This period will not be billed again." The old "If it was for the current period…" hedge is gone. `confirmCorrection` now returns a different message when a `yes:` press does not match the token: "The amount changed since you last checked, so nothing was posted. Check it again before it is posted." The pre-mounted status region therefore changes text and announces the re-ask. This covers all three corrections, because they share the function. A first ask keeps its wording.
+
+**What it decided.**
+
+- **The projection is read before the real void, not after.** It reads the invoice's own discount lines, and the void releases those credits. Reading before the void is what B-338's pre-submit sentence already does, so the echo, the sentence and the success message cannot disagree.
+- **The e2e asks the page which answer applies rather than pinning one.** The fixture's invoice is hard-coded to September 2026, so whether it re-bills depends on today's date (D-142). The spec reads B-338's pre-submit sentence and holds the echo and the announcement to the same answer.
+
+**What it left behind.** The confirm box's `tabIndex={-1}` focus target is still unnamed. The row's Build list did not ask for a name, and the changed status text now carries the re-ask. What VoiceOver and NVDA actually say on the re-ask is B-254's check, which no agent may tick.
+
+**Verification.** Typecheck and lint clean. `admin-ledger-corrections.spec.ts` (desktop-chrome, production build): **6 passed**. It now asserts the "Balance after the void" row, the "Billed again" row, the projection-matched success text with no "If it was for", and "nothing was posted" in `getByRole('status')` after the mismatched Confirm. `ledger-corrections-db` and `void-rebill-db`: **26 passed**. No schema change. Staff-facing only, so the public accessibility statement is unaffected.
