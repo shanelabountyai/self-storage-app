@@ -2803,6 +2803,12 @@ function reviewedOn(locale: Locale): string {
 // `tel:` link in the reminder's language (SC 3.1.1); it is page text, not a
 // second `role="alert"`. No other visible line changes; `LAST_REVIEWED` is not
 // bumped (D-115).
+//
+// Re-read 2026-09-21, at B-343. The receipt email now carries the receipt
+// number, the account and the check or money-order number as a captioned
+// table through `tableHtml` (`<th scope="row">`, SC 1.3.1) and as lines in the
+// text part, in both languages. It is an email, and this page makes no claim
+// about email, so nothing is added or withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

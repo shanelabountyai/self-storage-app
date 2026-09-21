@@ -156,6 +156,11 @@ export type CommsProse = {
   /// B-331. Always says what it is the balance OF: the account when
   /// `paymentCredits` quoted the account's figure, otherwise the units.
   receiptBalanceLine: (amount: string, inCredit: boolean, account: string | null, units: string[]) => string
+  /// B-343. The identifiers the paper receipt prints, as a table — so an AP
+  /// department can match the email to the check it cut.
+  receiptDetailsCaption: string
+  receiptDetailsColumns: readonly [string, string]
+  receiptDetailLabels: { receipt: string; account: string; paidBy: string }
 
   // ── referral (PRD 10 §6.3) ────────────────────────────────────────────────
   referralRewardReferee: (amount: string) => string
@@ -274,6 +279,9 @@ const en: CommsProse = {
       ? `Credit on ${scope}: ${amount}. It comes off your next bill.`
       : `Balance on ${scope} after this payment: ${amount}.`
   },
+  receiptDetailsCaption: 'Receipt details',
+  receiptDetailsColumns: ['Detail', 'Value'],
+  receiptDetailLabels: { receipt: 'Receipt number', account: 'Account', paidBy: 'Paid by' },
 
   referralRewardReferee: (amount) => `${amount} comes off your first invoice.`,
   referralRewardReferrer: (amount) => `${amount} comes off your next invoice.`,
@@ -450,6 +458,9 @@ const es: CommsProse = {
       ? `Saldo a favor de ${scope}: ${amount}. Se aplicará a su próxima factura.`
       : `Saldo de ${scope} después de este pago: ${amount}.`
   },
+  receiptDetailsCaption: 'Detalles del recibo',
+  receiptDetailsColumns: ['Dato', 'Valor'],
+  receiptDetailLabels: { receipt: 'Número de recibo', account: 'Cuenta', paidBy: 'Pagado con' },
 
   referralRewardReferee: (amount) => `Se le descontarán ${amount} de su primera factura.`,
   referralRewardReferrer: (amount) => `Se le descontarán ${amount} de su próxima factura.`,

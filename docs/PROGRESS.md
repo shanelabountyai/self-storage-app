@@ -11044,3 +11044,24 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.**
 
 - Nothing. The public accessibility statement makes no claims about email, so it is unchanged.
+
+## B-343 — the emailed receipt carries the identifiers the paper receipt prints (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.**
+
+- `payment_receipt` (both languages) has a new `{{payment.details}}` paragraph after the opening sentence, and it is a required merge field. It is a structured `MergeValue`: lines in the text part, and a captioned table through `tableHtml` in the HTML part (`<th scope="row">`, SC 1.3.1). The rows are *Receipt number* (only when the payment has one), *Account* (only when `paymentCredits` names one), and *Paid by*, which always appears and carries the check or money-order number (`Check #4321`, `Cheque #4321`).
+- `lib/comms/service.ts`: `receiptDetailsValue` builds it from `Payment.receiptNumber`, `Payment.checkNumber` and `paymentCredits().accountName`. Those are the columns `receiptRows` reads, so the paper receipt and the email cannot disagree. The strings are in `lib/comms/prose.ts` (`receiptDetails*`). The field is documented in `merge-fields.ts`.
+- Tests: `tests/receipt-balance-scope-db.test.ts` takes a check payment on an account at the counter. It checks that the text and HTML parts carry the receipt number, the check number and the account name, matching `receiptRows`. It also checks that a card payment's email renders with no receipt number.
+
+**What it decided.**
+
+- *Paid by* is always a row, so the table is never empty. `renderEmail` treats an empty required field as a failure, and an optional table would otherwise have needed a special case in the renderer.
+- A card receipt still has no number. That was B-320's decision, and this item does not re-open it.
+
+**What it left behind.**
+
+- The opening sentence still names the method too (*"by check"*), so the method appears twice. That is deliberate: the sentence reads on its own, and the table is the part someone files.
+- Templates are seeded state (B-206), so run `db:migrate:test` after switching to or from this branch.
+- The public accessibility statement makes no claims about email. A re-read note was added and no claim changed.

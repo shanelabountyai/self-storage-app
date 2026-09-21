@@ -27,7 +27,7 @@ let accountId = ''
 const tenantIds: string[] = []
 let counter = 0
 
-const sends: { subject: string; body: string }[] = []
+const sends: { subject: string; body: string; html: string }[] = []
 
 const t = (key: MessageKey, vars?: Record<string, string | number>) =>
   translate(dictionaryFor('en'), key, vars)
@@ -112,13 +112,17 @@ async function openRent(leaseId: string, cents: number) {
 }
 
 async function emailReceipt(paymentId: string): Promise<string> {
+  return (await emailReceiptParts(paymentId)).body
+}
+
+async function emailReceiptParts(paymentId: string) {
   sends.length = 0
   const event = await prisma.domainEvent.create({
     data: { name: 'payment.succeeded', entityType: 'Payment', entityId: paymentId, facilityId, payload: {} },
   })
   await processCommsEvent(event)
   expect(sends).toHaveLength(1)
-  return sends[0].body
+  return sends[0]
 }
 
 async function counterBalanceRow(paymentId: string) {
@@ -131,7 +135,7 @@ describeDb('receipt balance scope (B-331)', () => {
     vi.spyOn(provider, 'selectProvider').mockImplementation(() => ({
       name: 'test',
       async sendEmail(email) {
-        sends.push({ subject: email.subject ?? '', body: email.text ?? '' })
+        sends.push({ subject: email.subject ?? '', body: email.text ?? '', html: email.html ?? '' })
         return { ok: true, providerMessageId: `test_${sends.length}` }
       },
     }))
@@ -261,5 +265,54 @@ describeDb('receipt balance scope (B-331)', () => {
       label: 'Balance on unit P-2',
       value: '$0.00',
     })
+  })
+
+  // B-343. The email carries what the paper receipt prints, from the same
+  // columns `receiptRows` reads, so an AP department can match it to its check.
+  it('carries the receipt number, check number and account the paper receipt prints', async () => {
+    const payerId = await tenant('ap')
+    const name = `Beta Hauling ${suffix}`
+    const account = (
+      await prisma.billingAccount.create({ data: { facilityId, name, payerTenantId: payerId } })
+    ).id
+    await openRent(await makeLease(await tenant('hal'), 'B-1', account), 10_000)
+
+    const result = await recordCounterPayment(staff(), {
+      facilityId,
+      tenantId: payerId,
+      leaseId: '',
+      accountId: account,
+      method: 'check',
+      checkNumber: '4321',
+      amountCents: 10_000,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    const receipt = (await counterReceipt(staff(), result.paymentId))!
+    const rows = receiptRows(receipt)
+    expect(rows).toContainEqual({ label: 'Account', value: name })
+    expect(rows).toContainEqual({ label: 'Paid by', value: 'Check #4321' })
+
+    const { body, html } = await emailReceiptParts(result.paymentId)
+    expect(body).toContain(`Receipt number: #${receipt.receiptNumber}`)
+    expect(body).toContain(`Account: ${name}`)
+    expect(body).toContain('Paid by: Check #4321')
+    expect(html).toContain(`<th scope="row" align="left">Receipt number</th><td align="right">#${receipt.receiptNumber}</td>`)
+    expect(html).toContain(`<th scope="row" align="left">Account</th><td align="right">${name}</td>`)
+    expect(html).toContain('<th scope="row" align="left">Paid by</th><td align="right">Check #4321</td>')
+  })
+
+  it('renders a card receipt with no receipt number', async () => {
+    const tenantId = await tenant('cara')
+    await makeLease(tenantId, 'C-1')
+    const payment = await prisma.payment.create({
+      data: { facilityId, tenantId, amountCents: 5_000, method: 'card', status: 'succeeded' },
+    })
+
+    const { body, html } = await emailReceiptParts(payment.id)
+    expect(body).toContain('Paid by: Card')
+    expect(body).not.toContain('Receipt number')
+    expect(html).not.toContain('Receipt number')
   })
 })

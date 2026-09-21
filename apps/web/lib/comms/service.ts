@@ -5,6 +5,7 @@ import type {
   MessageChannel,
   MessageClassification,
   NotificationCategory,
+  PaymentMethod,
   SuppressionReason,
 } from '@storage/db'
 import { codeForLease } from '@/lib/access/provision'
@@ -768,6 +769,30 @@ function scheduleValue(
   }
 }
 
+/// B-343. The identifiers the paper receipt prints (`receiptRows`), read from
+/// the same Payment columns and `paymentCredits` account, so the email and the
+/// printout cannot disagree. "Paid by" is always present, so the table is never
+/// empty; a card payment has no receipt number (B-320) and simply omits the row.
+function receiptDetailsValue(
+  payment: { method: PaymentMethod; receiptNumber: number | null; checkNumber: string | null },
+  accountName: string | null,
+  locale: Locale,
+): MergeValue {
+  const say = proseFor(locale)
+  const label = say.receiptDetailLabels
+  const method = say.paymentMethods[payment.method]
+  const paidBy = method.charAt(0).toUpperCase() + method.slice(1)
+  const rows = [
+    ...(payment.receiptNumber !== null ? [[label.receipt, `#${payment.receiptNumber}`]] : []),
+    ...(accountName ? [[label.account, accountName]] : []),
+    [label.paidBy, payment.checkNumber ? `${paidBy} #${payment.checkNumber}` : paidBy],
+  ]
+  return {
+    text: rows.map(([name, value]) => `${name}: ${value}`).join('\n'),
+    html: tableHtml({ caption: say.receiptDetailsCaption, columns: [...say.receiptDetailsColumns], rows }),
+  }
+}
+
 type ContextExtender = (event: DomainEvent, recipient: Recipient) => Promise<MergeContext>
 
 /// B-051. A one-tap pay link for this message, or the portal login as a
@@ -1276,7 +1301,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     const [payment, credits] = await Promise.all([
       prisma.payment.findUnique({
         where: { id: event.entityId },
-        select: { amountCents: true, receivedAt: true, method: true },
+        select: { amountCents: true, receivedAt: true, method: true, receiptNumber: true, checkNumber: true },
       }),
       paymentCredits(event.entityId),
     ])
@@ -1331,6 +1356,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       'payment.method': proseFor(recipient.locale).paymentMethods[payment.method],
       // B-317. Negative is credit, said in words — not clamped to "$0.00".
       // B-331. The line names what the balance covers — the account, or the units.
+      'payment.details': receiptDetailsValue(payment, accountName, recipient.locale),
       'payment.balance_line': say.receiptBalanceLine(
         formatCents(Math.abs(balanceCents), tag),
         balanceCents < 0,

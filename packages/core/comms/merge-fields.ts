@@ -214,6 +214,8 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     // B-316. Built in code: one unit, a count, or the account's name.
     { field: 'payment.subject_for', description: 'Which unit, how many, or which account — for the subject', sample: 'for unit A-12' },
     { field: 'payment.unit_lines', description: 'Every unit the payment credited, one per line', sample: '- Unit A-12: $129.00' },
+    // B-343. What the paper receipt prints: receipt number, account, check number.
+    { field: 'payment.details', description: 'Receipt number (counter payments), account and how they paid, with the check or money-order number — lines in the plain-text part, a table in the HTML one. Put it on a line of its own.', sample: 'Receipt number: #1042\nAccount: Acme Supply Co.\nPaid by: Check #1234' },
     // B-317. A sentence, because a negative balance reads as credit, not "$0.00".
     { field: 'payment.balance_line', description: 'The balance after this payment, or the credit left, naming the account or units it covers', sample: 'Balance on unit C-7 after this payment: $0.00.' },
   ],
