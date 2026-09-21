@@ -11328,7 +11328,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-356 — an expired pay link opens the magic-link form for tenants with no password (2026-09-21)
 
-**Commit:** `pending`
+**Commit:** `75dc582`
 
 **What it built.** With `reason=pay_link_expired`, `/login` renders the magic-link `<details>` open, so the route a checkout-only tenant can actually use is visible without a click. It still carries `from=/portal/pay?lease=<id>`. `login.payLinkExpired` now reads "That payment link has expired. To pay, sign in below. No password? We can email you a sign-in link. Or call {phone}." (ES to match). A bare `/login` keeps the disclosure closed.
 
