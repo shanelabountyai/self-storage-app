@@ -11358,7 +11358,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-358 — "Pay A-1 and B-2 together" hands focus to the Unit select, and the warning names the lockout (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `4afcce3`
 
 **What it built.** In `counter-payment-form.tsx`, pressing "Pay … together" moves focus to the Unit select, which now holds the `units:` value. Before this, the button unmounted itself and focus fell to `<body>`. The form's existing status region now says "Now paying {units} together." until the next subject or method change. It is carried through `chooseSubject`'s new `note` argument into B-319's `methodReset` state, so there is still only one region. If the method was Card, the Card-to-Cash reset and the note are announced together. `overflowWarning` now adds "Credit on A-1 does not take B-2 off its past-due schedule, so B-2 can still be locked out." when any other owing unit has `daysPastDue > 0`, and pluralises for several units.
 
