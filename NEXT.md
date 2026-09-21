@@ -4,10 +4,11 @@
 
 ## Start here
 
-1. **B-330 (`83azzb`)**: an account payment at the counter can settle the payer's own units instead of the account's. Work down the block from there, skipping B-333 and B-338 (built). B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
+1. **B-331 (`83azzc`)**: the receipt calls the credited units' balance the account's balance. Its dependency B-330 is built. Work down the block from there, skipping B-333 and B-338 (built). B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
 
 **B-329 is built** (2026-09-20, `5a6c9b3`), minus its production count — see Owner actions.
 **B-333 is built** (2026-09-20, `af32799`).
+**B-330 is built** (2026-09-21, `d3c23d7`). `applyPayment` takes `accountId`; the counter, counter card and `/portal/pay?account=` all pass it (card via PaymentIntent metadata). The Stripe idempotency namespace moved to `v3`.
 **B-338 is built** (2026-09-20, `ec2b380`). It also fixed `outstandingCents` to ignore `void`/`uncollectible` invoices — every delinquency consumer (late fees, dunning, access gate, reports, POS) was counting cancelled invoices as owed. If a later item sees a delinquency figure drop after a void or write-off, that is this fix, not a regression.
 
 ## Owner actions
