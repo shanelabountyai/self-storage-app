@@ -2842,6 +2842,12 @@ function reviewedOn(locale: Locale): string {
 // unit now sees "Balance on unit C-5" instead of the account's name and total.
 // Same row, same header markup as B-331; only which figure fills it changes.
 // Nothing is added or withdrawn.
+//
+// Re-read 2026-09-21, at B-356. `/login?reason=pay_link_expired` now renders
+// the magic-link `<details>` open and rewords its sentence; same native
+// disclosure, still plain page text, no second `role="alert"`. That state is
+// still unscanned (B-362 owns it), and this page makes no claim about it, so
+// nothing is added or withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

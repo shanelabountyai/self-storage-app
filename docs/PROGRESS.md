@@ -11325,3 +11325,18 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** Nothing owned by an item. There is no automated assertion on either string: no spec reaches a partly-paid invoice on the ledger screen, and a test on a literal string only proves the edit was made.
 
 **Verification.** Typecheck and lint clean. `void-rebill-db`: **12 passed**. Staff-facing only, so the public accessibility statement was not affected. No schema change.
+
+## B-356 — an expired pay link opens the magic-link form for tenants with no password (2026-09-21)
+
+**Commit:** `pending`
+
+**What it built.** With `reason=pay_link_expired`, `/login` renders the magic-link `<details>` open, so the route a checkout-only tenant can actually use is visible without a click. It still carries `from=/portal/pay?lease=<id>`. `login.payLinkExpired` now reads "That payment link has expired. To pay, sign in below. No password? We can email you a sign-in link. Or call {phone}." (ES to match). A bare `/login` keeps the disclosure closed.
+
+**What it decided.**
+
+- **Still plain page text, not a second `role="alert"`** (B-314's carried gap).
+- **Built without the production count the row named** (`passwordHash IS NULL`). Opening the form costs a password-holder nothing, so the change is right whatever the share is.
+
+**What it left behind.** The expired-link state is still not axe-scanned. B-362 owns that.
+
+**Verification.** Typecheck and lint clean. `i18n` + `login-flow-db`: **34 passed**. ``e2e/pay-link.spec.ts` (**20 passed**, production build) asserts the open disclosure and its `from` in both languages and in both projects, and a bare `/login` with it closed. The accessibility statement was re-read and a note added; no visible line changes. No schema change.

@@ -147,9 +147,12 @@ export default async function LoginPage({
           states the rule as a GENERAL FACT (D-40). A general sentence leaks
           nothing about any particular address: it is true of staff accounts as
           a class, and says nothing about whether the address in the box is
-          one. */}
+          one.
+
+          B-356: opened for an expired pay link. Checkout never sets a
+          password, so for most of those tenants this is the only route in. */}
       {hint !== 'staff' && (
-      <details className="border-input rounded-lg border p-4">
+      <details open={reason === 'pay_link_expired'} className="border-input rounded-lg border p-4">
         <summary className="cursor-pointer text-sm font-medium">{t('login.magicLinkSummary')}</summary>
         <p className="text-muted-foreground mt-2 text-sm text-pretty">{t('login.magicLinkBody1')}</p>
         <p className="text-muted-foreground mt-2 text-sm text-pretty">{t('login.magicLinkBody2')}</p>

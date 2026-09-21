@@ -23,6 +23,10 @@ test('an expired or unknown pay link lands on the login, never a dead end', asyn
   // post-login destination — never a dead end."
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+
+  // B-356. Only an expired link opens the magic-link form; a bare login keeps it shut.
+  await page.goto('/login')
+  await expect(page.locator('details')).not.toHaveAttribute('open')
 })
 
 test('a bad token says the same thing whatever kind of bad it is', async ({ page }) => {
@@ -133,6 +137,11 @@ test.describe('the receipt screen', () => {
         'href',
         `tel:${SITE.phone.href}`,
       )
+      // B-356. Checkout sets no password, so the magic-link route is open
+      // without a click, and still returns to this lease's payment.
+      const magic = page.locator('details')
+      await expect(magic).toHaveAttribute('open', '')
+      await expect(magic.locator('input[name="from"]')).toHaveValue(`/portal/pay?lease=${leaseId}`)
 
       await page.getByLabel(translate(dict, 'auth.email')).first().fill(`e2e-pay-link-${test.info().project.name}@example.com`)
       await page.getByLabel(translate(dict, 'auth.password')).fill(PASSWORD)

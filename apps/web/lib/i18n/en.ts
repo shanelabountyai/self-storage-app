@@ -1823,7 +1823,8 @@ export const en = {
   'login.title': 'Sign in',
   'login.error.magicLinkInvalid':
     'That sign-in link is no longer good. It may have expired or already been used.',
-  'login.payLinkExpired': 'That payment link has expired. Sign in to pay, or call',
+  'login.payLinkExpired':
+    'That payment link has expired. To pay, sign in below. No password? We can email you a sign-in link. Or call',
   'login.staffCodeHint':
     'Staff only: the 6-digit code from your authenticator app, or a recovery code. Leave it blank if you are a customer, or if you have not set up two-factor authentication yet.',
   'login.code': 'Authentication code',
