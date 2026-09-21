@@ -11283,7 +11283,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-353 — a non-payer member's receipt quotes their unit, not the company's balance (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `4f6d91f`
 
 **What it built.** `paymentCredits` (`lib/billing/allocation.ts`) now takes the account scope only when the payment's `tenantId` is the account's `payerTenantId`, as well as every credited lease being one of its occupying units. Otherwise it falls to unit scope with `accountName: null`. Every receipt surface (the email and its B-343 details table, `/portal/pay/done`, `/pay/[token]/done`, the counter receipt) reads that one function, so one guard covers all of them. A new case in `tests/receipt-balance-scope-db.test.ts` has Dana, a member of an account she does not pay, settle her own $80 unit C-5 at the counter while another member's unit owes $500. Every surface now reads "Balance on unit C-5" at $0.00 with no account name. On the old code the email assertion fails. The payer's existing cases pass unchanged.
 

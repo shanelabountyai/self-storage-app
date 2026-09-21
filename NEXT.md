@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-353**. Continue down review block 10 in order.
+**Next: B-354**. Continue down review block 10 in order.
+
+**B-353 is built** (2026-09-21, `4f6d91f`). `paymentCredits` takes account scope only when the payment's tenant is the account's payer. A member paying their own unit gets that unit's balance and no account name on every receipt.
 
 **B-352 is built** (2026-09-21, `ec7e240`). `voidRentInvoice` refuses `payment_in_flight` while a pending or processing charge is allocated to the invoice, and `applyPayment` locks its target invoices and drops any no longer open. PROGRESS records two narrow leftovers, neither owned by an item.
 
