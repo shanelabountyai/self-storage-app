@@ -4,8 +4,9 @@
 
 ## Start here
 
-1. **B-342 (`83azzn`)**: next in review block 9. Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
+1. **B-343 (`83azzo`)**: next in review block 9. Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
 
+**B-342 is built** (2026-09-21, `03ea9ac`). When `accountName` is set, the account-access mail has its own subject (*"You can now see {account} at {site}"*) and lead, and a recovery line that links `/forgot-password`, in EN and ES. The ordinary reset email is unchanged, and nothing is re-sent.
 **B-341 is built** (2026-09-21, `950b49d`). The print page's `<article>` carries the tenant's `lang`, the letter and print-time dates are formatted in that locale, and the print-time line is two dictionary keys (`letter.printedCall` / `letter.printedSignIn`). `/admin/tasks` renders B-323's detail through `taskDetailSegments`, so the quoted subject gets its own `lang`. Both use the tenant's CURRENT preference: `Message` stores no locale (ponytail comment; unowned).
 **B-340 is built** (2026-09-21, `920fcce`). The print page adds *"Printed {date}. To pay, call {phone} or sign in at {host}/login."* after the `<article>` and leaves the body verbatim. There is no Print button while the address is incomplete. The button and the profile link now have accessible names that start with their visible text, and the link never falls back to the template key. The repo has its first `.tsx` render test (`tests/message-print-page.test.tsx`). The print-time line is English only, and B-341 owns that.
 **B-339 is built** (2026-09-21, `4edca09`). Confirmed the ladder cures per lease and does not net tenant credit, so the full row shipped. On `/admin/pos`, an amount over the picked unit's balance names the tenant's other owing units and offers a `units:` subject that settles them together. Card is not offered on that subject. B-305's single-unit restriction is unchanged.
