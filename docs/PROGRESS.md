@@ -11068,7 +11068,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-344 — the counter card screens say "payer" for an account, link the account, and offer a retry (2026-09-21)
 
-**Commit:** `pending`
+**Commit:** `924cdd5`
 
 **What it built.**
 

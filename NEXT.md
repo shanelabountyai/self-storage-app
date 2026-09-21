@@ -4,8 +4,9 @@
 
 ## Start here
 
-1. **B-344 (`83azzp`)**: next in review block 9. Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
+1. **B-345 (`83azzq`)**: next in review block 9. Change two British phrases to US English in the comms catalog and the en dictionary, then add a guard test. Templates are seeded state, so run `db:migrate:test` after the edit. Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
 
+**B-344 is built** (2026-09-21, `924cdd5`). For a business account, the counter card screens say "payer" instead of "tenant", and the card-on-file line names whose card it is. The done page links `/admin/billing/accounts/[id]`, and a declined card links back to `/admin/pos/card` with the same subject and amount.
 **B-343 is built** (2026-09-21, `47e106b`). The receipt email has a `{{payment.details}}` table (receipt number when there is one, the account, and *Paid by* with the check or money-order number). It reads the same columns `receiptRows` does, in both languages. Templates are seeded state, so run `db:migrate:test` when you switch branches.
 **B-342 is built** (2026-09-21, `03ea9ac`). When `accountName` is set, the account-access mail has its own subject (*"You can now see {account} at {site}"*) and lead, and a recovery line that links `/forgot-password`, in EN and ES. The ordinary reset email is unchanged, and nothing is re-sent.
 **B-341 is built** (2026-09-21, `950b49d`). The print page's `<article>` carries the tenant's `lang`, the letter and print-time dates are formatted in that locale, and the print-time line is two dictionary keys (`letter.printedCall` / `letter.printedSignIn`). `/admin/tasks` renders B-323's detail through `taskDetailSegments`, so the quoted subject gets its own `lang`. Both use the tenant's CURRENT preference: `Message` stores no locale (ponytail comment; unowned).
