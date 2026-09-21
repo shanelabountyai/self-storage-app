@@ -57,12 +57,26 @@ export async function sendAuthEmail({
 }: SendArgs): Promise<void> {
   const minutes = Math.round((expiresAt.getTime() - Date.now()) / 60_000)
   const say = proseFor(locale).direct
-  const lead = accountName === undefined ? [] : [say.authAccountAccess(accountName, SITE.name)]
-  // B-300. The ignore sentence is omitted exactly when `lead` is present: a
+  const forgotUrl = new URL('/forgot-password', url).href
+  // B-300. The ignore sentence is omitted exactly when `accountName` is set: a
   // business-account member did NOT request this mail, and telling them to
   // ignore it tells them to discard the access it was sent to give them.
-  const tail = accountName === undefined ? [say.authIgnore] : []
-  const text = [...lead, say.authIntro[purpose], url, say.authExpiry(minutes), ...tail].join('\n\n')
+  // B-342. Nor is it framed as a password reset: that reads as phishing.
+  const text = (
+    accountName === undefined
+      ? [say.authIntro[purpose], url, say.authExpiry(minutes), say.authIgnore]
+      : [
+          say.authAccountAccess(accountName, SITE.name),
+          say.authAccountAccessIntro,
+          url,
+          say.authExpiry(minutes),
+          say.authAccountAccessRecovery(forgotUrl),
+        ]
+  ).join('\n\n')
+  const subject =
+    accountName === undefined
+      ? say.authSubject[purpose](SITE.name)
+      : say.authAccountAccessSubject(accountName, SITE.name)
 
   // Auth tokens are minted once per request (no stable id to key an
   // idempotency column on), so a random key is correct here — unlike a
@@ -79,9 +93,15 @@ export async function sendAuthEmail({
     recipientTenantId,
     to,
     fromName: SITE.name,
-    subject: say.authSubject[purpose](SITE.name),
-    // Escaped since B-287 put a staff-typed account name in the text.
-    html: `<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>`,
+    subject,
+    // Escaped since B-287 put a staff-typed account name in the text. B-342
+    // links the two URLs we wrote, never anything staff typed.
+    html: `<p>${[url, forgotUrl]
+      .reduce(
+        (html, href) => html.replaceAll(escapeHtml(href), `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`),
+        escapeHtml(text),
+      )
+      .replace(/\n/g, '<br>')}</p>`,
     text,
   })
 

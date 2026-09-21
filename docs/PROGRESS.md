@@ -11025,3 +11025,22 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 - Both surfaces use the tenant's **current** preference. `Message` records no locale, so a letter composed before the tenant switched language, or one whose template fell back to English (`effectiveTemplate`), is marked with the wrong `lang`. Recording the rendered locale on `Message` fixes it. No item owns this yet. Both places carry a `ponytail:` comment.
 - The public accessibility statement makes no claims about `/admin`, so it is unchanged.
+
+## B-342 — the business-account access email no longer reads like a password reset (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.**
+
+- `lib/comms/prose.ts`: three new keys in both languages (usted, D-122). `authAccountAccessSubject` is *"You can now see {account} at {site}"* / *"Ya puede ver {account} en {site}"*. `authAccountAccessIntro` is *"Use this link to set up your sign-in:"*. `authAccountAccessRecovery(url)` is *"If the link has expired, ask for a new one here: {url}"*. The last paragraph of `authAccountAccess` moved into the recovery line, which now comes after the expiry.
+- `lib/auth/send-auth-email.ts`: when `accountName` is set, the mail uses those three keys in place of `authSubject` / `authIntro`. The recovery URL is `/forgot-password` on the same origin as the link. The HTML turns the two URLs the sender wrote into `<a>`s. Anything staff typed stays escaped text and is never linked. The magic-link and ordinary reset emails keep their wording.
+- Tests: `tests/auth-email-account-access.test.ts` checks both languages: no "reset" or "restablec" in the subject or lead, the recovery line is in the text, and `/forgot-password` is an `<a href>` in the HTML. It also checks that the ordinary reset email is unchanged. `tests/billing-account-members-db.test.ts` asserts the new subject. `auth-email-ignore` and `auth-email-conditionals` pass as they were.
+
+**What it decided.**
+
+- The recovery link text is the URL. Its purpose comes from the sentence around it, which SC 2.4.4 (A) allows. `lang` on the root was already handled: `sendDirectEmail` has wrapped every direct send in `<div lang>` since B-265.
+- Nothing is re-sent. B-301's `accountAccessKey(memberId)` idempotency is untouched, and B-287's 60-minute token is unchanged.
+
+**What it left behind.**
+
+- Nothing. The public accessibility statement makes no claims about email, so it is unchanged.

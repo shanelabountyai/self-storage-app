@@ -308,7 +308,7 @@ describeDb('authorized users on a business account', () => {
     expect(messages[0].templateKey).toBe('auth_password_reset')
     expect(messages[0].toAddress).toBe(emailFor('reader'))
     expect(messages[0].subjectSnapshot).toBe(
-      proseFor('es').direct.authSubject.password_reset(SITE.name),
+      proseFor('es').direct.authAccountAccessSubject(`Acme Members ${suffix}`, SITE.name),
     )
     expect(messages[0].bodySnapshot).toContain(
       proseFor('es').direct.authAccountAccess(`Acme Members ${suffix}`, SITE.name),
