@@ -10928,3 +10928,25 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - B-331's re-read note in `accessibility/page.tsx` says neither receipt is scanned. That was true when it was written. The B-336 note below it supersedes it for `/pay/[token]/done`.
 
 **Verification.** `e2e/pay-link.spec.ts`: 20/20 across both projects (0 failed, skipped or flaky). Unit suites: pay-links, scan-coverage, accessibility-statement, i18n, login-flow and live-region, 77/77. Typecheck clean. Lint: 0 errors (6 pre-existing warnings). No migration.
+
+## B-337 — the refused-amount message says Pay charges the full balance, not that the box changed (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.**
+
+- `paypg.balanceRestored` ("We've put your full balance back in for now.") is replaced by `paypg.refusedChargesBalance` in both locales: "We did not accept that amount, so the card form below will charge your full balance of {amount} unless you correct it." / "No aceptamos esa cantidad, así que el formulario de tarjeta de abajo cobrará su saldo completo de {amount} a menos que la corrija."
+- `/portal/pay` and `/pay/[token]` fill `{amount}` with `formatRate(amountCents)`, the same expression passed to the Payment Element's `amountLabel`. The refusal paragraph, its id and B-302's `aria-describedby` are unchanged.
+- Tests: `tests/i18n.test.ts` pins that both locales name the amount and neither says the balance was put back. `tests/refusal-fragment.test.ts` asserts, on both routes, that the refusal and `amountLabel` use the same expression. `e2e/portal.spec.ts`'s refused-amount test now checks in the rendered page that the figure the refusal names equals "Paying today".
+
+**What it decided.**
+
+- The key was renamed rather than reworded, so no caller can keep the old meaning by accident.
+- The figure is `formatRate` (what the Pay button says), not `formatCents` (what "Paying today" says). The e2e compares them as numbers.
+
+**What it left behind.**
+
+- `/pay/[token]` still cannot be rendered by a unit test (a live token is needed), and `e2e/pay-link.spec.ts` does not produce a refusal. That route is covered by the source assertion only.
+- The VoiceOver pass over the Spanish refusal belongs to B-254.
+
+**Verification.** Unit: 4651 passed, 8 skipped (281 files). `e2e/portal.spec.ts` refused-amount test: 2/2 (desktop and mobile). Typecheck clean. Lint: 0 errors (6 pre-existing warnings). The accessibility statement was re-read and is still accurate (`a11y.true.errors`), so it was not edited. No migration.

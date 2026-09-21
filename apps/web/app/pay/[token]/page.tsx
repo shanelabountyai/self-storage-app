@@ -140,7 +140,7 @@ export default async function PayLinkPage({
           className="border-input rounded-md border p-3 text-sm text-pretty"
         >
           {t(AMOUNT_PROBLEM_KEYS[checked.problem], { min: formatCents(MIN_PAYMENT_CENTS) })}{' '}
-          {t('paypg.balanceRestored')}
+          {t('paypg.refusedChargesBalance', { amount: formatRate(amountCents) })}
         </p>
       )}
 

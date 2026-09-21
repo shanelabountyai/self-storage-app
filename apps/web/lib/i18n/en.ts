@@ -954,7 +954,10 @@ export const en = {
   'paypg.gateOnAfter': 'turns it back on, usually within a couple of minutes.',
   'paypg.gateShortBefore': 'turns it back on — paying',
   'paypg.gateShortAfter': 'leaves it switched off.',
-  'paypg.balanceRestored': "We've put your full balance back in for now.",
+  // B-337. The field echoes what was typed (B-302), so this must never claim
+  // the box changed — only what Pay will charge and how to change it.
+  'paypg.refusedChargesBalance':
+    'We did not accept that amount, so the card form below will charge your full balance of {amount} unless you correct it.',
   'paypg.payDifferent': 'Pay a different amount',
   'paypg.cardDetails': 'Card details',
   'paypg.callInstead': "We can't take card payments online just now. Call",

@@ -361,6 +361,20 @@ test.describe('signed in as the demo tenant', () => {
     await expect(page.locator(`#${describedBy}`)).toHaveText(
       /Enter an amount like 75 or 75\.50\./,
     )
+
+    // B-337. The box still says "seventy five", so the refusal has to say what
+    // Pay will actually charge: the same full balance "Paying today" shows (one
+    // is `formatRate`, the other `formatCents`, so compare the number).
+    const cents = (text: string) => Math.round(Number(text.replace(/[^0-9.]/g, '')) * 100)
+    const payingToday = await page
+      .getByRole('row', { name: /Paying today/ })
+      .getByRole('cell')
+      .last()
+      .innerText()
+    const named = (await refusal.innerText()).match(/full balance of (\$[\d,.]+)/)?.[1]
+    expect(named).toBeTruthy()
+    expect(cents(named!)).toBe(cents(payingToday))
+    await expect(refusal).not.toHaveText(/put .*back/i)
   })
 
   test('/portal/methods lists autopay per unit and has no WCAG 2.1 AA violations', async ({

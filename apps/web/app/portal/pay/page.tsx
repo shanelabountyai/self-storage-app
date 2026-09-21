@@ -340,7 +340,7 @@ export default async function PortalPayPage({
           ) : (
             t(AMOUNT_PROBLEM_KEYS[checked.problem], { min: formatRate(MIN_PAYMENT_CENTS) })
           )}{' '}
-          {t('paypg.balanceRestored')}
+          {t('paypg.refusedChargesBalance', { amount: formatRate(amountCents) })}
         </p>
       )}
 

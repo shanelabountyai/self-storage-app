@@ -119,4 +119,12 @@ describe('a refused amount is tied to the field that was refused (B-302)', () =>
     const page = readFileSync(root(files[0]), 'utf8')
     expect(page).toMatch(/amountProblemId \? requested : \(amountCents \/ 100\)\.toFixed\(2\)/)
   })
+
+  it.each(DESCRIBED)('$what names the figure the Payment Element will charge (B-337)', ({ files }) => {
+    // The field keeps the refused amount, so the refusal has to say that Pay
+    // charges the fallback — the same expression the Payment Element is given.
+    const page = readFileSync(root(files[0]), 'utf8')
+    expect(page).toContain("t('paypg.refusedChargesBalance', { amount: formatRate(amountCents) })")
+    expect(page).toContain('amountLabel={formatRate(amountCents)}')
+  })
 })

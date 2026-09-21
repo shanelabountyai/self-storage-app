@@ -629,3 +629,15 @@ describe('receipt balance scope (B-331)', () => {
     )
   })
 })
+
+// B-337. Since B-302 the refused amount stays in the box, so the refusal must
+// not say the balance was put back in — it says what Pay will charge instead.
+describe('refused amount (B-337)', () => {
+  it('names the full-balance charge and never claims the box changed', () => {
+    const en1 = translate(dictionaryFor('en'), 'paypg.refusedChargesBalance', { amount: '$1284' })
+    const es1 = translate(dictionaryFor('es'), 'paypg.refusedChargesBalance', { amount: '$1284' })
+    for (const message of [en1, es1]) expect(message).toContain('$1284')
+    expect(en1).not.toMatch(/put .*back/i)
+    expect(es1).not.toMatch(/volvimos a poner/i)
+  })
+})

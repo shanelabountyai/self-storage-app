@@ -868,7 +868,8 @@ export const es: Dictionary = {
   'paypg.gateOnAfter': 'lo vuelve a activar, normalmente en un par de minutos.',
   'paypg.gateShortBefore': 'lo vuelve a activar — pagar',
   'paypg.gateShortAfter': 'lo deja desactivado.',
-  'paypg.balanceRestored': 'Por ahora volvimos a poner su saldo completo.',
+  'paypg.refusedChargesBalance':
+    'No aceptamos esa cantidad, así que el formulario de tarjeta de abajo cobrará su saldo completo de {amount} a menos que la corrija.',
   'paypg.payDifferent': 'Pagar otra cantidad',
   'paypg.cardDetails': 'Datos de la tarjeta',
   'paypg.callInstead': 'Ahora mismo no podemos aceptar pagos con tarjeta en línea. Llame al',
