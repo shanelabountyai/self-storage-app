@@ -960,6 +960,10 @@ export const en = {
     'We did not accept that amount, so the card form below will charge your full balance of {amount} unless you correct it.',
   'paypg.payDifferent': 'Pay a different amount',
   'paypg.cardDetails': 'Card details',
+  // B-340/B-341. The print-time line under a mailed letter, in the tenant's
+  // language like the letter above it.
+  'letter.printedCall': 'Printed {date}. To pay, call {phone} or sign in at {signIn}.',
+  'letter.printedSignIn': 'Printed {date}. To pay, sign in at {signIn}.',
   'paypg.callInstead': "We can't take card payments online just now. Call",
   'paypg.callInsteadAfter': 'and we will take your payment over the phone.',
   'amt.notANumber': 'Enter an amount like 75 or 75.50.',

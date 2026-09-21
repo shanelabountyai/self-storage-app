@@ -872,6 +872,8 @@ export const es: Dictionary = {
     'No aceptamos esa cantidad, así que el formulario de tarjeta de abajo cobrará su saldo completo de {amount} a menos que la corrija.',
   'paypg.payDifferent': 'Pagar otra cantidad',
   'paypg.cardDetails': 'Datos de la tarjeta',
+  'letter.printedCall': 'Impreso el {date}. Para pagar, llame al {phone} o inicie sesión en {signIn}.',
+  'letter.printedSignIn': 'Impreso el {date}. Para pagar, inicie sesión en {signIn}.',
   'paypg.callInstead': 'Ahora mismo no podemos aceptar pagos con tarjeta en línea. Llame al',
   'paypg.callInsteadAfter': 'y le tomamos el pago por teléfono.',
   'amt.notANumber': 'Escriba una cantidad como 75 o 75.50.',

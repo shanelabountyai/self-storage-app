@@ -45,6 +45,7 @@ beforeEach(() => {
     facilityName: 'Print Test',
     facilityPhone: '(512) 555-0100',
     timezone: 'America/Chicago',
+    locale: 'en',
     subject: 'Your rent is past due',
     body: BODY,
     createdAt: new Date('2026-09-01T15:00:00Z'),
@@ -90,6 +91,24 @@ describe('the letter print page', () => {
       expect(controls.length).toBeGreaterThan(0)
       for (const { name, visible } of controls) expect(name.startsWith(visible)).toBe(true)
     }
+  })
+
+  // B-341 / SC 3.1.2. The letter is in the tenant's language; the admin page is not.
+  it("marks a Spanish tenant's letter lang=\"es\", dates it in Spanish, and prints the line in Spanish", async () => {
+    letter = { ...letter, locale: 'es', subject: 'Su renta está vencida', body: 'Su renta está vencida.' }
+    const html = await render()
+
+    const [article, after] = html.slice(html.indexOf('<article')).split('</article>')
+    expect(article).toMatch(/^<article lang="es"/)
+    expect(article).toContain('1 de septiembre de 2026')
+    expect(article).not.toContain('September')
+    // The sr-only heading is English around the Spanish subject.
+    expect(article).toContain('<h2 id="letter-heading" lang="en" class="sr-only"><span lang="es">Su renta está vencida</span> for')
+    // The page's own intro stays English (D-122).
+    expect(html.slice(0, html.indexOf('<article'))).toContain('composed on September 1, 2026')
+    expect(after).toContain(
+      '<p lang="es" class="text-sm text-pretty">Impreso el 21 de septiembre de 2026. Para pagar, llame al (512) 555-0100 o inicie sesión en storage.example/login.</p>',
+    )
   })
 
   it("the profile's print link starts with its visible label and never speaks a template key", () => {

@@ -11003,3 +11003,25 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - No e2e spec covers the print page, and none did before this item.
 
 **Verification.** Unit: 4661 passed, 8 skipped (283 files: 282 passed, 1 skipped). That is B-339's 4656 plus these 5. `tests/message-print-db.test.ts` is still green. Typecheck is clean, including the new `.tsx` test. Lint: 0 errors (6 pre-existing warnings). No migration. I re-read the accessibility statement. It makes no claim about the `/admin` print page or printed letters, so I did not edit it.
+
+## B-341 — the printed letter and the task detail mark a Spanish tenant's words `lang="es"`, and the letter is dated in Spanish (2026-09-21)
+
+**Commit:** `TBD`
+
+**What it built.**
+
+- `lib/admin/message-print.ts`: `MessagePrint.locale`, from the recipient's `Tenant.preferredLocale` (default `en`).
+- `app/admin/messages/[messageId]/print/page.tsx`: the `<article>` carries `lang={locale}`, so the subject, body and letter date inherit it. The English words inside the article carry `lang="en"`: the sr-only heading (with the subject in its own `lang` span) and the two missing-address notes. The letter date and the print-time date are formatted with `LOCALE_TAG[locale]`, so a Spanish letter reads *"1 de septiembre de 2026"*. The page's own intro, including its composed-on date, stays English (D-122).
+- The print-time line B-340 added is now two dictionary keys, `letter.printedCall` and `letter.printedSignIn`, rendered in the tenant's language with its own `lang`. B-340 handed this over.
+- `lib/admin/tasks.ts`: `taskDetailSegments(detail, lang)` splits B-323's no-address detail around the quoted subject and marks the subject with the tenant's language, as `MessageSegment`s (B-272). `facilityTasks` returns `detailSegments`, looking up `preferredLocale` only for `no_reachable_channel` tasks with a detail. `/admin/tasks` renders it with `MessageSegments`. An English tenant, or a detail the function did not write, stays one plain text node.
+- Tests: a Spanish case in `tests/message-print-page.test.tsx` (`lang="es"` on the article and the subject, the Spanish letter date, the English intro, the Spanish print-time line), and `tests/task-detail-lang.test.ts` (the wrapped subject, including apostrophes inside it; plain text for `en` and unknown; an unrecognised detail left alone).
+
+**What it decided.**
+
+- The quote is matched between the producer's fixed words (`NO_EMAIL_ON_FILE — '…' could not be sent.`), greedily, so an apostrophe in the subject stays inside it. The same kind of prefix match `taskLabel` already does.
+- In the task detail, `lang` is set only when it differs from the page's, so an English tenant's card is unchanged. The print page always sets it on the article, since the letter is a document of its own.
+
+**What it left behind.**
+
+- Both surfaces use the tenant's **current** preference. `Message` records no locale, so a letter composed before the tenant switched language, or one whose template fell back to English (`effectiveTemplate`), is marked with the wrong `lang`. Recording the rendered locale on `Message` fixes it. No item owns this yet. Both places carry a `ponytail:` comment.
+- The public accessibility statement makes no claims about `/admin`, so it is unchanged.

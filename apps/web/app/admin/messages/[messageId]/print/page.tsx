@@ -4,6 +4,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { messageForPrint } from '@/lib/admin/message-print'
 import { PrintLetterButton } from '@/components/admin/print-letter-button'
 import { siteOrigin } from '@/lib/marketing/origin'
+import { dictionaryFor, LOCALE_TAG, translate, type Locale } from '@/lib/i18n'
 
 export const metadata = {
   title: 'Letter',
@@ -25,8 +26,10 @@ export const metadata = {
 // of it is still in the accessibility tree on screen, which is the difference
 // between hiding chrome from a printer and hiding content from a reader.
 
-function formatLetterDate(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+// B-341. A Spanish letter is dated in Spanish; the admin chrome around it keeps
+// English (D-122), so the locale is the caller's choice, not the page's.
+function formatLetterDate(date: Date, timeZone: string, locale: Locale = 'en'): string {
+  return new Intl.DateTimeFormat(LOCALE_TAG[locale], {
     timeZone,
     month: 'long',
     day: 'numeric',
@@ -50,8 +53,12 @@ export default async function MessagePrintPage({
   // days (D-30) from when it was COMPOSED — nobody types it from paper, and the
   // letter may go out after it lapsed. The body stays verbatim (CN-18); this
   // line is added at print time, outside it, with routes a paper reader can use.
-  const printedOn = formatLetterDate(new Date(), letter.timezone)
   const signIn = `${siteOrigin().replace(/^https?:\/\//, '')}/login`
+  const printedLine = translate(
+    dictionaryFor(letter.locale),
+    letter.facilityPhone ? 'letter.printedCall' : 'letter.printedSignIn',
+    { date: formatLetterDate(new Date(), letter.timezone, letter.locale), phone: letter.facilityPhone ?? '', signIn },
+  )
 
   return (
     <div className="flex max-w-2xl flex-col gap-6 print:max-w-none">
@@ -95,13 +102,17 @@ export default async function MessagePrintPage({
           )}
 
           {/* The letter itself. Nothing in here is admin chrome, and nothing
-              outside it prints. */}
+              outside it prints. B-341 / SC 3.1.2: it is in the tenant's
+              language, so the page's English stops at its edge — the few
+              English words inside (the heading, the gap notes) say so. */}
           <article
+            lang={letter.locale}
             aria-labelledby="letter-heading"
             className="border-input flex flex-col gap-8 rounded-md border p-8 text-sm print:rounded-none print:border-0 print:p-0"
           >
-            <h2 id="letter-heading" className="sr-only">
-              {letter.subject ?? 'Letter'} for {letter.tenantName}
+            <h2 id="letter-heading" lang="en" className="sr-only">
+              {letter.subject ? <span lang={letter.locale}>{letter.subject}</span> : 'Letter'} for{' '}
+              {letter.tenantName}
             </h2>
 
             {/* Return address, top left — the facility, from its own settings. */}
@@ -119,7 +130,7 @@ export default async function MessagePrintPage({
                   </span>
                 </>
               ) : (
-                <span className="block">
+                <span lang="en" className="block">
                   {letter.facilityName} — no complete return address on file (missing its{' '}
                   {letter.from.missing.join(', ')}). Fix it in facility settings.
                 </span>
@@ -145,14 +156,14 @@ export default async function MessagePrintPage({
               ) : (
                 <>
                   <span className="block">{letter.tenantName}</span>
-                  <span className="block">
+                  <span lang="en" className="block">
                     No address of record — missing {letter.to.missing.join(', ')}
                   </span>
                 </>
               )}
             </address>
 
-            <p className="mt-8">{formatLetterDate(letter.createdAt, letter.timezone)}</p>
+            <p className="mt-8">{formatLetterDate(letter.createdAt, letter.timezone, letter.locale)}</p>
 
             {letter.subject && <p className="font-medium">{letter.subject}</p>}
 
@@ -164,9 +175,8 @@ export default async function MessagePrintPage({
 
           {/* Outside the <article> so it is not read as part of the letter
               (SC 1.3.1), but not `print:hidden` — it goes on the paper. */}
-          <p className="text-sm text-pretty">
-            Printed {printedOn}. To pay,{' '}
-            {letter.facilityPhone ? `call ${letter.facilityPhone} or ` : ''}sign in at {signIn}.
+          <p lang={letter.locale} className="text-sm text-pretty">
+            {printedLine}
           </p>
 
           {/* The server refuses to record a letter with no address, so the

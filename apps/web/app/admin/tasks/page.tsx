@@ -7,6 +7,7 @@ import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 import { TaskAssignment } from '@/components/admin/task-assignment'
+import { MessageSegments } from '@/components/message-segments'
 
 export const metadata = { title: 'Tasks' }
 
@@ -214,8 +215,10 @@ export default async function TasksPage({
                   {/* B-169. Why THIS task exists, when its type cannot say —
                       "the contents were sold at auction" under a card whose
                       label is only "take the overlock off". */}
-                  {task.detail && (
-                    <p className="text-sm text-pretty">{task.detail}</p>
+                  {task.detailSegments && (
+                    <p className="text-sm text-pretty">
+                      <MessageSegments segments={task.detailSegments} />
+                    </p>
                   )}
                   <p className="text-muted-foreground text-sm">
                     {formatDate(task.businessDate)}

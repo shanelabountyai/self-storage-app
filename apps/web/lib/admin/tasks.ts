@@ -7,6 +7,7 @@ import {
   taskTypeIsSensitive,
   taskTypeResolvedByAction,
   taskLabel,
+  NO_EMAIL_ON_FILE,
   type TaskType,
   type TaskTypeSpec,
 } from '@storage/core/tasks'
@@ -18,6 +19,7 @@ import { isOverdue } from '@storage/core/access'
 import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 import { settleCommandForTask } from '@/lib/access/manual-adapter'
 import { confirmOverlockApplied, confirmOverlockRemoved } from '@/lib/delinquency/overlock'
+import { DEFAULT_LOCALE, isLocale, type Locale, type MessageSegment } from '@/lib/i18n'
 import { fallbackSubject, resolveTaskSubjects, type TaskSubject } from '@/lib/admin/task-subjects'
 
 // PRD 02 §4.9 US-41 (B-095). One task queue. Every function here is generic
@@ -110,6 +112,9 @@ export type TaskRow = {
   /// B-169. Why this particular task exists, when its creator knew something
   /// the type could not say.
   detail: string | null
+  /// B-341. `detail` as runs, with a customer's own words marked in their
+  /// language — see `taskDetailSegments`.
+  detailSegments: MessageSegment[] | null
   assigneeName: string | null
   /// B-233. Who holds it, as an id — `assigneeName` says it to a reader, this
   /// is what a list compares against the reader to decide between "Take this"
@@ -214,6 +219,20 @@ export async function requiredProofFieldsFor(
   return byId
 }
 
+/// B-341 / SC 3.1.2. A no-address `no_reachable_channel` detail quotes the
+/// message's rendered subject (B-323) — in the tenant's language — inside an
+/// English sentence (D-122). Splits it out so it can carry its own `lang`.
+///
+/// Matched greedily between the producer's fixed words (`noReachableEmail` in
+/// the comms service), so an apostrophe inside the subject stays in it.
+export function taskDetailSegments(detail: string, lang: Locale | null): MessageSegment[] {
+  const quoted = lang && lang !== DEFAULT_LOCALE
+    ? new RegExp(`^(${NO_EMAIL_ON_FILE} — ')(.*)(' could not be sent\\..*)$`, 's').exec(detail)
+    : null
+  if (!quoted) return [{ text: detail }]
+  return [{ text: quoted[1]! }, { text: quoted[2]!, lang: lang! }, { text: quoted[3]! }]
+}
+
 /// "My day": open tasks at a facility, today's business date by default.
 export async function facilityTasks(
   actor: Actor,
@@ -268,6 +287,15 @@ export async function facilityTasks(
 
   const subjects = await resolveTaskSubjects(tasks)
   const required = await requiredProofFieldsFor(tasks)
+  // ponytail: the tenant's current preference, like the print page (B-341).
+  const quotingIds = tasks.filter((t) => t.type === 'no_reachable_channel' && t.detail).map((t) => t.entityId)
+  const locales = new Map(
+    quotingIds.length === 0
+      ? []
+      : (
+          await prisma.tenant.findMany({ where: { id: { in: quotingIds } }, select: { id: true, preferredLocale: true } })
+        ).map((t) => [t.id, isLocale(t.preferredLocale) ? t.preferredLocale : DEFAULT_LOCALE]),
+  )
 
   return tasks.map((task) => ({
     id: task.id,
@@ -287,6 +315,7 @@ export async function facilityTasks(
       slaHours: facility.manualTaskSlaHours,
     }),
     detail: task.detail,
+    detailSegments: task.detail ? taskDetailSegments(task.detail, locales.get(task.entityId) ?? null) : null,
     assigneeName: task.assignee ? `${task.assignee.firstName} ${task.assignee.lastName}` : null,
     assigneeStaffId: task.assigneeStaffId,
     status: task.status,

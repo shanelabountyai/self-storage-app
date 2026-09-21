@@ -5,6 +5,7 @@ import { assertFacilityAccess, can, ForbiddenError } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { currentAddress } from '@/lib/portal/contact'
+import { DEFAULT_LOCALE, isLocale, type Locale } from '@/lib/i18n'
 
 // B-318. The paper half of B-281.
 //
@@ -30,6 +31,12 @@ export type MessagePrint = {
   /// B-340. The number the print-time line tells a paper reader to call.
   facilityPhone: string | null
   timezone: string
+  /// B-341 / SC 3.1.2. The recipient's language — the letter's subject, body
+  /// and date are in it, inside an admin page that stays English (D-122).
+  // ponytail: the tenant's CURRENT preference — `Message` records no locale, so
+  // a letter composed before they switched, or one whose template fell back to
+  // English, is marked wrong. Store the rendered locale on `Message` if it bites.
+  locale: Locale
   subject: string | null
   /// The stored render, verbatim. Never a re-render: templates are versioned
   /// and edited (CN-16), so the only honest answer to "what did we tell them"
@@ -70,7 +77,7 @@ export async function messageForPrint(actor: Actor, messageId: string): Promise<
       createdAt: true,
       recipientTenantId: true,
       facilityId: true,
-      recipient: { select: { firstName: true, lastName: true } },
+      recipient: { select: { firstName: true, lastName: true, preferredLocale: true } },
       facility: {
         select: {
           name: true,
@@ -124,6 +131,7 @@ export async function messageForPrint(actor: Actor, messageId: string): Promise<
     facilityName: message.facility.name,
     facilityPhone: message.facility.phone,
     timezone: message.facility.timezone,
+    locale: isLocale(message.recipient.preferredLocale) ? message.recipient.preferredLocale : DEFAULT_LOCALE,
     subject: message.subjectSnapshot,
     body: message.bodySnapshot,
     createdAt: message.createdAt,
