@@ -11195,7 +11195,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-349 — a bare `/portal/pay` goes to the tenant's unit, or says to choose one (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `67ec7f4`
 
 **What it built.**
 
