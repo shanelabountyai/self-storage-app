@@ -10931,7 +10931,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-337 — the refused-amount message says Pay charges the full balance, not that the box changed (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `2760ee2`
 
 **What it built.**
 
