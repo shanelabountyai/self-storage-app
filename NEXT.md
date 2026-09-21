@@ -10,7 +10,7 @@
 - Storage Business in Brief: https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf
 - LinkedIn drafts 25–29 in the Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
 
-**Next:** turn the three defects the demo walk found into backlog rows (closure entry, *What it left behind*): the lease's late-fee sentence, the self-referencing `--font-sans`, and bare `/portal/pay`. After that, a tenth review block is the only other open option.
+**Next: B-347** (the lease's late-fee sentence reads `FeeSchedule`, not the ladder), then **B-348** (`--font-sans` refers to itself; one line) and **B-349** (bare `/portal/pay`). All three XS, at `83azzs`–`83azzu`, written 2026-09-21 from the closure demo walk. After those, a tenth review block is the only other open option.
 
 **B-346 is built** (2026-09-21, `ef3c813`). Write-off, void and non-zero adjustment on the ledger screen echo tenant, unit, amount, direction and balance after, and post only on a press that carries back `yes:<echoed cents>`. Cancel posts nothing. Each domain function takes `preview: true`, which runs every refusal and writes nothing. `AdminForm`'s confirm state has opt-in `confirmValue` and `cancel`.
 **B-345 is built** (2026-09-21, `a63a737`). "crossed in the mail" and "anything we mail you". `tests/us-english.test.ts` guards the en dictionary and the English catalog.
