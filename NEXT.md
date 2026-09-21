@@ -4,8 +4,9 @@
 
 ## Start here
 
-1. **B-340 (`83azzl`)**: next in review block 9. Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
+1. **B-341 (`83azzm`)**: next in review block 9. Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
 
+**B-340 is built** (2026-09-21, `920fcce`). The print page adds *"Printed {date}. To pay, call {phone} or sign in at {host}/login."* after the `<article>` and leaves the body verbatim. There is no Print button while the address is incomplete. The button and the profile link now have accessible names that start with their visible text, and the link never falls back to the template key. The repo has its first `.tsx` render test (`tests/message-print-page.test.tsx`). The print-time line is English only, and B-341 owns that.
 **B-339 is built** (2026-09-21, `4edca09`). Confirmed the ladder cures per lease and does not net tenant credit, so the full row shipped. On `/admin/pos`, an amount over the picked unit's balance names the tenant's other owing units and offers a `units:` subject that settles them together. Card is not offered on that subject. B-305's single-unit restriction is unchanged.
 **B-337 is built** (2026-09-21, `2760ee2`). The refused-amount message on `/portal/pay` and `/pay/[token]` is now `paypg.refusedChargesBalance`: it says the amount was not accepted and that the card form will charge the full balance of {amount} (`formatRate(amountCents)`, the Payment Element's figure). It no longer claims the box changed.
 **B-336 is built** (2026-09-21, `b129bb7`). A refused token goes through `/pay/<token>/expired`. An expired link on an occupying lease sets `st_locale` to the tenant's language and lands on `/login?from=/portal/pay?lease=…&reason=pay_link_expired`, which shows a message and a `tel:` link. Revoked and unknown tokens are unchanged. `/pay/[token]/done` is now axe-scanned.
