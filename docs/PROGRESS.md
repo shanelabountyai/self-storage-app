@@ -11260,7 +11260,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-352 — a payment in flight, or landing mid-void, cannot be allocated to a voided invoice (2026-09-21)
 
-**Commit:** `PENDING`
+**Commit:** `ec7e240`
 
 **What it built.**
 

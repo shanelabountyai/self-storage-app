@@ -4,7 +4,7 @@
 
 **Next: B-353**. Continue down review block 10 in order.
 
-**B-352 is built** (2026-09-21). `voidRentInvoice` refuses `payment_in_flight` while a pending or processing charge is allocated to the invoice, and `applyPayment` locks its target invoices and drops any no longer open. PROGRESS records two narrow leftovers, neither owned by an item.
+**B-352 is built** (2026-09-21, `ec7e240`). `voidRentInvoice` refuses `payment_in_flight` while a pending or processing charge is allocated to the invoice, and `applyPayment` locks its target invoices and drops any no longer open. PROGRESS records two narrow leftovers, neither owned by an item.
 
 ## Start here
 
