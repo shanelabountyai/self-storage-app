@@ -637,6 +637,8 @@ export type CounterCharge = {
   unitNumber: string;
   balanceCents: number;
   accountId: string | null;
+  /// B-344. The account's own name, for the link back to it; null for a lease.
+  accountName: string | null;
   /// What is being paid for, in the words the screens use: "unit C-7", or
   /// "Acme Moving (units C-3, C-7)".
   subject: string;
@@ -691,6 +693,7 @@ export async function chargeableLease(
     unitNumber: lease.unit.number,
     balanceCents: balance._sum.amountCents ?? 0,
     accountId: null,
+    accountName: null,
     subject: `unit ${lease.unit.number}`,
   };
 }
@@ -755,6 +758,7 @@ export async function chargeableAccount(
     unitNumber: units.join(", "),
     balanceCents: leases.reduce((sum, lease) => sum + (balances.get(lease.id) ?? 0), 0),
     accountId: account.id,
+    accountName: account.name,
     subject: `${account.name} (units ${units.join(", ")})`,
   };
 }

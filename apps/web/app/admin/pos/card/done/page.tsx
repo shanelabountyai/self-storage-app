@@ -90,7 +90,15 @@ export default async function CounterCardDonePage({
           className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
         >
           {receipt.failureReason ?? 'The card was declined.'} Nothing has been charged. Try another
-          card, or take cash or a check.
+          card, or take cash or a check.{' '}
+          {/* B-344. Back to the same subject and amount, so a retry is one
+              click rather than finding the tenant again (SC 2.4.4). */}
+          <Link
+            href={`/admin/pos/card?${lease.accountId ? `account=${encodeURIComponent(lease.accountId)}` : `lease=${encodeURIComponent(lease.leaseId)}`}&amount=${(receipt.amountCents / 100).toFixed(2)}`}
+            className="font-medium underline underline-offset-2"
+          >
+            Try another card for {formatCents(receipt.amountCents)}
+          </Link>
         </p>
       )}
 
@@ -103,7 +111,7 @@ export default async function CounterCardDonePage({
             <dd className="font-medium tabular-nums">{formatCents(receipt.amountCents)}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Tenant</dt>
+            <dt className="text-muted-foreground">{lease.accountId ? 'Payer' : 'Tenant'}</dt>
             <dd>
               {lease.tenantName} — {lease.subject}
             </dd>
@@ -119,12 +127,18 @@ export default async function CounterCardDonePage({
         <Link href="/admin/pos/summary" className="underline underline-offset-2">
           Today&apos;s payments
         </Link>
-        <Link
-          href={`/admin/tenants/${lease.tenantId}`}
-          className="underline underline-offset-2"
-        >
-          {lease.tenantName}&apos;s account
-        </Link>
+        {lease.accountId ? (
+          <Link
+            href={`/admin/billing/accounts/${lease.accountId}`}
+            className="underline underline-offset-2"
+          >
+            {lease.accountName} account
+          </Link>
+        ) : (
+          <Link href={`/admin/tenants/${lease.tenantId}`} className="underline underline-offset-2">
+            {lease.tenantName}&apos;s account
+          </Link>
+        )}
       </div>
     </div>
   )

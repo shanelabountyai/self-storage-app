@@ -98,6 +98,9 @@ export default async function CounterCardPage({
     savedMethods(lease.tenantId),
   ])
   const defaultMethod = methods?.find((method) => method.isDefault) ?? null
+  // B-344. An account's payer is not "the tenant", and the saved cards are the
+  // payer's own, which may not be the company's (B-320 does not direct them).
+  const who = lease.accountId ? 'payer' : 'tenant'
 
   return (
     <div className="flex flex-col gap-8">
@@ -175,7 +178,7 @@ export default async function CounterCardPage({
 
       <section aria-labelledby="present-heading" className="flex flex-col gap-2">
         <h2 id="present-heading" className="font-medium">
-          Card the tenant is holding
+          Card the {who} is holding
         </h2>
         <p className="text-muted-foreground text-sm text-pretty">
           Turn the screen to them and let them enter it. Never type a card number in yourself —
@@ -208,8 +211,11 @@ export default async function CounterCardPage({
             <p className="text-sm text-pretty">
               {/* Named, not "the card on file". A tenant with two cards needs
                   to hear which one is about to be charged before agreeing. */}
-              <span className="capitalize">{defaultMethod.brand}</span> ending {defaultMethod.last4},
+              {lease.tenantName}&apos;s <span className="capitalize">{defaultMethod.brand}</span> ending{' '}
+              {defaultMethod.last4},
               expiring {String(defaultMethod.expMonth).padStart(2, '0')}/{defaultMethod.expYear}.
+              {lease.accountId &&
+                ` This is saved to ${lease.tenantName} as a person, not to ${lease.accountName} — check it is the card they mean.`}
             </p>
             <AdminForm
               action={chargeCardOnFileAction}
@@ -228,7 +234,7 @@ export default async function CounterCardPage({
                 as="checkbox"
                 required
                 value="yes"
-                label={`The tenant has asked us to charge ${formatCents(amountCents)} to this card`}
+                label={`The ${who} has asked us to charge ${formatCents(amountCents)} to this card`}
                 hint="Nobody is presenting the card, so this is the record that they agreed to it."
               />
               <button
@@ -243,7 +249,7 @@ export default async function CounterCardPage({
           <p className="text-muted-foreground text-sm text-pretty">
             {methods === null
               ? 'We can’t reach the thing that knows which cards are on file.'
-              : 'No card on file for this tenant.'}{' '}
+              : `No card on file for ${lease.tenantName}.`}{' '}
             Use the form above, or take cash or a check on the POS screen.
           </p>
         )}

@@ -11065,3 +11065,23 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - The opening sentence still names the method too (*"by check"*), so the method appears twice. That is deliberate: the sentence reads on its own, and the table is the part someone files.
 - Templates are seeded state (B-206), so run `db:migrate:test` after switching to or from this branch.
 - The public accessibility statement makes no claims about email. A re-read note was added and no claim changed.
+
+## B-344 — the counter card screens say "payer" for an account, link the account, and offer a retry (2026-09-21)
+
+**Commit:** `pending`
+
+**What it built.**
+
+- `CounterCharge` has a new `accountName` field (null for a lease), set by `chargeableAccount`.
+- `/admin/pos/card`: when the subject is an account, the screen says "payer" instead of "tenant" (the presented-card heading and the consent checkbox). The card-on-file line starts with the payer's name (*"Pat Payer's Visa ending 4242"*). For an account it adds that the card is saved to the payer as a person, not to the account. The no-card line names the person rather than "this tenant".
+- `/admin/pos/card/done`: the fallback summary labels the row *Payer* for an account. For an account, the footer links `/admin/billing/accounts/[id]` ("Acme Moving account") instead of the payer's tenant profile. A declined card now links *"Try another card for $125.00"* back to `/admin/pos/card` with the same `lease=` or `account=` and the amount (SC 2.4.4).
+- Tests: `tests/counter-card-payer.test.tsx` renders both pages with the data layer mocked. It covers an account (no "tenant", the account link, whose card is on file, and the retry link) and a lease (still "tenant", and the retry link and tenant link carry the lease).
+
+**What it decided.**
+
+- B-320 stands: the saved cards are still the payer's own (`savedMethods(payer)`), and the screen says so rather than directing the company's card. D-119 is untouched.
+- The retry amount is the declined payment's `amountCents`, so the retry charges the same figure rather than defaulting back to the whole balance.
+
+**What it left behind.**
+
+- Nothing owned. These are staff screens, so the public accessibility statement was not re-read.
