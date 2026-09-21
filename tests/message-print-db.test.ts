@@ -38,15 +38,15 @@ function manager(): Actor {
   }
 }
 
-async function makeMessage(overrides: { body?: string; key?: string } = {}) {
+async function makeMessage(overrides: { body?: string; key?: string; templateKey?: string } = {}) {
   const key = overrides.key ?? randomUUID().slice(0, 8)
   return prisma.message.create({
     data: {
       idempotencyKey: `print-${suffix}-${key}`,
       eventId: `event-${suffix}-${key}`,
       ruleId: 'test-rule',
-      templateKey: 'invoice_past_due',
-      templateVersion: 3,
+      templateKey: overrides.templateKey ?? 'invoice_past_due',
+      templateVersion: overrides.templateKey ? 1 : 3,
       classification: 'transactional',
       channel: 'email',
       recipientTenantId: tenantId,
@@ -117,6 +117,16 @@ describeDb('printing a stored message', () => {
   afterEach(async () => {
     await prisma.task.deleteMany({ where: { facilityId } })
     await prisma.message.deleteMany({ where: { facilityId } })
+  })
+
+  // B-357. From the seeded catalog: `dunning_step` requires `links.pay_now`,
+  // `payment_receipt` does not.
+  it('knows whether the letter asks for payment, and that this tenant has no email', async () => {
+    const dunning = await messageForPrint(manager(), (await makeMessage({ templateKey: 'dunning_step' })).id)
+    expect(dunning).toMatchObject({ asksPayment: true, tenantHasEmail: false })
+
+    const receipt = await messageForPrint(manager(), (await makeMessage({ templateKey: 'payment_receipt' })).id)
+    expect(receipt?.asksPayment).toBe(false)
   })
 
   it('renders the letter: both addresses, and the stored body verbatim', async () => {

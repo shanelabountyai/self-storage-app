@@ -876,6 +876,8 @@ export const es: Dictionary = {
   'paypg.cardDetails': 'Datos de la tarjeta',
   'letter.printedCall': 'Impreso el {date}. Para pagar, llame al {phone} o inicie sesión en {signIn}.',
   'letter.printedSignIn': 'Impreso el {date}. Para pagar, inicie sesión en {signIn}.',
+  'letter.printedCallOffice': 'Impreso el {date}. Para pagar, llame al {phone} o pague en persona en la oficina.',
+  'letter.printedOffice': 'Impreso el {date}. Para pagar, visite la oficina en la dirección de arriba.',
   'paypg.callInstead': 'Ahora mismo no podemos aceptar pagos con tarjeta en línea. Llame al',
   'paypg.callInsteadAfter': 'y le tomamos el pago por teléfono.',
   'amt.notANumber': 'Escriba una cantidad como 75 o 75.50.',

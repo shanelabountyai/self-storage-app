@@ -966,6 +966,8 @@ export const en = {
   // language like the letter above it.
   'letter.printedCall': 'Printed {date}. To pay, call {phone} or sign in at {signIn}.',
   'letter.printedSignIn': 'Printed {date}. To pay, sign in at {signIn}.',
+  'letter.printedCallOffice': 'Printed {date}. To pay, call {phone} or pay in person at the office.',
+  'letter.printedOffice': 'Printed {date}. To pay, visit the office at the address above.',
   'paypg.callInstead': "We can't take card payments online just now. Call",
   'paypg.callInsteadAfter': 'and we will take your payment over the phone.',
   'amt.notANumber': 'Enter an amount like 75 or 75.50.',

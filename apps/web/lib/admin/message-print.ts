@@ -30,6 +30,11 @@ export type MessagePrint = {
   facilityName: string
   /// B-340. The number the print-time line tells a paper reader to call.
   facilityPhone: string | null
+  /// B-357. Whether the message's template requires `links.pay_now` — only a
+  /// letter that asks for money gets the print-time "To pay" line.
+  asksPayment: boolean
+  /// B-357. Sign-in is by email, so a tenant with none is never told to sign in.
+  tenantHasEmail: boolean
   timezone: string
   /// B-341 / SC 3.1.2. The recipient's language — the letter's subject, body
   /// and date are in it, inside an admin page that stays English (D-122).
@@ -75,9 +80,12 @@ export async function messageForPrint(actor: Actor, messageId: string): Promise<
       subjectSnapshot: true,
       bodySnapshot: true,
       createdAt: true,
+      templateKey: true,
+      templateVersion: true,
+      channel: true,
       recipientTenantId: true,
       facilityId: true,
-      recipient: { select: { firstName: true, lastName: true, preferredLocale: true } },
+      recipient: { select: { firstName: true, lastName: true, preferredLocale: true, email: true } },
       facility: {
         select: {
           name: true,
@@ -106,6 +114,17 @@ export async function messageForPrint(actor: Actor, messageId: string): Promise<
   }
 
   const address = await currentAddress(message.recipientTenantId)
+  // Any row of this key and version, whatever its locale or facility override:
+  // `Message` records neither, and a translation does not change what it asks for.
+  const payTemplate = await prisma.messageTemplate.findFirst({
+    where: {
+      key: message.templateKey,
+      channel: message.channel,
+      version: message.templateVersion,
+      requiredMergeFields: { has: 'links.pay_now' },
+    },
+    select: { id: true },
+  })
   // Scoped to the message's own facility, not just to the tenant. A tenant
   // with units at two sites can have an open task at each, and closing the
   // wrong site's — possibly one this actor cannot even see — would leave the
@@ -130,6 +149,8 @@ export async function messageForPrint(actor: Actor, messageId: string): Promise<
     tenantName,
     facilityName: message.facility.name,
     facilityPhone: message.facility.phone,
+    asksPayment: payTemplate !== null,
+    tenantHasEmail: Boolean(message.recipient.email),
     timezone: message.facility.timezone,
     locale: isLocale(message.recipient.preferredLocale) ? message.recipient.preferredLocale : DEFAULT_LOCALE,
     subject: message.subjectSnapshot,

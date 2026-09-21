@@ -11340,3 +11340,18 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** The expired-link state is still not axe-scanned. B-362 owns that.
 
 **Verification.** Typecheck and lint clean. `i18n` + `login-flow-db`: **34 passed**. ``e2e/pay-link.spec.ts` (**20 passed**, production build) asserts the open disclosure and its `from` in both languages and in both projects, and a bare `/login` with it closed. The accessibility statement was re-read and a note added; no visible line changes. No schema change.
+
+## B-357 — the printed letter's pay line asks only when the letter does, and never sends a no-email tenant to sign in (2026-09-21)
+
+**Commit:** `pending`
+
+**What it built.** `messageForPrint` now returns `asksPayment` and `tenantHasEmail`. `asksPayment` is true when a `message_template` row with the message's key, channel and version requires `links.pay_now`. `tenantHasEmail` is true when the recipient has an email. The print page leaves out the "Printed {date}. To pay…" line when the letter does not ask for payment. For a tenant with no email it uses two new strings, `letter.printedCallOffice` ("To pay, call {phone} or pay in person at the office.") and `letter.printedOffice` ("To pay, visit the office at the address above."), with Spanish versions of both. A tenant with an email keeps B-340's sign-in wording. The stored body is unchanged (CN-18).
+
+**What it decided.**
+
+- **The pay-link test matches any locale or facility override of that key and version.** `Message` stores neither, and a translation does not change what the letter asks for.
+- **No pay line means no date line either.** The row's wording is one sentence, and "Printed {date}." alone tells a tenant nothing.
+
+**What it left behind.** Nothing owned by an item.
+
+**Verification.** Typecheck and lint clean. The full unit suite: **4695 passed, 8 skipped**. `message-print-page` covers a receipt letter with no pay line, a dunning letter to a no-email tenant with no "/login", and a no-phone letter that names the office, each in EN and ES. `message-print-db` checks that `dunning_step` is read as asking for payment and `payment_receipt` is not, against the seeded catalog. No schema change. The accessibility statement was re-read and a note added; no visible line changes.

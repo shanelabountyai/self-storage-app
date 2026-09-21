@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-357**. Continue down review block 10 in order.
+**Next: B-358**. Continue down review block 10 in order.
+
+**B-357 is built** (2026-09-21). The printed letter's "To pay" line appears only when the template requires `links.pay_now`, and a no-email tenant is sent to the phone or the office, never `/login`.
 
 **B-356 is built** (2026-09-21, `75dc582`). An expired pay link opens `/login`'s magic-link form without a click and says "No password? We can email you a sign-in link." A bare `/login` keeps it closed.
 

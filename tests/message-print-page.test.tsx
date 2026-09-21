@@ -44,6 +44,8 @@ beforeEach(() => {
     tenantName: 'Cash Renter',
     facilityName: 'Print Test',
     facilityPhone: '(512) 555-0100',
+    asksPayment: true,
+    tenantHasEmail: true,
     timezone: 'America/Chicago',
     locale: 'en',
     subject: 'Your rent is past due',
@@ -110,6 +112,34 @@ describe('the letter print page', () => {
       '<p lang="es" class="text-sm text-pretty">Impreso el 21 de septiembre de 2026. Para pagar, llame al (512) 555-0100 o inicie sesión en storage.example/login.</p>',
     )
   })
+
+  // B-357. The line is for letters that ask for money, and only offers sign-in
+  // to a tenant with an email to sign in with.
+  for (const [locale, noEmail, noPhone] of [
+    ['en', 'Printed September 21, 2026. To pay, call (512) 555-0100 or pay in person at the office.', 'Printed September 21, 2026. To pay, visit the office at the address above.'],
+    ['es', 'Impreso el 21 de septiembre de 2026. Para pagar, llame al (512) 555-0100 o pague en persona en la oficina.', 'Impreso el 21 de septiembre de 2026. Para pagar, visite la oficina en la dirección de arriba.'],
+  ] as const) {
+    it(`[${locale}] a payment_receipt letter carries no pay line`, async () => {
+      letter = { ...letter, locale, asksPayment: false }
+      const html = await render()
+      expect(html).not.toContain(locale === 'en' ? 'To pay' : 'Para pagar')
+      expect(html).not.toContain('/login')
+    })
+
+    it(`[${locale}] a dunning letter to a no-email tenant never says /login`, async () => {
+      letter = { ...letter, locale, tenantHasEmail: false }
+      const html = await render()
+      expect(html).toContain(`<p lang="${locale}" class="text-sm text-pretty">${noEmail}</p>`)
+      expect(html).not.toContain('/login')
+    })
+
+    it(`[${locale}] with no phone and no email, the line names the office`, async () => {
+      letter = { ...letter, locale, tenantHasEmail: false, facilityPhone: null }
+      const html = await render()
+      expect(html).toContain(noPhone)
+      expect(html).not.toContain('/login')
+    })
+  }
 
   it("the profile's print link starts with its visible label and never speaks a template key", () => {
     expect(printForMailingName('Your rent is past due')).toBe('Print this for mailing: Your rent is past due')

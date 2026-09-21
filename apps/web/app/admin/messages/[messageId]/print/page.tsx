@@ -53,12 +53,19 @@ export default async function MessagePrintPage({
   // days (D-30) from when it was COMPOSED — nobody types it from paper, and the
   // letter may go out after it lapsed. The body stays verbatim (CN-18); this
   // line is added at print time, outside it, with routes a paper reader can use.
+  // B-357. Only on a letter that asks for money, and sign-in only for a tenant
+  // who has an email to sign in with — most printed letters go to one who does not.
   const signIn = `${siteOrigin().replace(/^https?:\/\//, '')}/login`
-  const printedLine = translate(
-    dictionaryFor(letter.locale),
-    letter.facilityPhone ? 'letter.printedCall' : 'letter.printedSignIn',
-    { date: formatLetterDate(new Date(), letter.timezone, letter.locale), phone: letter.facilityPhone ?? '', signIn },
-  )
+  const printedKey = letter.facilityPhone
+    ? letter.tenantHasEmail ? 'letter.printedCall' : 'letter.printedCallOffice'
+    : letter.tenantHasEmail ? 'letter.printedSignIn' : 'letter.printedOffice'
+  const printedLine = letter.asksPayment
+    ? translate(dictionaryFor(letter.locale), printedKey, {
+        date: formatLetterDate(new Date(), letter.timezone, letter.locale),
+        phone: letter.facilityPhone ?? '',
+        signIn,
+      })
+    : null
 
   return (
     <div className="flex max-w-2xl flex-col gap-6 print:max-w-none">
@@ -175,9 +182,11 @@ export default async function MessagePrintPage({
 
           {/* Outside the <article> so it is not read as part of the letter
               (SC 1.3.1), but not `print:hidden` — it goes on the paper. */}
-          <p lang={letter.locale} className="text-sm text-pretty">
-            {printedLine}
-          </p>
+          {printedLine && (
+            <p lang={letter.locale} className="text-sm text-pretty">
+              {printedLine}
+            </p>
+          )}
 
           {/* The server refuses to record a letter with no address, so the
               button would print one that cannot be mailed. The note above

@@ -2848,6 +2848,11 @@ function reviewedOn(locale: Locale): string {
 // disclosure, still plain page text, no second `role="alert"`. That state is
 // still unscanned (B-362 owns it), and this page makes no claim about it, so
 // nothing is added or withdrawn.
+//
+// Re-read 2026-09-21, at B-357. The printed letter's "To pay" line now appears
+// only on letters that ask for payment, and never tells a tenant with no email
+// to sign in. Paper wording only, in the same `<p lang>` outside the letter;
+// this page makes no claim about printed letters, so nothing is added or withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
