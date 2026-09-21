@@ -287,6 +287,27 @@ export async function applyPayment(
     if (named.length > 0) targets = named
   }
 
+  // B-352. `claimsFor` read these without a lock, so a void (or write-off)
+  // committed since then would otherwise still receive money: the allocation
+  // insert only waits for the void's commit, `recomputeInvoices` then skips the
+  // void row, and B-327 re-bills the period at full rate. Locking in id order
+  // keeps two payments over the same invoices from deadlocking; a row that is
+  // no longer open once its lock is granted is dropped from both lists.
+  const candidateIds = [...new Set([...targets, ...deferred].map((target) => target.invoiceId))]
+  if (candidateIds.length > 0) {
+    const stillOpen = new Set(
+      (
+        await tx.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "invoice"
+          WHERE "id" = ANY(${candidateIds}) AND "status" IN ('open', 'partially_paid')
+          ORDER BY "id" FOR UPDATE
+        `
+      ).map((row) => row.id),
+    )
+    targets = targets.filter((target) => stillOpen.has(target.invoiceId))
+    deferred = deferred.filter((target) => stillOpen.has(target.invoiceId))
+  }
+
   const order = orderFor(facility.paymentAllocationOrder)
   const first = allocatePayment(payment.amountCents, targets, order)
   // Whatever the plan's arrears did not absorb falls through to the current

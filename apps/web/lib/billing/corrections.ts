@@ -324,7 +324,23 @@ export async function writeOffOpenLeaseBalance(
 export type VoidInvoiceResult =
   | { ok: true; amountCents: number; number: string; leaseId: string }
   | { ok: false; reason: 'partly_paid'; amountPaidCents: number }
+  | { ok: false; reason: 'payment_in_flight'; amountCents: number }
   | CorrectionRefusal
+
+/// B-352. Money raised against an invoice that has not settled yet — an
+/// autopay charge before its webhook, a bank debit for the days it is
+/// `processing`. It does not raise `amountPaidCents`, so B-329's test passes it,
+/// and on success `settlePayment` finds the named invoice void and spreads the
+/// whole amount over the tenant's other invoices while the original allocation
+/// stays behind. Only autopay names an invoice on a pending charge, so an
+/// abandoned portal intent cannot hold a void off.
+async function inFlightCents(client: Prisma.TransactionClient | typeof prisma, invoiceId: string): Promise<number> {
+  const sum = await client.paymentAllocation.aggregate({
+    where: { invoiceId, payment: { status: { in: ['pending', 'processing'] } } },
+    _sum: { amountCents: true },
+  })
+  return sum._sum.amountCents ?? 0
+}
 
 /// Void a rent invoice that should never have been raised.
 ///
@@ -390,6 +406,8 @@ export async function voidRentInvoice(
   if (invoice.amountPaidCents > 0) {
     return { ok: false, reason: 'partly_paid', amountPaidCents: invoice.amountPaidCents }
   }
+  const pendingCents = await inFlightCents(prisma, invoice.id)
+  if (pendingCents > 0) return { ok: false, reason: 'payment_in_flight', amountCents: pendingCents }
 
   const refusal = await authorize(actor, invoice.facilityId, outstanding)
   if (refusal) return refusal
@@ -398,10 +416,11 @@ export async function voidRentInvoice(
   const result = await prisma.$transaction(async (tx): Promise<VoidInvoiceResult> => {
     // B-329, the second half. The read above is outside this transaction, so a
     // payment landing between the two would otherwise slip past it. `FOR UPDATE`
-    // takes the same row lock `recomputeInvoices`'s own `invoice.update` takes,
-    // so the two serialise: either this sees the payment's paid total, or the
-    // payment waits and lands on an invoice already voided (where
-    // `recomputeInvoices` leaves it voided, by its own rule).
+    // takes the same row lock `applyPayment` takes on every invoice it is about
+    // to allocate to (B-352), so the two serialise: either this sees the
+    // payment's paid total, or the payment waits, finds the invoice void once
+    // the lock is granted, and allocates elsewhere. Landing on the voided
+    // invoice is NOT safe — the period is re-billed at full rate (B-327).
     const [locked] = await tx.$queryRaw<{ amountPaidCents: number; status: string }[]>`
       SELECT "amountPaidCents", "status" FROM "invoice" WHERE "id" = ${invoice.id} FOR UPDATE
     `
@@ -411,6 +430,8 @@ export async function voidRentInvoice(
     if (locked.amountPaidCents > 0) {
       return { ok: false, reason: 'partly_paid', amountPaidCents: locked.amountPaidCents }
     }
+    const lockedPendingCents = await inFlightCents(tx, invoice.id)
+    if (lockedPendingCents > 0) return { ok: false, reason: 'payment_in_flight', amountCents: lockedPendingCents }
 
     await tx.ledgerEntry.create({
       data: {

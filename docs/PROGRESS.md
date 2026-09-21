@@ -11257,3 +11257,26 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** Nothing owned. The e2e suite was not run: no spec reaches a second delinquency, and this change has no UI. CI's e2e lane runs it.
 
 **Verification.** Typecheck is clean. Lint shows the same six warnings as before, none in files this row touched. `npm test -- tests/late-fees-db.test.ts tests/late-fees.test.ts`: **38 passed**. The eight other suites that run the ladder (credit, holds, ACH settlement, job-failure alarm, lease late fee, void/rebill, fee charges, money loop): **69 passed, 8 skipped**. The 8 skips are `integration-money-loop`, which skips as a whole file.
+
+## B-352 — a payment in flight, or landing mid-void, cannot be allocated to a voided invoice (2026-09-21)
+
+**Commit:** `PENDING`
+
+**What it built.**
+
+- `voidRentInvoice` (`apps/web/lib/billing/corrections.ts`) refuses with `payment_in_flight` (naming the amount) when any allocation on the invoice belongs to a `pending` or `processing` payment. The check runs at the pre-read, so the preview refuses, and again under the `FOR UPDATE` lock. The ledger action tells staff to wait until the charge succeeds or fails.
+- `applyPayment` (`apps/web/lib/billing/allocation.ts`) locks every invoice it is about to allocate to (`SELECT … FOR UPDATE`, in id order) and drops any that are no longer `open` or `partially_paid` once the lock is granted. A payment that read the invoice as open and then waited on a void's lock now allocates elsewhere instead of onto the void row.
+- B-329's comment is corrected. Landing on the voided invoice is the defect, not the safe outcome.
+- `tests/void-rebill-db.test.ts` has three new cases: `pending` and `processing` allocations each make the void refuse, and a real interleaving (the void holds the row lock while `applyPayment` has already read it as open) leaves no allocation on the void invoice. The interleaving case **fails on the old `allocation.ts`** (`expected [ {…} ] to deeply equal []`).
+
+**What it decided.**
+
+- **Reachability, as the row asked.** Only autopay passes `invoiceId` to `createChargeIntent` (both calls in `autopay.ts`). Portal, counter and checkout intents write no allocation, so an abandoned portal intent cannot hold a void off forever. `createSetupIntent` sets no `payment_method_types`, so whether autopay can save a bank account as `stripeDefaultPaymentMethodId` depends on the Stripe dashboard, not the code. The multi-day `processing` window has to be treated as reachable, and the refusal covers it.
+- **The lock also drops invoices that became `paid`**, not only `void` and `uncollectible`. A concurrent payment that settled the invoice first would otherwise have been topped up past its total with outstanding figures read before the lock.
+
+**What it left behind.**
+
+- Autopay's in-flight guard (`autopay.ts`, `pending`/`succeeded` only) still ignores `processing`. The row puts that out of scope. With the void now refused while a debit is processing, the B-338 double-charge path the row describes is closed. A processing ACH debit on a still-open invoice is the remaining gap, and it predates this block.
+- `createChargeIntent`'s allocation insert is not under the invoice lock. An autopay run that read the invoice as open in the milliseconds before a void commits can still write its pending allocation on the void row. When it settles, the (b) lock drops the void invoice and the money goes elsewhere, but the pending row stays behind, harmless to totals because `recomputeInvoices` skips void invoices. No item owns this; it is a narrower version of the same race.
+
+**Verification.** Typecheck is clean. Lint shows the same six warnings as `main`. `npm test -- tests/void-rebill-db.test.ts`: **14 passed**. Full unit sweep: **4686 passed, 8 skipped, 1 failed**, out of 4695. The one failure is `cron-catchup-db > resumes from a partial run` (`expected undefined to be 'partial'`). That is the intermittent already recorded under B-241, in code this row does not touch. It then passed twice alone, and on `main`. No schema change, so there is no drift check to run. The e2e suite was not run: the only UI change is one refusal sentence on the staff ledger, and no spec reaches an in-flight autopay charge.

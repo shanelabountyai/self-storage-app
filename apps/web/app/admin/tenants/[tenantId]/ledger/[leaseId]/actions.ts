@@ -254,6 +254,14 @@ export async function voidInvoiceAction(
       fieldErrors: {},
     }
   }
+  // B-352. Nothing to do instead but wait: the charge settles or fails on its own.
+  if (!result.ok && result.reason === 'payment_in_flight') {
+    return {
+      status: 'error',
+      message: `A payment of ${formatCents(result.amountCents)} against this invoice has not settled yet, so it cannot be voided. Try again once it has succeeded or failed.`,
+      fieldErrors: {},
+    }
+  }
   if (!result.ok) {
     return refusalState(result, {
       nothingToDo: 'That invoice has already been paid, voided or written off.',

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
 import { voidRentInvoice } from '../apps/web/lib/billing/corrections'
-import { recomputeInvoices } from '../apps/web/lib/billing/allocation'
+import { applyPayment, recomputeInvoices } from '../apps/web/lib/billing/allocation'
 import { generateInvoices } from '../apps/web/lib/billing/invoices'
 import { leaseLedger } from '../apps/web/lib/admin/ledger'
 import { assessLateFees } from '../apps/web/lib/billing/late-fees'
@@ -379,6 +379,76 @@ describeDb('B-327 — re-billing a voided rent period', () => {
       })
       expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe('open')
       expect(await prisma.ledgerEntry.count({ where: { leaseId, type: 'adjustment' } })).toBe(0)
+    })
+
+    // B-352 (b). An autopay charge writes its allocation before Stripe is
+    // called, and a pending allocation raises no paid total — so B-329's test
+    // alone let the void through.
+    it.each(['pending', 'processing'] as const)('is refused while a %s charge is allocated to it', async (status) => {
+      const { leaseId, tenantId } = await makeLease(d('2026-08-01'))
+      await generateInvoices(facilityId, d('2026-08-28'), noop)
+      const invoice = await liveRent(leaseId, '2026-09-01')
+      const payment = await prisma.payment.create({
+        data: { facilityId, tenantId, amountCents: invoice.totalCents, method: 'card', status },
+      })
+      await prisma.paymentAllocation.create({
+        data: { paymentId: payment.id, invoiceId: invoice.id, amountCents: invoice.totalCents },
+      })
+
+      expect(await voidRentInvoice(manager(), { invoiceId: invoice.id, reasonCode: 'wrong_rate' })).toEqual({
+        ok: false,
+        reason: 'payment_in_flight',
+        amountCents: invoice.totalCents,
+      })
+      expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe('open')
+      expect(await prisma.ledgerEntry.count({ where: { leaseId, type: 'adjustment' } })).toBe(0)
+    })
+
+    // B-352 (a). A payment that read the invoice as open and then waited on the
+    // void's row lock used to allocate to it anyway once the void committed.
+    it('a payment that waited on the void does not land on the voided invoice', async () => {
+      const { leaseId, tenantId } = await makeLease(d('2026-08-01'))
+      await generateInvoices(facilityId, d('2026-08-28'), noop)
+      const invoice = await liveRent(leaseId, '2026-09-01')
+      const payment = await prisma.payment.create({
+        data: { facilityId, tenantId, amountCents: invoice.totalCents, method: 'cash', status: 'succeeded' },
+      })
+
+      // Holds the void open, the way `voidRentInvoice`'s transaction does,
+      // until the payment is blocked behind it.
+      let locked!: () => void
+      let release!: () => void
+      const isLocked = new Promise<void>((resolve) => (locked = resolve))
+      const released = new Promise<void>((resolve) => (release = resolve))
+      const voiding = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "invoice" WHERE "id" = ${invoice.id} FOR UPDATE`
+          await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'void' } })
+          locked()
+          await released
+        },
+        { timeout: 20_000 },
+      )
+      await isLocked
+
+      const paying = prisma.$transaction((tx) => applyPayment(tx, payment), { timeout: 20_000 })
+      // Wait until the payment is actually queued on the lock, so the void
+      // commits between its read and its write rather than before both.
+      for (let tries = 0; tries < 100; tries += 1) {
+        const [{ waiting }] = await prisma.$queryRaw<{ waiting: bigint }[]>`
+          SELECT count(*) AS waiting FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'
+        `
+        if (waiting > 0n) break
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      release()
+      await voiding
+      const applied = await paying
+
+      expect(applied.lines).toEqual([])
+      expect(applied.unappliedCents).toBe(invoice.totalCents)
+      expect(await prisma.paymentAllocation.count({ where: { invoiceId: invoice.id } })).toBe(0)
     })
   })
 

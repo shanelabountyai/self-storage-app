@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-352**: a payment still in flight, or landing mid-void, can end up allocated to a voided invoice. The row says reachability needs confirming first. Then continue down the block in order.
+**Next: B-353**. Continue down review block 10 in order.
+
+**B-352 is built** (2026-09-21). `voidRentInvoice` refuses `payment_in_flight` while a pending or processing charge is allocated to the invoice, and `applyPayment` locks its target invoices and drops any no longer open. PROGRESS records two narrow leftovers, neither owned by an item.
 
 ## Start here
 
