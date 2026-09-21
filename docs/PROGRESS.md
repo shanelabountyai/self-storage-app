@@ -11152,7 +11152,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-347 — the lease states the late-fee ladder it will charge (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `720a7c4`
 
 **What it built.**
 
