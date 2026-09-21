@@ -11241,7 +11241,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-351 — late-fee steps are charged once per delinquency episode, not once per lease (2026-09-21)
 
-**Commit:** `PENDING`
+**Commit:** `34a0503`
 
 **What it built.**
 
