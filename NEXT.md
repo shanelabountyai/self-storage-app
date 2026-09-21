@@ -2,7 +2,7 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-350** — refuse an account overpayment at the counter (cash/check/money order, counter card, card-on-file) above the account's open balance. Then B-351 (late-fee steps once per delinquency episode, not per lease life), then down the block in order.
+**Next: B-351**: late-fee steps once per delinquency episode, not once per lease life. Then continue down the block in order.
 
 ## Start here
 
@@ -12,6 +12,8 @@
 - Storage Business in Brief: https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf
 - LinkedIn drafts 25–29 in the Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
 - Technical write-up: `WRITEUP.md` (https://github.com/shanelabountyai/self-storage-app/blob/main/WRITEUP.md), screenshots in `docs/images/`
+
+**B-350 is built** (2026-09-21, `7132293`). Cash/check/money order, the counter card and card-on-file refuse an ACCOUNT payment above the account's open balance (`account_above_balance`, or `accountAboveBalance` on the card setup), before anything is written. D-113 is still open.
 
 **B-349 is built** (2026-09-21, `67ec7f4`). A bare `/portal/pay` redirects a one-lease tenant to `?lease=`. A tenant with several leases, or none, gets a sentence and a link to `/portal`. The DEMO.md troubleshooting row is removed.
 

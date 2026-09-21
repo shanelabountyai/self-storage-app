@@ -11217,7 +11217,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-350 — an account payment at the counter takes no more than the account owes (2026-09-21)
 
-**Commit:** `pending`
+**Commit:** `7132293`
 
 **What it built.**
 
