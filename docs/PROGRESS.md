@@ -11298,7 +11298,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-354 — the void's confirm step states the re-bill, and a re-ask says nothing was posted (2026-09-21)
 
-**Commit:** `PENDING`
+**Commit:** `8eb48d9`
 
 **What it built.** `voidInvoiceAction` reads B-338's `projectRentRebill` once, before the void, and uses it twice. The confirm echo relabels "Balance after" as "Balance after the void" and adds a "Billed again" row: either "{amount} on the next run, due the day it is raised. The tenant is emailed the updated invoice." or "No". The success message follows the same projection. It reads "Invoice {n} voided. The next billing run bills this period again at {rebill} and emails the tenant." or "Invoice {n} voided. This period will not be billed again." The old "If it was for the current period…" hedge is gone. `confirmCorrection` now returns a different message when a `yes:` press does not match the token: "The amount changed since you last checked, so nothing was posted. Check it again before it is posted." The pre-mounted status region therefore changes text and announces the re-ask. This covers all three corrections, because they share the function. A first ask keeps its wording.
 

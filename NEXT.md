@@ -4,7 +4,7 @@
 
 **Next: B-355**. Continue down review block 10 in order.
 
-**B-354 is built** (2026-09-21). The void's confirm echo shows "Billed again" from `projectRentRebill`, the success message states the re-bill rather than hedging, and a mismatched Confirm re-asks with "nothing was posted" so the status region announces it.
+**B-354 is built** (2026-09-21, `8eb48d9`). The void's confirm echo shows "Billed again" from `projectRentRebill`, the success message states the re-bill rather than hedging, and a mismatched Confirm re-asks with "nothing was posted" so the status region announces it.
 
 **B-353 is built** (2026-09-21, `4f6d91f`). `paymentCredits` takes account scope only when the payment's tenant is the account's payer. A member paying their own unit gets that unit's balance and no account name on every receipt.
 
