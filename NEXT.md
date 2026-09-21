@@ -4,8 +4,9 @@
 
 ## Start here
 
-1. **B-332 (`83azzd`)**: next in review block 9. Work down the block from there, skipping B-333 and B-338 (built). B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
+1. **B-334 (`83azzf`)**: next in review block 9. Work down the block from there, skipping B-338 (built). B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
 
+**B-332 is built** (2026-09-21, `68f417e`). A no-email tenant's receipt for a desk payment (counter receipt number, or `counter: true` on a desk card's `payment.succeeded`) writes its failed Message but opens no task; `taskLabel` tells "No email address on file" from "Email is bouncing" by the task's detail.
 **B-329 is built** (2026-09-20, `5a6c9b3`), minus its production count — see Owner actions.
 **B-333 is built** (2026-09-20, `af32799`).
 **B-331 is built** (2026-09-21, `13540c3`). `paymentCredits` returns `accountName` and quotes the ACCOUNT's balance when every credited lease is an occupying unit of one account; every receipt (email, both portal/pay-link done pages, counter) names its scope from it.

@@ -10834,7 +10834,7 @@ Four receipts read it: the email (`receiptBalanceLine`, `apps/web/lib/comms/pros
 
 ## B-332 — a receipt in the tenant's hand is not a letter to post (2026-09-21)
 
-**Commit:** `pending`
+**Commit:** `68f417e`
 
 **What it built.** `noReachableEmail` (`apps/web/lib/comms/service.ts`) still writes the `failed` Message with its rendered body for every template, but no longer opens a `no_reachable_channel` task for a **`payment_receipt` whose payment was taken at the desk** (`receiptHandedOver`):
 
