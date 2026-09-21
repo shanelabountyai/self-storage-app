@@ -10953,7 +10953,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-339 — a counter payment over the picked unit's balance names the tenant's other owing unit, with a one-press "pay both" (2026-09-21)
 
-**Commit:** SHA_PENDING
+**Commit:** `4edca09`
 
 **What it built.**
 
