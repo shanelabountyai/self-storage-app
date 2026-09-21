@@ -11006,7 +11006,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-341 — the printed letter and the task detail mark a Spanish tenant's words `lang="es"`, and the letter is dated in Spanish (2026-09-21)
 
-**Commit:** `TBD`
+**Commit:** `950b49d`
 
 **What it built.**
 
