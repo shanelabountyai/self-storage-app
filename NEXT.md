@@ -2,7 +2,7 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-351**: late-fee steps once per delinquency episode, not once per lease life. Then continue down the block in order.
+**Next: B-352**: a payment still in flight, or landing mid-void, can end up allocated to a voided invoice. The row says reachability needs confirming first. Then continue down the block in order.
 
 ## Start here
 
@@ -12,6 +12,8 @@
 - Storage Business in Brief: https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf
 - LinkedIn drafts 25–29 in the Ledger: https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i
 - Technical write-up: `WRITEUP.md` (https://github.com/shanelabountyai/self-storage-app/blob/main/WRITEUP.md), screenshots in `docs/images/`
+
+**B-351 is built** (2026-09-21, `34a0503`). `chargedSteps` counts only fee lines due on or after the oldest unpaid rent invoice's original due date, so a cured-then-late-again tenant is charged the ladder again. Waived, transferred (B-138) and returned-payment (B-161) steps inside the episode still hold.
 
 **B-350 is built** (2026-09-21, `7132293`). Cash/check/money order, the counter card and card-on-file refuse an ACCOUNT payment above the account's open balance (`account_above_balance`, or `accountAboveBalance` on the card setup), before anything is written. D-113 is still open.
 
