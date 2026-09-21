@@ -4,8 +4,9 @@
 
 ## Start here
 
-1. **B-345 (`83azzq`)**: next in review block 9. Change two British phrases to US English in the comms catalog and the en dictionary, then add a guard test. Templates are seeded state, so run `db:migrate:test` after the edit. Work down the block from there. B-346 is last: **D-145** was settled (A), so write-off, void and adjustment all get a confirm step.
+1. **B-346 (`83azzr`)**: last in review block 9. **D-145** was settled (A), so write-off, void and non-zero adjustment on the ledger corrections page all get FR-21's confirm-and-echo step on the shared `AdminForm`. The echo lands in B-333's status region.
 
+**B-345 is built** (2026-09-21, `a63a737`). "crossed in the mail" and "anything we mail you". `tests/us-english.test.ts` guards the en dictionary and the English catalog.
 **B-344 is built** (2026-09-21, `924cdd5`). For a business account, the counter card screens say "payer" instead of "tenant", and the card-on-file line names whose card it is. The done page links `/admin/billing/accounts/[id]`, and a declined card links back to `/admin/pos/card` with the same subject and amount.
 **B-343 is built** (2026-09-21, `47e106b`). The receipt email has a `{{payment.details}}` table (receipt number when there is one, the account, and *Paid by* with the check or money-order number). It reads the same columns `receiptRows` does, in both languages. Templates are seeded state, so run `db:migrate:test` when you switch branches.
 **B-342 is built** (2026-09-21, `03ea9ac`). When `accountName` is set, the account-access mail has its own subject (*"You can now see {account} at {site}"*) and lead, and a recovery line that links `/forgot-password`, in EN and ES. The ordinary reset email is unchanged, and nothing is re-sent.

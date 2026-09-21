@@ -11088,7 +11088,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-345 — two British phrasings in customer English are now US English (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `a63a737`
 
 **What it built.**
 
