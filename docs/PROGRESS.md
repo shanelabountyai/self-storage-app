@@ -10756,7 +10756,7 @@ The counter form's Method select was uncontrolled under `key={former | account |
 
 ## B-338 — a voided rent period is re-billed on a date the tenant can pay by, and they are told (2026-09-20)
 
-**Commit:** `PENDING`
+**Commit:** `ec2b380`
 
 **What it built.** The three things B-327 left open when it made a voided period billable again, plus the defect that would have made the second one a no-op.
 
