@@ -81,6 +81,11 @@ function referenceInvoiceId(intent: Stripe.PaymentIntent): string | null {
   return intent.metadata?.invoiceId ?? null
 }
 
+/// The business account a charge pays, when it pays one (B-330).
+function referenceAccountId(intent: Stripe.PaymentIntent): string | null {
+  return intent.metadata?.accountId ?? null
+}
+
 /// The payment plan an installment charge belongs to, when there is one
 /// (B-189). What it buys is the allocation narrowing in `applyPayment`.
 function referencePlanId(intent: Stripe.PaymentIntent): string | null {
@@ -222,6 +227,7 @@ async function settlePayment(
   payment: { id: string; facilityId: string; tenantId: string; amountCents: number },
   explicitInvoiceId: string | null,
   explicitPlanId: string | null = null,
+  accountId: string | null = null,
 ): Promise<AppliedPayment> {
   // The named invoice is checked against this payment's own tenant and
   // facility before it is trusted: it arrives through Stripe metadata, and
@@ -255,6 +261,7 @@ async function settlePayment(
   const applied = await applyPayment(tx, payment, {
     explicitInvoiceId: named?.id ?? null,
     restrictToInvoiceIds: plan?.invoiceIds ?? null,
+    accountId,
   })
 
   for (const line of applied.lines) {
@@ -303,6 +310,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           payment,
           referenceInvoiceId(intent),
           referencePlanId(intent),
+          referenceAccountId(intent),
         )
         // B-257. AFTER the allocation, not before it, because the entries are
         // split by what the allocation settled — one per lease this payment

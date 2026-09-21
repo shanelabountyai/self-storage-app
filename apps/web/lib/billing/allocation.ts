@@ -169,6 +169,13 @@ export async function applyPayment(
     /// never wander off that unit, so nothing left to claim there means credit
     /// on it rather than a fallback onto everything this payer owes.
     restrictIsAbsolute?: boolean
+    /// B-330. A payment made against a business ACCOUNT settles the account's
+    /// units and nothing else. `claimsFor` is the payer's own leases OR the
+    /// account's (D-118), so without this Acme's check paid the foreman's
+    /// older personal unit and left an Acme unit open. Absolute, like B-305:
+    /// a surplus is credit on the anchor, never the payer's own arrears. The
+    /// account is checked against the payer here — it can arrive via Stripe.
+    accountId?: string | null
   } = {},
 ): Promise<AppliedPayment> {
   const facility = await tx.facility.findUniqueOrThrow({
@@ -178,6 +185,24 @@ export async function applyPayment(
 
   let targets = await claimsFor(payment.tenantId, payment.facilityId, tx)
   let deferred: AllocationTarget[] = []
+
+  if (options.accountId) {
+    const onAccount = new Set(
+      (
+        await tx.invoice.findMany({
+          where: {
+            facilityId: payment.facilityId,
+            lease: {
+              billingAccountId: options.accountId,
+              billingAccount: { payerTenantId: payment.tenantId },
+            },
+          },
+          select: { id: true },
+        })
+      ).map((invoice) => invoice.id),
+    )
+    targets = targets.filter((target) => onAccount.has(target.invoiceId))
+  }
 
   // B-189. A payment plan installment settles a SLICE of the arrears the plan
   // froze, so it narrows to that set rather than naming one invoice — and the

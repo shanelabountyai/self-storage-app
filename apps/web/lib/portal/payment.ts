@@ -251,9 +251,9 @@ export async function payableLease(tenantId: string, leaseId: string): Promise<P
 /// path, so a member who types the account's own URL gets the same null a
 /// stranger does.
 ///
-/// The returned `leaseId` is an ANCHOR, not the unit being paid. A payment is
-/// allocated across every claimable lease in the facility's own order however
-/// it is anchored (`claimsFor` via `payableLeaseFilter`), so which unit the
+/// The returned `leaseId` is an ANCHOR, not the unit being paid. The payment
+/// is allocated across the account's units in the facility's own order, and
+/// never the payer's personal units (B-330, via `accountId`), so which unit the
 /// button names changes nothing about where the money lands; the anchor exists
 /// only so a remainder has somewhere to sit (`postPaymentLedger`). It is the
 /// first unit in the list's own sort order, so a reload produces the same
@@ -344,6 +344,7 @@ export async function startPortalPayment(
       facilityId: lease.facilityId,
       tenantId,
       leaseId: lease.leaseId,
+      accountId: lease.account?.id ?? null,
       amountCents,
       // B-256. An account payment is keyed on the ACCOUNT, not on the anchor
       // lease: two accounts can share a facility and an amount, and the anchor

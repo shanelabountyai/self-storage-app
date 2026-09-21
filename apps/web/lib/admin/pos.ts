@@ -304,8 +304,8 @@ export async function recordCounterPayment(
     // — $161 due", the screen offered "Pay in full" from that unit's own
     // balance, and B-278's receipt came back naming C-3. Absolute, so a unit
     // that owes nothing takes the cash as credit rather than handing it to the
-    // employer's arrears. The account option is unrestricted, deliberately:
-    // spreading across the account is the whole point of it (B-280).
+    // employer's arrears. The account option spreads across the account's
+    // units (B-280) and only those (B-330) — never the payer's personal units.
     const directed = Boolean(input.restrictToLease) && !input.accountId;
     const applied = await applyPayment(
       tx,
@@ -328,7 +328,7 @@ export async function recordCounterPayment(
             ).map((invoice) => invoice.id),
             restrictIsAbsolute: true,
           }
-        : {},
+        : { accountId: input.accountId ?? null },
     );
     allocation.push(applied);
 
@@ -614,7 +614,7 @@ function timezoneOffsetMs(at: Date, timezone: string): number {
 export type CounterCharge = {
   /// For an account, the ANCHOR lease: where the webhook's `postPaymentLedger`
   /// puts a remainder no invoice claimed, exactly as `accountAnchor` does for a
-  /// check. Not what the money settles — `claimsFor(payer)` decides that.
+  /// check. Not what the money settles — the account's open invoices do (B-330).
   leaseId: string;
   /// Who is charged: the lease's tenant, or an account's PAYER (B-320). This is
   /// the Stripe customer, and the `Payment.tenantId` that `claimsFor` spreads.
@@ -684,9 +684,8 @@ export async function chargeableLease(
 
 /// B-320. A whole business account as a card charge: the PAYER is the Stripe
 /// customer, so the webhook allocates it by `claimsFor(payer)` exactly as
-/// `recordCounterPayment` allocates the account's check — undirected, across
-/// every unit on the account (B-280). B-305 governs both paths; this one does
-/// not pre-empt it by narrowing.
+/// `recordCounterPayment` allocates the account's check — across every unit on
+/// the account (B-280) and no unit that is not on it (B-330).
 ///
 /// Needs an open lease on the account, the same rule `chargeableLease` keeps
 /// for one unit: a card at the counter is not widened to closed leases here.
@@ -793,6 +792,7 @@ export async function startCounterCardPayment(
       facilityId: lease.facilityId,
       tenantId: lease.tenantId,
       leaseId: lease.leaseId,
+      accountId: lease.accountId,
       amountCents,
       // B-320. An account is keyed by the ACCOUNT: its anchor lease is also a
       // unit somebody can be charged for alone, and the two are different
@@ -873,6 +873,7 @@ export async function chargeCardOnFile(
       facilityId: lease.facilityId,
       tenantId: lease.tenantId,
       leaseId: lease.leaseId,
+      accountId: lease.accountId,
       amountCents,
       // Same key shape as the on-session counter charge above and for the same
       // reason, in its own namespace: a staffer who presses this twice while

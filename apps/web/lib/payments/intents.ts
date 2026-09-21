@@ -29,6 +29,10 @@ export type ChargeIntentInput = {
   /// wrong unit. Optional because move-in (B-025) genuinely has no lease yet
   /// at the moment it charges.
   leaseId?: string
+  /// B-330. The business account this charge pays, when it pays one. Comes
+  /// back on the webhook, where `applyPayment` confines the money to the
+  /// account's units rather than the payer's own.
+  accountId?: string | null
   /// Keep the card on file for later charges. Default true: move-in enrols in
   /// autopay by default (§4.6/D-11a) and needs the method retained. A portal
   /// one-time payment passes false — the tenant asked to pay a bill, not to
@@ -189,17 +193,18 @@ export async function createChargeIntent(input: ChargeIntentInput): Promise<Char
           tenantId: input.tenantId,
           reference: input.reference,
           ...(input.leaseId ? { leaseId: input.leaseId } : {}),
+          ...(input.accountId ? { accountId: input.accountId } : {}),
           ...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
           ...(input.paymentPlanId ? { paymentPlanId: input.paymentPlanId } : {}),
         },
       },
-      // `v2` namespaces the key. Stripe remembers the PARAMETERS a key was
+      // `v3` (B-330 added `accountId`) namespaces the key. Stripe remembers the PARAMETERS a key was
       // first used with for 24 hours, so removing `paymentId` from the metadata
       // above would otherwise keep conflicting with keys recorded under the old
       // shape until they aged out. Bumping the namespace when the request shape
       // changes is the standard move, and cheap: the worst case is that one
       // charge is not deduplicated against a pre-change attempt.
-      { idempotencyKey: idempotencyKey('charge', 'v2', input.reference) },
+      { idempotencyKey: idempotencyKey('charge', 'v3', input.reference) },
     )
   } catch (error) {
     // The pending row was written first on purpose (see above), but if Stripe

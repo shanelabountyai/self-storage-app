@@ -10782,3 +10782,27 @@ The counter form's Method select was uncontrolled under `key={former | account |
 - **Confirm step on the void is still D-145 / B-346.**
 
 **Verification.** Typecheck clean (including `tests/` and `e2e/`), lint clean (6 pre-existing `_prev` warnings, 0 errors). Full unit suite: **4627 passed + 8 skipped = 4635**, exit 0, after `db:migrate:test` reseeded the catalog (B-206). `tests/void-rebill-db.test.ts` 9 passed, including the two B-338 cases: the ledger read reports `rebillCents` equal to the voided amount with the rate unchanged, the new rate once it changes, and null a month on; and a reissue raised on 3 September is due 3 September, draws no late fee against a day-1 step, emits exactly one `invoice.reissued`, and produces exactly one sent message — to the Spanish-speaking tenant, in Spanish, none to the account payer. The late-fee assertion was confirmed to **fail with the `outstandingCents` guard removed**. The seeded-catalog guards (`merge-fields.test.ts`, `comms-catalog-locale.test.ts`) cover the new template in both languages. `e2e/admin-ledger-corrections.spec.ts` on `desktop-chrome` after `db:migrate:e2e`: 3 passed (plus 2 auth setup). No schema change, so no drift check needed. Accessibility statement re-read: the only customer-facing change is an email, and the page makes no claim about email (B-198) — a re-read note was added, no claim changed.
+
+## B-330 — an account payment settles the account's units, never the payer's own (2026-09-21)
+
+**Commit:** `PENDING`
+
+**What it built.** `applyPayment` takes an `accountId` (`apps/web/lib/billing/allocation.ts`): the payer's claims (`claimsFor`, D-118's union) are filtered to invoices on leases of that account, and only when the account's `payerTenantId` is this payment's tenant. Three callers pass it:
+
+1. **Counter cash, check and money order** (`recordCounterPayment`, `apps/web/lib/admin/pos.ts`) — the account option, which was deliberately unrestricted, now passes `accountId`. A unit-directed payment (B-305) is unchanged.
+2. **Counter card and card-on-file** (`startCounterCardPayment`, `chargeCardOnFile`) — `CounterCharge.accountId` goes to `createChargeIntent`, which writes it into the PaymentIntent's metadata; the webhook's `settlePayment` reads it back (`referenceAccountId`, `apps/web/lib/payments/reconcile.ts`).
+3. **The portal's `/portal/pay?account=`** (`startPortalPayment`, `apps/web/lib/portal/payment.ts`) — **confirmed to have the same shape**: payer as tenant, anchor lease, no narrowing. Fixed the same way.
+
+**What it decided.**
+
+- **Restricting is absolute.** An account that owes less than the payment leaves the rest unapplied, and `postPaymentLedger` puts it on the anchor lease (`accountAnchor` / the portal's anchor) as credit — never on the payer's personal arrears. Same direction B-305 chose.
+- **The account is re-checked against the payer inside `applyPayment`**, because on the card path it arrives through Stripe metadata (B-045's caution). An account the payer no longer pays for narrows to nothing, so the money sits as unapplied credit and the reconciliation report shows it, rather than spreading across whatever the payer owes.
+- **The idempotency namespace moved `v2` → `v3`**, because account intents now carry different metadata and Stripe refuses a reused key with different parameters. Cost: an intent raised just before the deploy is not deduplicated against one raised after it — the file's own stated trade.
+- D-118, D-137 and B-320's "not narrowed to one unit" all stand; the change is only that an ACCOUNT payment's set is the account's.
+
+**What it left behind.**
+
+- **Receipt balance wording is B-331**, next. B-278's `paymentCredits` now names only account units for an account payment (asserted), but the "Balance now" line still sums the credited leases only.
+- **A portal payment for ONE personal unit is still undirected on the webhook** — it can spread across the tenant's other personal units at the site. Not this row's scope (it is about the account/personal boundary); B-331's second acceptance touches the wording of the same shape.
+
+**Verification.** `tests/account-payment-scope-db.test.ts` (new, 5): the payer has an older personal unit owing $100 and an account unit owing $100; a $100 account payment settles the account unit and leaves the personal invoice open and its ledger at $100 — for counter cash, for a counter card through `applyStripeEvent`, and for the portal account payment through `applyStripeEvent`; a $150 account payment leaves $50 credit on the account unit and still does not touch the personal one; the counter receipt's credits name only the account unit; a cash payment directed at the payer's own unit still settles it. **With the `allocation.ts` change stashed, 4 of the 5 fail** (the own-name case passes both ways, as it should). `counter-card-account-db` and `counter-account-payment-db` still pass. Typecheck and lint clean (6 pre-existing warnings). Full unit suite: **4632 passed + 8 skipped = 4640** (B-338's 4635 plus these 5), exit 0 — after one earlier attempt was SIGKILLed at startup, zero tests run, by countertop's concurrent sweep. No schema change, so no drift check. Accessibility statement re-read: no rendered change, note added.
