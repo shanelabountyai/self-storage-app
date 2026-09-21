@@ -11313,7 +11313,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-355 — the partly-paid void refusal leads with the correction, and warns a refund can miss (2026-09-21)
 
-**Commit:** `pending`
+**Commit:** `a70ef4c`
 
 **What it built.** The `partly_paid` refusal in `voidInvoiceAction` and the "Void a rent invoice" section prose in `ledger-corrections.tsx` now put the correction first ("post a correction above for the difference between this invoice and the right amount"), then the refund, then a warning: if that payment also paid other invoices, check this one reads unpaid before voiding. The refusal names the paid amount in both places it is mentioned. The section prose has no single invoice to quote, so it says "the paid amount".
 
