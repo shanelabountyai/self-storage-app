@@ -191,6 +191,13 @@ export default async function CounterCardPage({
             returnUrl={`${process.env.AUTH_URL ?? 'http://localhost:3000'}/admin/pos/card/done?payment=${setup.paymentId}&${subjectParam}`}
             amountLabel={formatCents(amountCents)}
           />
+        ) : setup.accountAboveBalance ? (
+          // B-350. No intent was raised for an account's surplus.
+          <p className="border-input rounded-lg border p-4 text-sm text-pretty">
+            {formatCents(amountCents)} is more than the {formatCents(lease.balanceCents)} owed on{' '}
+            {lease.subject}. Paying ahead on a business account isn’t taken yet. Use Charge a different amount to take{' '}
+            {formatCents(lease.balanceCents)} or less.
+          </p>
         ) : (
           <p className="border-input rounded-lg border p-4 text-sm text-pretty">
             Card payments are not configured right now.{' '}

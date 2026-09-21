@@ -25,6 +25,9 @@ const PROBLEM_COPY: Record<string, string> = {
   // B-280 / D-137.
   account_remainder:
     'That is more than this tenant owes, and their unit is on a business account. To take it for the whole account, choose the account under Unit or account.',
+  // B-350. D-113 has not said whose an account's surplus is.
+  account_above_balance:
+    'That is more than this business account owes. Paying ahead on a business account isn’t taken yet — take no more than the account’s balance.',
   needs_manager: 'Cash this large needs a manager. Ask one to take it, or split the payment.',
   // B-230. The counter takes cards now, on its own screen — this string is
   // only reachable if something posts `card` past the redirect below, and it

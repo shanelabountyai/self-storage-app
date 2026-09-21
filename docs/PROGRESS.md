@@ -11214,3 +11214,27 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.**
 
 - The unit suite was not run in full; only `i18n.test.ts` was, because the change adds one query, which the e2e tests cover.
+
+## B-350 — an account payment at the counter takes no more than the account owes (2026-09-21)
+
+**Commit:** `pending`
+
+**What it built.**
+
+- `recordCounterPayment` (cash, check, money order) refuses an **account** subject whose amount is over the account's open balance. It returns `account_above_balance` before the transaction, so no `Payment`, allocation, ledger row or receipt number is written. The balance comes from `accountBalanceCents`: the sum of the ledger over the account's occupying and ended leases at the facility, which is the set `counterPayableAccounts` shows in the picker.
+- `startCounterCardPayment` returns `{ available: false, accountAboveBalance: true }` for the same case before it raises an intent. `/admin/pos/card` says so in place of the Element and points to *Charge a different amount*.
+- `chargeCardOnFile` returns `account_above_balance` before it looks up the card. `chargeCardOnFileAction` already refused any amount over the balance. For an account it now gives the account sentence.
+- `tests/account-payment-scope-db.test.ts`: B-330's surplus case is replaced by one refusal test per path. Each refuses $150 against $100 owed, and asserts no payment for the payer, both invoices still open and the ledger unchanged. A new test pays exactly $100, runs `generateInvoices`, and finds that payment's only allocation on the account's lease.
+
+**What it decided.**
+
+- **The wording is B-322's sentence, not its phone link.** Every surface is staff-facing (*"Paying ahead on a business account isn't taken yet"*), and the person reading it is the office, so a `tel:` link to the office would send them to themselves. English only, like the rest of the admin surface.
+- **The guard is in the lib, not the screens,** so any caller of the three functions gets it. A unit-directed payment (B-305) and B-339's `units:` subject are unchanged: their surplus is the tenant's own and is swept correctly.
+- **D-113 stays open.** This row decides nothing about whose an account credit is. It stops the case being created.
+
+**What it left behind.**
+
+- Credit that B-330 already booked on an account before this row can still be swept onto the payer's own unit. Production holds seeded demo data only, so no row owns it.
+- The e2e suite was not run. No spec pays an account more than it owes, and the new card-screen branch is staff-only. CI's e2e lane runs it.
+
+**Verification.** Typecheck is clean. Lint shows the same six warnings as before, none in files this row touched. `npm test -- tests/account-payment-scope-db.test.ts` plus the five other counter/account suites and `pos-db.test.ts`: **56 passed**.

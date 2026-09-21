@@ -57,8 +57,14 @@ vi.mock('../apps/web/lib/payments/stripe', async (importOriginal) => {
   return { ...actual, paymentsEnabled: () => true, stripeClient: () => ({}) as never }
 })
 
-const { chargeableAccount, counterReceipt, recordCounterPayment, startCounterCardPayment } =
-  await import('../apps/web/lib/admin/pos')
+const {
+  chargeableAccount,
+  chargeCardOnFile,
+  counterReceipt,
+  recordCounterPayment,
+  startCounterCardPayment,
+} = await import('../apps/web/lib/admin/pos')
+const { generateInvoices } = await import('../apps/web/lib/billing/invoices')
 const { payableAccount, startPortalPayment } = await import('../apps/web/lib/portal/payment')
 const { applyStripeEvent } = await import('../apps/web/lib/payments/reconcile')
 
@@ -278,7 +284,21 @@ describeDb('an account payment settles the account, not the payer’s own units 
     await expectAccountSettledOnly()
   })
 
-  it('a surplus on the account is credit on the account, not the payer’s arrears', async () => {
+  // B-350. A surplus on an account used to be booked as credit that every
+  // credit-spending job then looked up by the payer, so it paid the payer's
+  // personal unit at the next billing run. Now it is never created.
+  async function expectNothingWritten(): Promise<void> {
+    expect(await prisma.payment.count({ where: { tenantId: f.payerId } })).toBe(0)
+    expect(await status(f.accountInvoiceId)).toBe('open')
+    expect(await status(f.personalInvoiceId)).toBe('open')
+    const ledger = await prisma.ledgerEntry.aggregate({
+      where: { leaseId: { in: [f.accountLeaseId, f.personalLeaseId] } },
+      _sum: { amountCents: true },
+    })
+    expect(ledger._sum.amountCents).toBe(20_000)
+  }
+
+  it('cash over the account’s balance is refused and writes nothing (B-350)', async () => {
     const result = await recordCounterPayment(actor(), {
       facilityId,
       tenantId: f.payerId,
@@ -290,13 +310,24 @@ describeDb('an account payment settles the account, not the payer’s own units 
       tenderedCents: 15_000,
       checkNumber: '',
     })
-    if (!result.ok) throw new Error(result.problem)
-    await expectAccountSettledOnly()
-    const accountLedger = await prisma.ledgerEntry.aggregate({
-      where: { leaseId: f.accountLeaseId },
-      _sum: { amountCents: true },
-    })
-    expect(accountLedger._sum.amountCents).toBe(-5_000)
+    expect(result).toEqual({ ok: false, problem: 'account_above_balance' })
+    await expectNothingWritten()
+  })
+
+  it('a counter card over the account’s balance raises no intent (B-350)', async () => {
+    const charge = (await chargeableAccount(actor(), f.accountId))!
+    const setup = await startCounterCardPayment(actor(), charge, 15_000)
+    expect(setup).toEqual({ available: false, accountAboveBalance: true })
+    expect(charges).toHaveLength(0)
+    await expectNothingWritten()
+  })
+
+  it('card on file over the account’s balance is refused before the card (B-350)', async () => {
+    const charge = (await chargeableAccount(actor(), f.accountId))!
+    const result = await chargeCardOnFile(actor(), charge, 15_000)
+    expect(result).toEqual({ ok: false, problem: 'account_above_balance' })
+    expect(charges).toHaveLength(0)
+    await expectNothingWritten()
   })
 
   it('a payment in the payer’s own name still reaches their own unit', async () => {
@@ -313,5 +344,26 @@ describeDb('an account payment settles the account, not the payer’s own units 
     if (!result.ok) throw new Error(result.problem)
     expect(await status(f.personalInvoiceId)).toBe('paid')
     expect(await status(f.accountInvoiceId)).toBe('open')
+  })
+
+  it('the next billing run spends none of an account payment outside the account (B-350)', async () => {
+    const result = await recordCounterPayment(actor(), {
+      facilityId,
+      tenantId: f.payerId,
+      leaseId: '',
+      accountId: f.accountId,
+      restrictToLease: false,
+      method: 'cash',
+      amountCents: 10_000,
+      tenderedCents: 10_000,
+      checkNumber: '',
+    })
+    if (!result.ok) throw new Error(result.problem)
+    await generateInvoices(facilityId, d('2026-09-28'), () => {})
+    const allocations = await prisma.paymentAllocation.findMany({
+      where: { paymentId: result.paymentId },
+      select: { invoice: { select: { leaseId: true } } },
+    })
+    expect(allocations.map((a) => a.invoice.leaseId)).toEqual([f.accountLeaseId])
   })
 })

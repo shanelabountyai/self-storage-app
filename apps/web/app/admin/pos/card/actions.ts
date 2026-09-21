@@ -43,6 +43,12 @@ export async function chargeCardOnFileAction(
   if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
     return fieldError({ amount: 'Enter an amount greater than zero.' })
   }
+  if (amountCents > lease.balanceCents && lease.accountId) {
+    // B-350. D-113 has not said whose an account's surplus is.
+    return fieldError({
+      amount: `That is more than the ${formatCents(lease.balanceCents)} owed on ${lease.subject}. Paying ahead on a business account isn’t taken yet.`,
+    })
+  }
   if (amountCents > lease.balanceCents) {
     // Deliberately NOT the portal's twelve-month prepayment ceiling. That
     // ceiling exists so a tenant can pay ahead from their own account; this is

@@ -101,7 +101,11 @@ export type CounterPaymentResult =
     }
   | {
       ok: false;
-      problem: CounterTenderProblem | "lease_not_found" | "account_remainder";
+      problem:
+        | CounterTenderProblem
+        | "lease_not_found"
+        | "account_remainder"
+        | "account_above_balance";
     };
 
 /// Every refusal `counterTenderRefusal` can produce — deliberately WITHOUT
@@ -252,6 +256,17 @@ export async function recordCounterPayment(
     if (settled.amountCents > owedCents) {
       return { ok: false, problem: "account_remainder" };
     }
+  }
+
+  // B-350. An account takes what it owes and no more. A surplus would sit as
+  // credit that every job spending credit looks up by `lease.tenantId` — so it
+  // was swept onto the payer's personal unit, or stranded — and whose credit it
+  // is stays open under D-113. Refused here, as B-256 refuses it on the portal.
+  if (
+    input.accountId &&
+    settled.amountCents > (await accountBalanceCents(input.accountId, input.facilityId))
+  ) {
+    return { ok: false, problem: "account_above_balance" };
   }
 
   // A one-element box rather than a `let`: TypeScript narrows a variable only
@@ -451,6 +466,21 @@ async function accountAnchor(
         billingAccount: { payerTenantId: account.payerTenantId },
       }
     : null;
+}
+
+/// B-350. What an account owes at this facility: the picker's own lease set
+/// (`counterPayableAccounts`), so the ceiling is the figure the staffer was shown.
+async function accountBalanceCents(accountId: string, facilityId: string): Promise<number> {
+  const leases = await prisma.lease.findMany({
+    where: {
+      billingAccountId: accountId,
+      facilityId,
+      status: { in: [...OCCUPYING_LEASE_STATUSES, "ended"] },
+    },
+    select: { id: true },
+  });
+  const balances = await balancesFor(leases.map((lease) => lease.id));
+  return [...balances.values()].reduce((sum, cents) => sum + cents, 0);
 }
 
 export type DailySummaryRow = {
@@ -764,7 +794,7 @@ export async function chargeableAccount(
 }
 
 export type CounterCardSetup =
-  | { available: false }
+  | { available: false; accountAboveBalance?: true }
   | {
       available: true;
       clientSecret: string;
@@ -801,6 +831,11 @@ export async function startCounterCardPayment(
       "payments:take",
       lease.facilityId,
     );
+  }
+  // B-350. Before any intent is raised: an account's surplus has nowhere safe
+  // to land (see `recordCounterPayment`).
+  if (lease.accountId && amountCents > lease.balanceCents) {
+    return { available: false, accountAboveBalance: true };
   }
   if (!paymentsEnabled()) return { available: false };
 
@@ -840,7 +875,11 @@ export async function startCounterCardPayment(
 
 export type CardOnFileResult =
   | { ok: true; paymentId: string; amountCents: number }
-  | { ok: false; problem: "unavailable" | "no_method" | "declined"; message?: string };
+  | {
+      ok: false;
+      problem: "unavailable" | "no_method" | "declined" | "account_above_balance";
+      message?: string;
+    };
 
 /// US-32 / B-230. Charges the card the tenant already has on file.
 ///
@@ -874,6 +913,10 @@ export async function chargeCardOnFile(
       "payments:take",
       lease.facilityId,
     );
+  }
+  // B-350, as in `startCounterCardPayment`.
+  if (lease.accountId && amountCents > lease.balanceCents) {
+    return { ok: false, problem: "account_above_balance" };
   }
   if (!paymentsEnabled()) return { ok: false, problem: "unavailable" };
 
