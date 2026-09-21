@@ -286,6 +286,57 @@ describeDb('business account payer comms', () => {
     expect(messages.every((message) => message.status === 'sent')).toBe(true)
   })
 
+  // B-335. Both leases' events are on the outbox before either is dispatched,
+  // which is how the nightly job and the next cron tick meet. Each order gets an
+  // account of its own, since the payer's copy is keyed per account per day.
+  for (const order of [['day3', 'final'], ['final', 'day3']] as const) {
+    it(`speaks for the furthest rung on the account whichever event goes first (${order.join(' then ')})`, async () => {
+      const unitType = await prisma.unitType.findFirstOrThrow({ where: { facilityId } })
+      const account = await prisma.billingAccount.create({
+        data: { facilityId, name: `Rung Order ${order[0]} ${suffix}`, payerTenantId: payerId },
+      })
+      const leases = {
+        day3: await makeLease(tenantId, unitType.id, `PC-R3-${order[0]}-${suffix}`, account.id),
+        final: await makeLease(neighbourId, unitType.id, `PC-RF-${order[0]}-${suffix}`, account.id),
+      }
+      await openRent(leases.day3, `PCR3${order[0]}`, new Date(Date.now() - 3 * DAY))
+      await openRent(leases.final, `PCRF${order[0]}`, new Date(Date.now() - 20 * DAY))
+      const payloads = {
+        day3: { day: 3, position: 1, totalSteps: 4 },
+        final: { day: 20, position: 4, totalSteps: 4 },
+      }
+      const events = {
+        day3: await prisma.domainEvent.create({
+          data: { name: 'delinquency.day_reached', entityType: 'Lease', entityId: leases.day3, facilityId, payload: payloads.day3 },
+        }),
+        final: await prisma.domainEvent.create({
+          data: { name: 'delinquency.day_reached', entityType: 'Lease', entityId: leases.final, facilityId, payload: payloads.final },
+        }),
+      }
+      for (const rung of order) await processCommsEvent(events[rung])
+
+      const payerMessages = await prisma.message.findMany({
+        where: { recipientTenantId: payerId, templateKey: 'dunning_step_account', status: 'sent' },
+      })
+      const forThisAccount = payerMessages.filter((message) =>
+        message.bodySnapshot.includes(`/portal/pay?account=${account.id}`),
+      )
+      expect(forThisAccount).toHaveLength(1)
+      expect(forThisAccount[0].subjectSnapshot).toContain('Su cuenta está seriamente vencida')
+
+      // Each tenant still hears about their own unit's rung.
+      const [day3Tenant, finalTenant] = await Promise.all(
+        (['day3', 'final'] as const).map((rung) =>
+          prisma.message.findFirstOrThrow({
+            where: { eventId: events[rung].id, templateKey: 'dunning_step' },
+          }),
+        ),
+      )
+      expect(day3Tenant.subjectSnapshot).toContain('We missed your payment')
+      expect(finalTenant.subjectSnapshot).toContain('Your account is seriously overdue')
+    })
+  }
+
   it('serves the lien-notice supplement on the tenant and never on the payer (D-118)', async () => {
     const messages = await dispatch('notice.generated', 'Lease', accountLeaseId, {
       noticeId: `notice-${suffix}`,

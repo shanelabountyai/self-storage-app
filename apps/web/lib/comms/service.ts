@@ -567,6 +567,44 @@ function consolidationKey(event: DomainEvent, recipient: Recipient): string {
   return `account:${recipient.payerAccount.id}:${day}`
 }
 
+type DunningPayload = { day?: number; position?: number; totalSteps?: number }
+
+/// B-335. The payer's ONE dunning message a day (D-141) speaks for the
+/// furthest rung any of the account's leases reached that business day, not
+/// for whichever event the dispatcher happened to take first — otherwise a
+/// day-3 nudge settles the key and the final warning is skipped. The dunning
+/// job emits every lease's event before the next cron tick dispatches any of
+/// them, so the whole night's rungs are already on the outbox when this reads.
+async function furthestRungToday(
+  event: DomainEvent,
+  accountId: string,
+  timezone: string,
+): Promise<DunningPayload> {
+  const day = (instant: Date) => businessDateFor(instant, timezone).getTime()
+  const leases = await prisma.lease.findMany({ where: { billingAccountId: accountId }, select: { id: true } })
+  // A business day is at most 25 hours, so ±26h brackets it; the exact day is
+  // decided by `businessDateFor` below, the same reckoning `consolidationKey` uses.
+  const window = 26 * 60 * 60 * 1000
+  const events = await prisma.domainEvent.findMany({
+    where: {
+      name: event.name,
+      entityId: { in: leases.map((lease) => lease.id) },
+      occurredAt: {
+        gte: new Date(event.occurredAt.getTime() - window),
+        lte: new Date(event.occurredAt.getTime() + window),
+      },
+    },
+    select: { occurredAt: true, payload: true },
+  })
+  return events
+    .filter((other) => day(other.occurredAt) === day(event.occurredAt))
+    .map((other) => (other.payload ?? {}) as DunningPayload)
+    .reduce(
+      (furthest, other) => ((other.position ?? 1) > (furthest.position ?? 1) ? other : furthest),
+      (event.payload ?? {}) as DunningPayload,
+    )
+}
+
 /// B-309. The `_account` variant for a payer, the rule's own key for everyone
 /// else. A `PAYER_EVENTS` event with no account template seeded records a
 /// `failed` Message naming the missing key, which is the loud direction.
@@ -1191,7 +1229,9 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // naming a date, because the lien pipeline is Phase 2 and promising a date we
   // cannot keep is worse than saying less.
   'delinquency.day_reached': async (event, recipient) => {
-    const payload = (event.payload ?? {}) as { day?: number; position?: number; totalSteps?: number }
+    const payload = recipient.payerAccount
+      ? await furthestRungToday(event, recipient.payerAccount.id, recipient.facility?.timezone ?? 'America/Chicago')
+      : ((event.payload ?? {}) as DunningPayload)
     const position = payload.position ?? 1
     const total = payload.totalSteps ?? 4
     const last = position >= total

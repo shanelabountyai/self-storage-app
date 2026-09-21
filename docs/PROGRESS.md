@@ -10880,3 +10880,24 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - VoiceOver/NVDA confirmation of the reset announcement is B-254's (already listed there).
 
 **Verification.** `tests/live-region-display.test.ts` 2/2, failing on `main`'s form before the fix. `npm run test:e2e -- e2e/admin-pos.spec.ts e2e/a11y-own-spec-routes.spec.ts`: **82 passed**, exit 0, including the new "the tender fields follow Method" (all four methods, both viewports) and both specs' axe scans. Typecheck clean, lint clean (6 pre-existing warnings). No schema change. Staff-facing only, so the accessibility statement needs no change.
+
+## B-335 — the payer's one daily past-due email speaks for the account's furthest rung (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.**
+
+- `furthestRungToday` in `apps/web/lib/comms/service.ts`: for a payer recipient, the `delinquency.day_reached` extender renders from the highest-`position` event among ALL the account's leases that facility business day (same `businessDateFor` reckoning as `consolidationKey`), not from the event being dispatched. Before, whichever event the dispatcher took first settled D-141's `(account, day, class)` key, so a day-3 nudge could win and the final warning be skipped.
+- Two DB tests in `tests/comms-billing-account-db.test.ts`, one per order (day-3 first, final first), each on its own account: the payer's single `dunning_step_account` message carries the last-rung subject both times, and each lease's tenant still gets their own rung. The day-3-first case fails on the pre-fix code.
+
+**What it decided.**
+
+- **The "rungs fired that day" are read from the outbox (`domain_event`), not from `DelinquencyStepRun`.** The courtesy ladder (`billing/dunning.ts`) is what carries `position`, and it records its sends as events, not step runs. It works because the dunning job emits every lease's event before the next cron tick dispatches any (`api/cron/route.ts` dispatches first, then runs jobs), and a billing account is facility-scoped, so one facility's job run covers the whole account.
+- D-141 is untouched: still one payer message per account per day per event class. The tenant path is unchanged; D-118 still keeps the lien supplement off the payer.
+
+**What it left behind.**
+
+- If a dispatch ever ran mid-way through a facility's dunning loop (it does not today — events are dispatched on the tick after they are emitted), a rung emitted after the payer's message was sent would be skipped. Not raised; the cron ordering is what prevents it.
+- The lien engine's own `delinquency.day_reached` (`delinquency/engine.ts`) carries no `position`, so it counts as rung 1 in the comparison — the same default the extender already applied to it.
+
+**Verification.** `tests/comms-billing-account-db.test.ts` 8/8; comms, dunning, delinquency and merge-field suites 540/540; typecheck clean; lint 0 errors (6 pre-existing warnings). No migration, no UI — the accessibility statement is unaffected.
