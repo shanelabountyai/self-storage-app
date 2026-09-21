@@ -10883,7 +10883,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-335 — the payer's one daily past-due email speaks for the account's furthest rung (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `a4954a7`
 
 **What it built.**
 
