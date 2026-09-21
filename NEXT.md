@@ -4,7 +4,7 @@
 
 ## Start here
 
-**Review block 9 is finished.** Every open row left is on the blocked list below. The next session picks one of:
+**Review block 9 is finished.** Every open row left is on the blocked list below. **Owner chose (2026-09-21): closure deliverables next** (item 2). Item 1 comes after, if ever:
 
 1. **A tenth review block** (operator, UX and accessibility agents over B-329–B-346), the way blocks 1–9 were raised.
 2. **Project closure deliverables** (global CLAUDE.md, *Definition of done*). None exist yet: `docs/DEMO.md`, the *Storage Business in Brief* exec-brief artifact, and the LinkedIn drafts in the Ledger. Record each URL in the repo.
