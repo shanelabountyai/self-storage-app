@@ -223,8 +223,10 @@ export function LedgerCorrections({
             lease is active, the next billing run bills it again at the lease&rsquo;s current rate,
             with any promotion or referral credit this invoice carried. An earlier period is not
             billed again automatically. An invoice money has already been paid against is not
-            listed here: refund the paid part first and then void it, or post a correction for
-            the difference.
+            listed here. If its amount is wrong, post a correction above for the difference
+            between the invoice and the right amount. To cancel it completely, refund the paid
+            amount first. If that payment also paid other invoices, check the invoice reads
+            unpaid before you void it.
           </p>
           <ul className="flex flex-col gap-3">
             {voidableInvoices.map((invoice) => (

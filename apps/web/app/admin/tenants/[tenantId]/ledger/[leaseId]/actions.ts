@@ -276,9 +276,12 @@ export async function voidInvoiceAction(
   // an invoice that no longer exists, and the period would be billed again at
   // full rate.
   if (!result.ok && result.reason === 'partly_paid') {
+    // B-355: correction first. A refund trims the payment's allocations in no
+    // chosen order (refunds.ts), so it can leave this invoice partly paid.
+    const paid = formatCents(result.amountPaidCents)
     return {
       status: 'error',
-      message: `${formatCents(result.amountPaidCents)} has already been paid against this invoice, so it cannot be voided. Refund the paid part first and then void it, or post a correction for the difference.`,
+      message: `${paid} has already been paid on this invoice, so it can't be voided. If the amount is wrong, post a correction above for the difference between this invoice and the right amount. To cancel it completely, refund the ${paid} first. If that payment also paid other invoices, check this one reads unpaid before you void it.`,
       fieldErrors: {},
     }
   }

@@ -11310,3 +11310,18 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** The confirm box's `tabIndex={-1}` focus target is still unnamed. The row's Build list did not ask for a name, and the changed status text now carries the re-ask. What VoiceOver and NVDA actually say on the re-ask is B-254's check, which no agent may tick.
 
 **Verification.** Typecheck and lint clean. `admin-ledger-corrections.spec.ts` (desktop-chrome, production build): **6 passed**. It now asserts the "Balance after the void" row, the "Billed again" row, the projection-matched success text with no "If it was for", and "nothing was posted" in `getByRole('status')` after the mismatched Confirm. `ledger-corrections-db` and `void-rebill-db`: **26 passed**. No schema change. Staff-facing only, so the public accessibility statement is unaffected.
+
+## B-355 — the partly-paid void refusal leads with the correction, and warns a refund can miss (2026-09-21)
+
+**Commit:** `pending`
+
+**What it built.** The `partly_paid` refusal in `voidInvoiceAction` and the "Void a rent invoice" section prose in `ledger-corrections.tsx` now put the correction first ("post a correction above for the difference between this invoice and the right amount"), then the refund, then a warning: if that payment also paid other invoices, check this one reads unpaid before voiding. The refusal names the paid amount in both places it is mentioned. The section prose has no single invoice to quote, so it says "the paid amount".
+
+**What it decided.**
+
+- **Refunds still trim allocations in no chosen order** (`lib/billing/refunds.ts`). Targeting a refund at one invoice changes B-048's refund model and was out of scope by the row's own terms. The warning is what this row delivers.
+- **Built without the confirmation the row flagged** (how often one payment covers several invoices). The copy is correct whether that case is rare or common.
+
+**What it left behind.** Nothing owned by an item. There is no automated assertion on either string: no spec reaches a partly-paid invoice on the ledger screen, and a test on a literal string only proves the edit was made.
+
+**Verification.** Typecheck and lint clean. `void-rebill-db`: **12 passed**. Staff-facing only, so the public accessibility statement was not affected. No schema change.
