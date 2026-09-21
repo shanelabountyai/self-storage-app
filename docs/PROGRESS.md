@@ -11047,7 +11047,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-343 — the emailed receipt carries the identifiers the paper receipt prints (2026-09-21)
 
-**Commit:** _pending_
+**Commit:** `47e106b`
 
 **What it built.**
 
