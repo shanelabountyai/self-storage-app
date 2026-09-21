@@ -76,6 +76,10 @@ export type CounterPaymentInput = {
   /// other caller — B-230's walk-in move-in — passes the first lease of a
   /// basket that can hold two units, and one payment has to settle both.
   restrictToLease?: boolean;
+  /// B-339. More of this tenant's own units the directed payment settles
+  /// alongside `leaseId`, which stays the anchor a surplus lands on. Checked
+  /// against the tenant and facility, so a foreign id claims nothing.
+  alsoLeaseIds?: readonly string[];
   method: CounterMethod;
   amountCents: number;
   tenderedCents?: number | null;
@@ -320,7 +324,16 @@ export async function recordCounterPayment(
             restrictToInvoiceIds: (
               await tx.invoice.findMany({
                 where: {
-                  leaseId: lease.id,
+                  // B-339. The picked unit, plus any other unit of the same
+                  // tenant's the counter chose to cover with it — still never
+                  // the account's or anything nobody named.
+                  OR: [
+                    { leaseId: lease.id },
+                    {
+                      leaseId: { in: [...(input.alsoLeaseIds ?? [])] },
+                      lease: { tenantId, facilityId: input.facilityId },
+                    },
+                  ],
                   status: { in: ["open", "partially_paid"] },
                 },
                 select: { id: true },

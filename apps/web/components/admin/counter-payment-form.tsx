@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { AdminForm, Field } from '@/components/admin/form'
 import { takePaymentAction } from '@/app/admin/pos/actions'
 import { formatCents } from '@/lib/format'
+import { overflowWarning, unitList } from '@/lib/admin/counter-overflow'
 import type { CounterPayableAccount, CounterPayableLease } from '@/lib/admin/pos'
 
 // B-231 / D-110(A). The counter screen finally shows what the tenant owes.
@@ -26,6 +27,10 @@ const FIELD_CLASS = 'flex flex-col gap-1 text-sm'
 /// B-280. The picker's value for a whole business account; `takePaymentAction`
 /// reads the same prefix.
 const ACCOUNT = 'account:'
+
+/// B-339. Several of the tenant's own units in one payment, the first being
+/// the anchor a surplus stays on; `takePaymentAction` reads the same prefix.
+const UNITS = 'units:'
 
 /// The aging in words, beside the money. "41 days past due" is what tells the
 /// person taking the cash whether to mention the overlock before the tenant
@@ -65,36 +70,73 @@ export function CounterPaymentForm({
   // against the account then booked as cash against the unit, number and all.
   const [method, setMethod] = useState('cash')
   const [methodReset, setMethodReset] = useState('')
+  const statusId = useId()
+
+  // B-339. The unit last picked on its own, plus every OTHER unit of this
+  // tenant's that owes: the several-unit subject B-305's entry asked for. A
+  // unit pick still settles that unit only (B-305 stands); this is the option
+  // the warning below offers when the amount says the tenant meant more.
+  const [anchorId, setAnchorId] = useState(
+    leases.some((l) => l.leaseId === subject) ? subject : (leases[0]?.leaseId ?? ''),
+  )
+  const anchor = leases.find((l) => l.leaseId === anchorId)
+  const others = leases.filter((l) => l.leaseId !== anchorId && l.balanceCents > 0)
+  const together = anchor && others.length > 0 ? [anchor, ...others] : []
+  const togetherValue = `${UNITS}${together.map((l) => l.leaseId).join(',')}`
+  const togetherUnits = unitList(together.map((l) => l.unitNumber))
+  const togetherCents = together.reduce((sum, l) => sum + l.balanceCents, 0)
 
   // B-280. Either a whole account or one unit; everything below the picker
   // reads this one shape so the balance, the aging and "Pay in full" follow it.
   const account = accounts.find((a) => `${ACCOUNT}${a.accountId}` === subject)
-  const lease = account ? null : (leases.find((l) => l.leaseId === subject) ?? leases[0])
+  const several = !account && together.length > 0 && subject === togetherValue
+  const lease = account || several ? null : (leases.find((l) => l.leaseId === subject) ?? leases[0])
   const selected = account
     ? { ...account, heading: account.name }
-    : { ...lease!, heading: lease!.unitNumber }
+    : several
+      ? {
+          heading: togetherUnits,
+          balanceCents: togetherCents,
+          daysPastDue: Math.max(...together.map((l) => l.daysPastDue)),
+          isFormer: together.every((l) => l.isFormer),
+        }
+      : { ...lease!, heading: lease!.unitNumber }
+
+  // B-339 / O5. Said before submit, while the money is still on the desk.
+  const warning = lease ? overflowWarning(lease, others, amount) : ''
 
   // Card is the one method a subject can rule out: the card screen needs an
-  // open lease. An account takes one since B-320, charged to its payer.
+  // open lease, and takes one unit (or, since B-320, one account) at a time.
   function chooseSubject(next: string) {
     setSubject(next)
+    if (leases.some((l) => l.leaseId === next)) setAnchorId(next)
     const nextAccount = accounts.find((a) => `${ACCOUNT}${a.accountId}` === next)
+    const nextSeveral = next.startsWith(UNITS)
     const nextFormer = (nextAccount ?? leases.find((l) => l.leaseId === next))?.isFormer
-    if (method === 'card' && nextFormer) {
+    if (method === 'card' && (nextFormer || nextSeveral)) {
       setMethod('cash')
       setMethodReset(
-        `Method changed from Card to Cash: ${nextAccount ? 'every unit on this account' : 'this unit'} has been moved out of, and a card needs an open lease.`,
+        nextSeveral
+          ? 'Method changed from Card to Cash: the card screen takes one unit at a time.'
+          : `Method changed from Card to Cash: ${nextAccount ? 'every unit on this account' : 'this unit'} has been moved out of, and a card needs an open lease.`,
       )
     } else {
       setMethodReset('')
     }
   }
 
-  const leaseOptions = leases.map((lease) => (
-    <option key={lease.leaseId} value={lease.leaseId}>
-      {label(lease)}
-    </option>
-  ))
+  const leaseOptions = [
+    ...leases.map((lease) => (
+      <option key={lease.leaseId} value={lease.leaseId}>
+        {label(lease)}
+      </option>
+    )),
+    together.length > 0 && (
+      <option key={togetherValue} value={togetherValue}>
+        {togetherUnits} together — {formatCents(togetherCents)} due
+      </option>
+    ),
+  ]
 
   return (
     <AdminForm
@@ -151,15 +193,28 @@ export function CounterPaymentForm({
         <option value="cash">Cash</option>
         <option value="check">Check</option>
         <option value="money_order">Money order</option>
-        {!selected.isFormer && <option value="card">Card</option>}
+        {!selected.isFormer && !several && <option value="card">Card</option>}
       </Field>
       {/* B-319. Always mounted so the reset is announced, not just shown.
           B-334: `sr-only` while idle, never `empty:hidden` — that is
           `display:none`, which kept this region out of the accessibility tree
           until the moment it had text, so the reset was announced to nobody. */}
-      <p role="status" className="col-span-2 text-sm font-medium text-pretty empty:sr-only">
-        {methodReset}
+      <p
+        id={statusId}
+        role="status"
+        className="col-span-2 text-sm font-medium text-pretty empty:sr-only"
+      >
+        {[methodReset, warning].filter(Boolean).join(' ')}
       </p>
+      {warning && (
+        <button
+          type="button"
+          onClick={() => chooseSubject(togetherValue)}
+          className="border-input hover:bg-accent col-span-2 inline-flex min-h-11 items-center justify-self-start rounded-md border px-3 text-sm font-medium"
+        >
+          Pay {togetherUnits} together — {formatCents(togetherCents)} due
+        </button>
+      )}
       <div className="col-span-2 flex flex-wrap items-center gap-3">
         <p className="text-sm text-pretty">
           <span className="font-medium">
@@ -186,6 +241,7 @@ export function CounterPaymentForm({
         className={FIELD_CLASS}
         value={amount}
         onChange={(event) => setAmount(event.target.value)}
+        aria-describedby={warning ? statusId : undefined}
       />
       {/* B-334. Each tender field shows only for its method. HIDDEN, not
           unmounted: a number typed under Check still submits after a switch to
@@ -209,6 +265,8 @@ export function CounterPaymentForm({
       <p className="text-muted-foreground col-span-2 text-xs text-pretty">
         {account
           ? `Settles ${account.name}’s oldest invoices first, across ${account.unitNumbers.join(', ')}, and is receipted to ${account.payerName}. ${account.isFormer ? 'Every unit on it has been moved out of — cash, check or money order only.' : `Card takes you to the card screen, where ${account.payerName}’s card is charged — the one they hand over, or the one on file.`}`
+          : several
+          ? `Settles units ${togetherUnits}, oldest invoices first; anything over their balance stays as credit on ${anchor!.unitNumber}. Cash, check or money order — the card screen takes one unit at a time.`
           : selected.isFormer
           ? `Settles unit ${selected.heading} only; anything over its balance stays as credit on it. This unit has been moved out of — cash, check or money order only, because a card at the counter needs an open lease.`
           : `Settles unit ${selected.heading} only; anything over its balance stays as credit on it. Card takes you to the card screen with this amount, where the tenant enters their own details — or you can charge the card they have on file.`}

@@ -10950,3 +10950,31 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - The VoiceOver pass over the Spanish refusal belongs to B-254.
 
 **Verification.** Unit: 4651 passed, 8 skipped (281 files). `e2e/portal.spec.ts` refused-amount test: 2/2 (desktop and mobile). Typecheck clean. Lint: 0 errors (6 pre-existing warnings). The accessibility statement was re-read and is still accurate (`a11y.true.errors`), so it was not edited. No migration.
+
+## B-339 — a counter payment over the picked unit's balance names the tenant's other owing unit, with a one-press "pay both" (2026-09-21)
+
+**Commit:** SHA_PENDING
+
+**What it built.**
+
+- **Confirmation first, as the row asked.** Late fees and the ladder DO disagree. `lib/billing/late-fees.ts` nets credit per tenant (`creditByTenantId`), but `lib/delinquency/engine.ts` qualifies each lease on its own ledger balance or its own rent invoices and nets nothing. So a surplus parked on unit A leaves unit B on the ladder, and B can be overlocked. The row therefore ships in full (the warning and the switch), not as the warning alone.
+- `components/admin/counter-payment-form.tsx`: if a unit is picked, the typed amount is more than that unit's balance, and the same tenant owes on another unit at this facility, the form says so before submit. It names each other owing unit and its balance, and says that as things stand the extra stays as credit on the picked unit and the other stays unpaid. The warning text lives in B-334's pre-mounted `role="status"` region (now given an id), and the Amount field's `aria-describedby` points at that region while the warning shows. A real `<button>` ("Pay A-1 and B-2 together — $322.00 due") switches the picker to a new subject.
+- The new subject is a picker option, `units:<picked>,<other>…`. It appears whenever the tenant has another owing unit. It covers the unit last picked on its own plus every other unit that owes, and shows their combined balance, the oldest aging among them, and Pay in full.
+- `lib/admin/pos.ts`: `CounterPaymentInput.alsoLeaseIds`. The directed restriction now covers the picked lease's open invoices plus those of the extra leases, and an extra lease counts only if it has the same `tenantId` and `facilityId`, so a forged id claims nothing. Any surplus still anchors to the picked lease. `takePaymentAction` parses the `units:` prefix. Card is not offered for a multi-unit subject. Choosing that subject while Card is selected resets Method to Cash and announces why, the same way the moved-out reset does, and a forged `card` post is refused.
+- `components/admin/form.tsx`: `Field` now adds a caller's `aria-describedby` to its own error and hint ids. Before this, the caller's value replaced them.
+- `lib/admin/counter-overflow.ts`: the warning as a pure function (the repo has no component-render tooling).
+- Tests: `tests/counter-overflow-db.test.ts`. The warning names B-2 and $161.00, and stays silent at or under the balance, when no other unit owes, and when the amount can't be parsed. With a two-unit tenant, $322 with both chosen settles both leases to $0. $322 without the switch leaves B's invoice open and puts −$161 on A (B-305 unchanged). Another tenant's lease id passed as an extra claims nothing.
+
+**What it decided.**
+
+- **B-305's restriction stands.** A unit pick still settles that unit only. The new behaviour is a separate subject that the counter chooses explicitly, not a return to spreading the payment.
+- The warning does not include the typed figure, so the live region doesn't re-announce on every keystroke.
+- The multi-unit subject is cash, check or money order only. The card screen still takes one unit or one account.
+- It covers only the tenant's OWN units. An account's units are still the account option (B-280/B-330), and a unit on someone else's account still falls under D-137's `account_remainder` refusal.
+
+**What it left behind.**
+
+- There is no e2e coverage of the form interaction, because the demo data has no two-unit tenant who owes on both units that a spec could mutate under B-120's rules. The wording and the money path are unit-tested. The DOM wiring (region id, `aria-describedby`, the button) is covered by typecheck and review only.
+- The ladder still doesn't net tenant credit. That is the per-lease design, and this row warns about it rather than changing it.
+
+**Verification.** Unit: 4656 passed, 8 skipped (282 files; 281 passed, 1 skipped). `tests/counter-overflow-db.test.ts` was run twice against the same database, green both times. Typecheck clean. Lint: 0 errors (6 pre-existing warnings). The accessibility statement was re-read. It makes no claims about `/admin`, so it was not edited. No migration.

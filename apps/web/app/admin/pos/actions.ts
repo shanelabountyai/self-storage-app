@@ -60,7 +60,13 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
   // business account (`CounterPaymentForm` writes the same prefix).
   const subject = String(formData.get('leaseId') ?? '')
   const accountId = subject.startsWith('account:') ? subject.slice('account:'.length) : null
-  const leaseId = accountId ? '' : subject
+  // B-339. `units:<picked>,<other>…` — several of the tenant's own units in one
+  // payment; the first is the anchor a surplus stays on.
+  const [leaseId = '', ...alsoLeaseIds] = accountId
+    ? []
+    : subject.startsWith('units:')
+      ? subject.slice('units:'.length).split(',')
+      : [subject]
 
   // B-230. A card leaves this form for the card screen, which raises a real
   // PaymentIntent and presents Stripe's own Element.
@@ -71,6 +77,11 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
   // old refusal read like a dead end. The amount is validated ABOVE this line,
   // so nothing unparseable reaches the query string.
   if (method === 'card') {
+    // B-339. The card screen takes one unit or one account; the form does not
+    // offer Card on a several-unit subject, so this is only a forged post.
+    if (alsoLeaseIds.length > 0) {
+      return fieldError({ method: 'Card takes one unit at a time. Pick a unit, or choose cash, check or money order.' })
+    }
     // B-320. An account goes to the same screen keyed by the account, which
     // charges its PAYER — never one unit's tenant.
     const target = accountId
@@ -86,6 +97,7 @@ export async function takePaymentAction(_prev: FormState, formData: FormData): P
     accountId,
     // B-305. The picker named a unit, so the money settles that unit.
     restrictToLease: !accountId,
+    alsoLeaseIds,
     method,
     amountCents,
     tenderedCents,

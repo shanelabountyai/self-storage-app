@@ -299,6 +299,7 @@ export function Field({
   className,
   as = 'input',
   children,
+  'aria-describedby': extraDescribedBy,
   ...control
 }: {
   name: string
@@ -326,6 +327,9 @@ export function Field({
     error ? `${id}-error` : null,
     groupErrorId,
     hint ? `${id}-hint` : null,
+    // B-339. A caller's own description (a live warning beside the field)
+    // joins the list rather than replacing the error's id.
+    extraDescribedBy ?? null,
   ]
     .filter(Boolean)
     .join(' ')
