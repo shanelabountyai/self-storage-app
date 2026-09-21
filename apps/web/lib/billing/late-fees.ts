@@ -55,6 +55,45 @@ export async function lateFeeStepsFor(facilityId: string, asOf: Date): Promise<L
     .sort((a, b) => a.step - b.step)
 }
 
+/// The ladder row in the operator's own words, not the enum's. The settings
+/// screen and the lease (B-347) both read it, so the contract cannot describe a
+/// fee in different terms from the ones the operator configured.
+export function describeLateFee(
+  row: Pick<LateFeeStep, 'amountCents' | 'percentBasisPoints'> & { basis: string },
+  money: (cents: number) => string = formatCents,
+): string {
+  const amount = money(row.amountCents)
+  const percent = `${row.percentBasisPoints / 100}%`
+  switch (row.basis) {
+    case 'flat':
+      return amount
+    case 'percent':
+      return `${percent} of the overdue balance`
+    case 'greater':
+      return `the greater of ${amount} or ${percent} of the overdue balance`
+    default:
+      return `the lesser of ${amount} or ${percent} of the overdue balance`
+  }
+}
+
+/// B-347. The lease's late-fee sentence, from the ladder `assessLateFees`
+/// actually charges — never from `FeeSchedule`, which holds fees a person
+/// decides to raise. No steps means no late fee is ever charged, and the lease
+/// says so rather than hedging with "may".
+export function lateFeeSentence(
+  steps: readonly LateFeeStep[],
+  money: (cents: number) => string = formatCents,
+): string {
+  if (steps.length === 0) return 'We do not charge a late fee if your rent is paid late.'
+  const parts = steps.map((step, index) => {
+    const cap = step.capCents === null || step.basis === 'flat' ? '' : ` (at most ${money(step.capCents)})`
+    const lead = index === 0 ? 'a late fee of' : 'a further late fee of'
+    return `${lead} ${describeLateFee(step, money)}${cap} once it is ${step.daysPastDue} days past due`
+  })
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`
+  return `If your rent is not paid on time we charge ${list}.`
+}
+
 export type AssessResult = { charged: number; skipped: number }
 
 /// Raises every late-fee step that has come due at this facility.

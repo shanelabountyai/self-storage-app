@@ -7,6 +7,7 @@ import { resolveSelectedFacility } from "@/lib/admin/facility-selection-logic";
 import { hasPermissionAnywhere } from "@/lib/rbac/authorize";
 import { getFacilitySettings } from "@/lib/admin/facility-settings";
 import { formatCents } from "@/lib/format";
+import { describeLateFee } from "@/lib/billing/late-fees";
 import { CLOSED_ALL_WEEK, DAYS_OF_WEEK } from "@storage/core/facility-settings";
 import { currentPlans } from "@/lib/protection/plans";
 import { facilityCameras } from "@/lib/access/cameras";
@@ -69,26 +70,6 @@ const FEE_TYPE_LABELS: Record<(typeof FEE_TYPES)[number], string> = {
   certified_mail: "Certified mail",
   auction_cost: "Auction costs",
 };
-
-/// The ladder row in the operator's own words, not the enum's.
-function describeLateFee(row: {
-  basis: string;
-  amountCents: number;
-  percentBasisPoints: number;
-}): string {
-  const amount = formatCents(row.amountCents);
-  const percent = `${row.percentBasisPoints / 100}%`;
-  switch (row.basis) {
-    case "flat":
-      return amount;
-    case "percent":
-      return `${percent} of the overdue balance`;
-    case "greater":
-      return `the greater of ${amount} or ${percent}`;
-    default:
-      return `the lesser of ${amount} or ${percent}`;
-  }
-}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -790,7 +771,7 @@ export default async function AdminSettingsPage() {
                       {row.step}
                     </th>
                     <td className="py-1">{row.daysPastDue} days past due</td>
-                    <td className="py-1">{describeLateFee(row)}</td>
+                    <td className="py-1">{describeLateFee(row, formatCents)}</td>
                     <td className="py-1">
                       {row.capCents === null
                         ? "none"

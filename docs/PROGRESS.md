@@ -11149,3 +11149,24 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 - **The lease quotes a late fee the product never charges.** `apps/web/lib/lease/build.ts` reads the lease's late-fee sentence from `FeeSchedule` (`feeType: 'late'`). Late fees are assessed from the late-fee ladder. At Austin South the lease says *"we charge a late fee of $20"* while the readiness banner says no late fee is ever charged.
 - **Every page renders in the browser's default serif.** `globals.css` sets `--font-sans: var(--font-sans)`, which refers to itself, so it resolves empty. The layout loads Geist as `--font-geist-sans` and nothing uses it. Measured: body `font-family` computes to `Times`.
 - **A bare `/portal/pay` (no `?lease=`) says "We couldn't find that unit on your account"** even for a tenant with one unit. It is reachable only by typing the URL. DEMO.md's troubleshooting table names it.
+
+## B-347 — the lease states the late-fee ladder it will charge (2026-09-21)
+
+**Commit:** _pending_
+
+**What it built.**
+
+- `leaseValuesFor` reads `lateFeeStepsFor(facilityId, now)` instead of `FeeSchedule` (`feeType: 'late'`). No steps → *"We do not charge a late fee if your rent is paid late."* One or more → every step's day and amount, e.g. *"a late fee of $25 once it is 5 days past due, and a further late fee of the greater of $20 or 10% of the overdue balance (at most $50) once it is 15 days past due."*
+- `describeLateFee` moved from the settings page into `lib/billing/late-fees.ts`, beside a new `lateFeeSentence`, so the lease and the settings table describe a step in the same words. Greater/lesser now say *"10% of the overdue balance"* on the settings table too, where they used to say only *"10%"*.
+- `tests/lease-late-fee-db.test.ts`: a `FeeSchedule` late row with no ladder gives a lease with no dollar late fee; a two-step ladder names both steps; a lease signed before the ladder existed keeps its content and hash.
+
+**What it decided.**
+
+- Signed leases are not re-rendered. The stored document is the contract. Only leases generated from now on carry the new sentence.
+- A cap is stated for percent, greater and lesser steps. It is not stated for a flat step, where it cannot bind.
+- The lease uses `formatRate` ($25), like the rest of the lease. The settings table keeps `formatCents` ($25.00).
+
+**What it left behind.**
+
+- The `FeeSchedule` `late` fee type still exists; the lease no longer reads it. Whether it should be retired is not owned by any item.
+- The sentence is English only, like the rest of the lease template.

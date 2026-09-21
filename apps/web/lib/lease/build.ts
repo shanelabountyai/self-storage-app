@@ -1,5 +1,6 @@
 import { prisma } from "@storage/db";
 import { formatRate } from "@/lib/format";
+import { lateFeeSentence, lateFeeStepsFor } from "@/lib/billing/late-fees";
 import { storeGeneratedDocument } from "@/lib/documents/store";
 import { renderTemplate } from "@/lib/documents/render";
 import { currentPlans } from "@/lib/protection/plans";
@@ -54,10 +55,8 @@ export async function leaseValuesFor(
     : null;
 
   const data = session.data as Record<string, string | number | undefined>;
-  const lateFee = await prisma.feeSchedule.findFirst({
-    where: { facilityId: session.facilityId, feeType: "late" },
-    orderBy: { effectiveFrom: "desc" },
-  });
+  // B-347. The ladder that is actually charged, not `FeeSchedule`.
+  const lateFeeSteps = await lateFeeStepsFor(session.facilityId, new Date());
 
   const protectionTier =
     typeof data.protection === "string" ? data.protection : "waiver";
@@ -177,9 +176,7 @@ export async function leaseValuesFor(
     billingDay: String(billingDayFor(facility.billingPolicy, localToday)),
     firstPaymentSummary,
     termSummary,
-    lateFeeSummary: lateFee
-      ? `If your rent is not paid on time we charge a late fee of ${formatRate(lateFee.amountCents)}.`
-      : "If your rent is not paid on time we may charge a late fee.",
+    lateFeeSummary: lateFeeSentence(lateFeeSteps, formatRate),
     gateHoursSummary:
       "You can reach your unit during the gate hours published for this facility.",
   };

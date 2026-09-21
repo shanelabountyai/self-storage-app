@@ -2817,6 +2817,12 @@ function reviewedOn(locale: Locale): string {
 // table through `tableHtml` (`<th scope="row">`, SC 1.3.1) and as lines in the
 // text part, in both languages. It is an email, and this page makes no claim
 // about email, so nothing is added or withdrawn.
+//
+// Re-read 2026-09-21, at B-347. The lease's late-fee sentence now states the
+// facility's late-fee ladder (each step's day and amount), or says plainly that
+// no late fee is charged. It is wording in the signed document, not markup; no
+// route, control or state changes, and this page makes no claim about the
+// lease's text, so nothing is added or withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
