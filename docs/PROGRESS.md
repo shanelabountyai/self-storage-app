@@ -11391,7 +11391,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-364 — the public shell per the design kit's website `Shell` (2026-09-22)
 
-**Commit:** _pending_
+**Commit:** `909716a`
 
 **What it built.** `SiteHeader` is now the kit's two-band header. A dark utility strip carries the click-to-call number and a footprint line ("5 facilities in Austin, Dallas and Houston"). Below it, a light nav bar has the "Placeholder Storage" wordmark (a clay square plus the name in Archivo), Guides, Pay bill, a clay "Find storage" primary, and the language toggle. `SiteFooter` is the kit's dark footer. A brand column holds the phone and email. It is followed by one `Footer` nav of three headed lists: Storage (search, one link per city page the registry has facilities in, guides), Company (About, Contact, FAQ) and Help (Pay bill, then the remaining `LEGAL_PAGES`). Underneath are the learning-project disclaimer and a copyright line. The site-wide facts come from `publicFootprint()` (`lib/facility/public-facility.ts`), a cached `groupBy` over active facilities. New tokens `--inverse`, `--inverse-foreground` and `--inverse-muted` are exposed as Tailwind colours. `[data-surface='inverse']` swaps `--ring` for a light pine.
 

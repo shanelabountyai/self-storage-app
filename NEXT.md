@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-364, the public shell per the website kit** (D-146, D-147). Read `ui_kits/website/Shell.jsx` through `DesignSync` (project `84b81ef9-747f-4042-8f27-c32a0e41d567`). The import runs B-363–B-370 in order, then review block 10 resumes at **B-359**. D-147 governs copy: take the kit's voice and "Placeholder Storage" name, render every fact from the database, and drop claims with no data behind them (Cedar Valley, 1998, manager names, $1 first month, kiosk). Where a kit token fails AA, AA wins.
+**Next: B-365, the home page per the kit's `HomeScreen`** (D-146, D-147), plus the metadata pass (title and OpenGraph still say "Self-Storage Platform"). Read `ui_kits/website/HomeScreen.jsx` through `DesignSync` (project `84b81ef9-747f-4042-8f27-c32a0e41d567`). `publicFootprint()` already gives the facility count and cities. The import runs through B-370, then review block 10 resumes at **B-359**. D-147: keep the voice, derive the facts, drop the claims. `SITE.brand` is the wordmark and `SITE.name` stays the legal operator.
+
+**B-364 is built** (2026-09-22, `909716a`). Two-band header and a dark four-column footer per the kit's `Shell`. Facts come from `publicFootprint()`. Dark bands get their own focus ring through `[data-surface='inverse']`.
 
 **B-363 is built** (2026-09-22, `8789a4d`). The kit's palette is on the shadcn variables, and Archivo, Source Sans 3 and JetBrains Mono replace Geist. `contrast-tokens` now computes chromatic oklch. a11y spec: 250 passed.
 
