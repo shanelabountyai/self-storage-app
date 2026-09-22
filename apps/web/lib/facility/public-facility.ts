@@ -162,3 +162,28 @@ export function mapEmbedUrl(facility: PublicFacility): string | null {
   const bbox = [lng - pad, lat - pad, lng + pad, lat + pad].join(',')
   return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}`
 }
+
+/// B-364 (D-147). The site-wide facts the public shell states: how many
+/// facilities are open to renters and in which cities. The design kit printed
+/// "7 sites across the Cedar Valley"; D-147 says every such figure comes from
+/// the registry, so the strip and footer say what this returns and nothing
+/// else. Cities are ordered by facility count, then name, and carry their
+/// city-page href so the footer can link them.
+export const publicFootprint = cache(async function publicFootprint(): Promise<{
+  siteCount: number
+  cities: { city: string; href: string }[]
+}> {
+  const rows = await prisma.facility.groupBy({
+    by: ['state', 'city'],
+    where: { status: 'active' },
+    _count: { _all: true },
+  })
+  rows.sort((a, b) => b._count._all - a._count._all || a.city.localeCompare(b.city))
+  return {
+    siteCount: rows.reduce((sum, row) => sum + row._count._all, 0),
+    cities: rows.map((row) => ({
+      city: row.city,
+      href: `/storage/${row.state.toLowerCase()}/${citySlug(row.city)}`,
+    })),
+  }
+})

@@ -183,3 +183,18 @@ describe('1.4.3 — text on the design-system palette', () => {
     expect(contrast(t('destructive'), t('background'))).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+// B-364. The public shell's dark bands (utility strip, footer).
+describe('the inverse surface', () => {
+  const t = (name: string) => token(':root', name)
+
+  it('carries text at 4.5:1, secondary text included', () => {
+    expect(contrast(t('inverse-foreground'), t('inverse'))).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(t('inverse-muted'), t('inverse'))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('needs its own focus ring: the page ring is too close to 3:1 on it', () => {
+    expect(contrast(t('inverse-ring'), t('inverse'))).toBeGreaterThanOrEqual(3)
+    expect(css).toMatch(/\[data-surface='inverse'\]\s*\{\s*--ring:\s*var\(--inverse-ring\)/)
+  })
+})

@@ -11388,3 +11388,25 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** Layout and copy belong to B-364–B-370. The hard-coded Tailwind status colours (`bg-red-50`, `bg-amber-50` and similar, about 200 uses) still use Tailwind's palette, not the kit's status tokens. The surface rows own them. The chart tokens stay achromatic until a chart is restyled.
 
 **Verification.** Typecheck and lint are clean. `contrast-tokens`, `scroll-regions`, `customer-control-height` and `live-region-display` pass (21 tests). `e2e/a11y.spec.ts` against a production build: **250 passed**, 0 failed, both projects. That covers every axe-scanned page and state on the new palette, plus the body-font check, now asserting Source Sans 3. The full unit suite was not re-run, because the change touches CSS and one CSS-reading test and nothing a database suite reads. The accessibility statement was re-read: it states no ratio or typeface, so nothing changed. No schema change.
+
+## B-364 — the public shell per the design kit's website `Shell` (2026-09-22)
+
+**Commit:** _pending_
+
+**What it built.** `SiteHeader` is now the kit's two-band header. A dark utility strip carries the click-to-call number and a footprint line ("5 facilities in Austin, Dallas and Houston"). Below it, a light nav bar has the "Placeholder Storage" wordmark (a clay square plus the name in Archivo), Guides, Pay bill, a clay "Find storage" primary, and the language toggle. `SiteFooter` is the kit's dark footer. A brand column holds the phone and email. It is followed by one `Footer` nav of three headed lists: Storage (search, one link per city page the registry has facilities in, guides), Company (About, Contact, FAQ) and Help (Pay bill, then the remaining `LEGAL_PAGES`). Underneath are the learning-project disclaimer and a copyright line. The site-wide facts come from `publicFootprint()` (`lib/facility/public-facility.ts`), a cached `groupBy` over active facilities. New tokens `--inverse`, `--inverse-foreground` and `--inverse-muted` are exposed as Tailwind colours. `[data-surface='inverse']` swaps `--ring` for a light pine.
+
+**What it decided.**
+
+- **`SITE.brand` is separate from `SITE.name`.** The wordmark says "Placeholder Storage". The disclaimer, copyright, terms, messaging policy and every SMS and email still sign as `SITE.name` (Lab Intelligence LLC), because that is the legal operator and an A2P campaign is reviewed against the registered business name. D-146's "brand name replaces" is read as brand copy, not the legal entity.
+- **Dropped from the kit under D-147:**
+  - "Gates open 6am – 10pm, every day": gate hours are per facility and stay on facility pages.
+  - "Cedar Valley" and "since 1998": no data behind them.
+  - "Talk to a manager": the org line is not a manager's.
+  - The product column (RV, containers, business storage) and the company links (managers, careers, franchise): none of them exist.
+- **The page ring fails on the dark band in practice, so the band gets its own.** pine-600 is 3.14:1 on `--inverse`, which is over the floor by a rounding error. The override lives on the surface, so the single `:focus-visible` rule still draws every indicator.
+- **"Facilities", not the kit's "sites".** The dictionaries keep one word per concept.
+- **The footer nav is a grid, not `display: contents`.** Safari has dropped landmark roles on `contents` elements.
+
+**What it left behind.** The facility-page and home-page copy is B-365's and B-366's. Page title and OpenGraph `siteName` still say "Self-Storage Platform" and `SITE.name`, and B-365 owns the metadata pass.
+
+**Verification.** Typecheck and lint are clean. 16 unit files, 245 tests, including dictionary parity, `us-english`, the accessibility-statement suite and two new `contrast-tokens` cases for the inverse surface. The a11y, smoke and i18n e2e specs against a production build: **494 passed, 4 skipped, 0 failed**. That covers axe on every public page, 320px reflow and both languages. The layout was not checked by eye, only by those specs. No schema change.

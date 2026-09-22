@@ -33,6 +33,13 @@ export const en = {
   'chrome.payBillSr': ' or sign in to my account',
   'chrome.questionsCall': 'Questions? Call',
   'chrome.orEmail': 'or email',
+  // B-364 (D-147). The shell's footprint line — the kit's "7 sites across the
+  // Cedar Valley", with both facts read from the facility registry.
+  'chrome.footprintOne': '{count} facility in {cities}',
+  'chrome.footprintOther': '{count} facilities in {cities}',
+  'chrome.footerStorage': 'Storage',
+  'chrome.footerCompany': 'Company',
+  'chrome.footerHelp': 'Help',
   'chrome.disclaimer':
     '{name} is a learning project. Nothing on this site is a real offer of storage, and the legal pages are unreviewed drafts.',
 

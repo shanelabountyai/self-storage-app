@@ -6,6 +6,9 @@
 
 @theme inline {
   --color-background: var(--background);
+  --color-inverse: var(--inverse);
+  --color-inverse-foreground: var(--inverse-foreground);
+  --color-inverse-muted: var(--inverse-muted);
   --color-foreground: var(--foreground);
   /* B-363 (D-146): the design system's three families. Archivo is display
      only; body copy stays in Source Sans 3 and figures in JetBrains Mono. */
@@ -100,6 +103,22 @@
   --sidebar-accent-foreground: oklch(0.235 0.018 62);
   --sidebar-border: oklch(0.905 0.01 75);
   --sidebar-ring: oklch(0.505 0.12 175);
+  /* B-364. The kit's dark bands (utility strip, footer): surface-inverse and
+     ink-on-dark. The kit dims secondary text with white at 55–70% alpha; that
+     is not measurable, so it is a solid L 0.72 (6.73:1). */
+  --inverse: oklch(0.235 0.018 62);
+  --inverse-foreground: oklch(0.965 0.008 80);
+  --inverse-muted: oklch(0.72 0.012 75);
+  /* pine-600 is 3.14:1 on the dark band — over the floor by a rounding error —
+     so a dark band swaps in a light pine (7.89:1) through the rule below. */
+  --inverse-ring: oklch(0.75 0.11 175);
+}
+
+/* Any dark band re-points the focus ring, so the one `:focus-visible` rule
+   still draws every indicator and a link added to the footer later cannot
+   forget it. */
+[data-surface='inverse'] {
+  --ring: var(--inverse-ring);
 }
 
 .dark {

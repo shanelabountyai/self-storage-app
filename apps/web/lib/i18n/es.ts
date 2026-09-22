@@ -30,6 +30,11 @@ export const es: Dictionary = {
   'chrome.payBillSr': ' o entrar a mi cuenta',
   'chrome.questionsCall': '¿Preguntas? Llame al',
   'chrome.orEmail': 'o escriba a',
+  'chrome.footprintOne': '{count} sucursal en {cities}',
+  'chrome.footprintOther': '{count} sucursales en {cities}',
+  'chrome.footerStorage': 'Almacenamiento',
+  'chrome.footerCompany': 'Empresa',
+  'chrome.footerHelp': 'Ayuda',
   // Deliberately says one thing more than the English (D-122): the contract,
   // the notices and the pages a lawyer wrote are English-only, and the Spanish
   // reader is the only one for whom that is news. Translating a lien notice

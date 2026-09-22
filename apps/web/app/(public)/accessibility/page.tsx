@@ -2859,6 +2859,12 @@ function reviewedOn(locale: Locale): string {
 // (D-147); `tests/contrast-tokens.test.ts` now checks the chromatic values and
 // the a11y spec re-ran axe over them. This page states no contrast ratio or
 // typeface, so nothing is added or withdrawn.
+//
+// Re-read 2026-09-22, at B-364. The public header and footer were rebuilt to
+// the design kit. The skip link, the `Main` and `Footer` nav landmarks, the
+// 44px targets and 320px reflow are all kept, and the a11y spec re-ran over
+// every public page. The new dark bands carry their own focus ring (7.89:1).
+// No claim here changes.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

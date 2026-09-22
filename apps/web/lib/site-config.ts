@@ -4,7 +4,14 @@
 // defaults arrive with B-079. Kept in one file so that item has one place to
 // replace rather than a hunt through templates.
 export const SITE = {
+  /// The operator — the legal entity the terms, the privacy policy, the A2P
+  /// messaging policy and every SMS and email sign as. Not the brand: an SMS
+  /// campaign is reviewed against the registered business name.
   name: 'Lab Intelligence LLC',
+  /// B-364 (D-146). The design system's brand, shown by the public shell's
+  /// wordmark. Brand copy only — anything that identifies who is legally
+  /// speaking uses `name`.
+  brand: 'Placeholder Storage',
   tagline: 'Simple self-storage, rented online in minutes.',
   /// E.164 for the `tel:` href, formatted separately for display.
   /// Deliberately still the reserved 555 range (2026-08-28, owner): there is no
