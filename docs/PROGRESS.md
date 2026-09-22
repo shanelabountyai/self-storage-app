@@ -11374,7 +11374,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-363 — the design system's tokens and fonts, app-wide (2026-09-22)
 
-**Commit:** _pending_
+**Commit:** `8789a4d`
 
 **What it built.** The first item of the design-system import (D-146). The two questions D-146 left open were settled as D-147: every kit is in scope, and the copy keeps the kit's voice but takes its facts from the data. The import is split into B-363–B-370. This item maps the kit's `tokens/colors.css` onto the shadcn variables in `globals.css`: paper background, ink foreground, clay primary, clay-100 accent, warm line-1 border, red-500 destructive, paper-2 sidebar. Every surface picks the palette up without a markup change. The root layout loads Archivo (the heading family, applied to `h1`–`h3` by a base rule), Source Sans 3 (body) and JetBrains Mono through `next/font`, replacing Geist. `tests/contrast-tokens.test.ts` now does the full oklch → linear-sRGB conversion, with a pinned red-on-white value to check it, and asserts AA text contrast for button text, secondary text on four grounds, primary-coloured text and destructive.
 

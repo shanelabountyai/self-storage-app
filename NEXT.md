@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: the design-system import (D-146).** The owner asked (2026-09-21) that the design match the claude.ai design system `84b81ef9-747f-4042-8f27-c32a0e41d567` ("Storage business design system", read through `DesignSync`), starting with `ui_kits/website/index.html` together with `card-helper.js` and `styles.css` (tokens in `tokens/*.css`, components in `components/**`). D-146 settles that the kit's COPY is adopted along with its visuals. Before building: raise the open halves of D-146 (how far beyond the website it reaches, and claims the demo data cannot back up), write the backlog row, then build. After that, continue review block 10 at **B-359**.
+**Next: B-364, the public shell per the website kit** (D-146, D-147). Read `ui_kits/website/Shell.jsx` through `DesignSync` (project `84b81ef9-747f-4042-8f27-c32a0e41d567`). The import runs B-363–B-370 in order, then review block 10 resumes at **B-359**. D-147 governs copy: take the kit's voice and "Placeholder Storage" name, render every fact from the database, and drop claims with no data behind them (Cedar Valley, 1998, manager names, $1 first month, kiosk). Where a kit token fails AA, AA wins.
+
+**B-363 is built** (2026-09-22, `8789a4d`). The kit's palette is on the shadcn variables, and Archivo, Source Sans 3 and JetBrains Mono replace Geist. `contrast-tokens` now computes chromatic oklch. a11y spec: 250 passed.
 
 **B-358 is built** (2026-09-21, `4afcce3`). "Pay … together" focuses the Unit select and announces "Now paying {units} together."; the overflow warning names the lockout when another owing unit is past due.
 
