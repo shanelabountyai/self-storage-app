@@ -80,7 +80,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       title: guide.title,
       description: guide.description,
       url,
-      siteName: SITE.name,
+      siteName: SITE.brand,
       locale: 'en_US',
       publishedTime: guide.published,
       modifiedTime: guide.updated,
@@ -114,7 +114,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
     // questions, rather than a one-question FAQPage.
     faqPageJsonLd(guide.faqs),
     breadcrumbJsonLd([
-      { name: SITE.name, url: absoluteUrl(siteOrigin(), '/') },
+      { name: SITE.brand, url: absoluteUrl(siteOrigin(), '/') },
       { name: 'Storage guides', url: absoluteUrl(siteOrigin(), '/guides') },
       { name: guide.title, url },
     ]),

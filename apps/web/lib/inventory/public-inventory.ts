@@ -218,12 +218,11 @@ export type FacilityFromRate = {
   availableUnits: number
 }
 
-export async function lowestAvailableWebRateByFacility(
-  facilityIds: string[],
-  asOf: Date = new Date(),
-): Promise<Map<string, FacilityFromRate>> {
-  if (facilityIds.length === 0) return new Map()
-
+/// Every unit type with at least one unit free and a rate in effect, with its
+/// size and count. The shared read behind the per-facility "from" price below
+/// and the home page's per-size prices (B-365), so the two apply one rule for
+/// what counts as sellable.
+async function availableRatedTypes(facilityIds: string[], asOf: Date) {
   const [availability, rateRows, unitTypes] = await Promise.all([
     prisma.unit.groupBy({
       by: ['facilityId', 'unitTypeId'],
@@ -243,39 +242,94 @@ export async function lowestAvailableWebRateByFacility(
   const rates = effectiveByGroup(rateRows, asOf, (row) => row.unitTypeId)
   const sizes = new Map(unitTypes.map((type) => [type.id, type]))
 
-  const lowest = new Map<string, FacilityFromRate>()
-  for (const row of availability) {
-    if (row._count._all === 0) continue
+  return availability.flatMap((row) => {
+    if (row._count._all === 0) return []
     const rate = rates.get(row.unitTypeId)
     // An available unit whose type has no rate in effect is not sellable, so
-    // it must not set the "from" price — same rule as the facility feed.
-    if (!rate) continue
+    // it must not set a "from" price — same rule as the facility feed.
+    if (!rate) return []
     const size = sizes.get(row.unitTypeId)
     // Unreachable in practice (the type is what the units hang off), but a
     // missing row must not invent dimensions.
-    if (!size) continue
-
-    const current = lowest.get(row.facilityId)
-    if (current === undefined) {
-      lowest.set(row.facilityId, {
+    if (!size) return []
+    return [
+      {
+        facilityId: row.facilityId,
         webRateCents: rate.webRateCents,
         widthFt: size.widthFt,
         lengthFt: size.lengthFt,
+        available: row._count._all,
+      },
+    ]
+  })
+}
+
+export async function lowestAvailableWebRateByFacility(
+  facilityIds: string[],
+  asOf: Date = new Date(),
+): Promise<Map<string, FacilityFromRate>> {
+  if (facilityIds.length === 0) return new Map()
+
+  const lowest = new Map<string, FacilityFromRate>()
+  for (const row of await availableRatedTypes(facilityIds, asOf)) {
+    const current = lowest.get(row.facilityId)
+    if (current === undefined) {
+      lowest.set(row.facilityId, {
+        webRateCents: row.webRateCents,
+        widthFt: row.widthFt,
+        lengthFt: row.lengthFt,
         availableSizes: 1,
-        availableUnits: row._count._all,
+        availableUnits: row.available,
       })
       continue
     }
 
     current.availableSizes += 1
-    current.availableUnits += row._count._all
-    if (rate.webRateCents < current.webRateCents) {
-      current.webRateCents = rate.webRateCents
-      current.widthFt = size.widthFt
-      current.lengthFt = size.lengthFt
+    current.availableUnits += row.available
+    if (row.webRateCents < current.webRateCents) {
+      current.webRateCents = row.webRateCents
+      current.widthFt = row.widthFt
+      current.lengthFt = row.lengthFt
     }
   }
   return lowest
+}
+
+/// B-365. One entry per dimension that is rentable somewhere in `facilityIds`:
+/// the lowest web rate for it and how many units of it are free, across all of
+/// them. Smallest first.
+export type SizeFromRate = {
+  widthFt: number
+  lengthFt: number
+  webRateCents: number
+  availableUnits: number
+}
+
+export async function lowestAvailableWebRateBySize(
+  facilityIds: string[],
+  asOf: Date = new Date(),
+): Promise<SizeFromRate[]> {
+  if (facilityIds.length === 0) return []
+
+  const bySize = new Map<string, SizeFromRate>()
+  for (const row of await availableRatedTypes(facilityIds, asOf)) {
+    const key = `${row.widthFt}x${row.lengthFt}`
+    const current = bySize.get(key)
+    if (current === undefined) {
+      bySize.set(key, {
+        widthFt: row.widthFt,
+        lengthFt: row.lengthFt,
+        webRateCents: row.webRateCents,
+        availableUnits: row.available,
+      })
+      continue
+    }
+    current.availableUnits += row.available
+    current.webRateCents = Math.min(current.webRateCents, row.webRateCents)
+  }
+  return [...bySize.values()].sort(
+    (a, b) => a.widthFt * a.lengthFt - b.widthFt * b.lengthFt || a.widthFt - b.widthFt,
+  )
 }
 
 /// The cached display read. B-017 gave the facility page filter and sort

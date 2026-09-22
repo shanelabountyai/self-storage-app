@@ -29,7 +29,7 @@ export function generateMetadata() {
       title: TITLE,
       description: DESCRIPTION,
       url: absoluteUrl(siteOrigin(), '/guides'),
-      siteName: SITE.name,
+      siteName: SITE.brand,
       locale: 'en_US',
     },
     twitter: { card: 'summary_large_image', title: TITLE, description: DESCRIPTION },
@@ -46,7 +46,7 @@ export default function GuidesHubPage() {
       TITLE,
     ),
     breadcrumbJsonLd([
-      { name: SITE.name, url: absoluteUrl(origin, '/') },
+      { name: SITE.brand, url: absoluteUrl(origin, '/') },
       { name: TITLE, url: absoluteUrl(origin, '/guides') },
     ]),
   ].filter((node): node is NonNullable<typeof node> => node !== null)

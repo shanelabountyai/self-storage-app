@@ -5,6 +5,7 @@ import { PAY_TOKEN_HEADER, RESET_TOKEN_HEADER } from '@/lib/i18n'
 import { requestLinkLocale } from '@/lib/i18n/link-locale'
 import { payLinkLocale } from '@/lib/portal/pay-links'
 import { resetLinkLocale } from '@/lib/auth/flows'
+import { SITE } from '@/lib/site-config'
 
 import './globals.css'
 
@@ -26,12 +27,14 @@ export const metadata: Metadata = {
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : 'http://localhost:3000',
   ),
+  // B-365 (D-146): the brand, not the legal operator — `SITE.name` stays on
+  // anything that says who is legally speaking.
   title: {
-    default: 'Self-Storage Platform',
-    template: '%s · Self-Storage Platform',
+    default: SITE.brand,
+    template: `%s · ${SITE.brand}`,
   },
-  description:
-    'Multi-facility self-storage: find a unit, rent online, and manage your account.',
+  description: 'Self-storage you can find, reserve and pay for online, with a person to call.',
+  openGraph: { siteName: SITE.brand, type: 'website' },
   // PRD 04 §7 Phase 2 (B-082 part 5). Google's site-verification token, which
   // is the precondition for every other thing Search Console can tell us —
   // nothing can be read about a property nobody has proved they own.

@@ -67,11 +67,17 @@ export function parseFilters(params: {
   }
 }
 
-function matchesSize(unitType: PublicUnitType, band: SizeBand): boolean {
+function matchesSize(unitType: { sqFt: number }, band: SizeBand): boolean {
   const bounds = SIZE_BANDS[band] as { min?: number; max?: number }
   if (bounds.min !== undefined && unitType.sqFt < bounds.min) return false
   if (bounds.max !== undefined && unitType.sqFt > bounds.max) return false
   return true
+}
+
+/// B-365. The band a size falls in, for a link that lands on search carrying
+/// it. The bands are contiguous over whole square feet, so one always matches.
+export function sizeBandFor(sqFt: number): SizeBand {
+  return (Object.keys(SIZE_BANDS) as SizeBand[]).find((band) => matchesSize({ sqFt }, band))!
 }
 
 export function applyFilters(

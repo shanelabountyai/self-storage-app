@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { searchFacilities, SEARCH_RADIUS_MILES } from '../apps/web/lib/geo/facility-search'
-import { lowestAvailableWebRateByFacility } from '../apps/web/lib/inventory/public-inventory'
+import {
+  lowestAvailableWebRateByFacility,
+  lowestAvailableWebRateBySize,
+} from '../apps/web/lib/inventory/public-inventory'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
 const describeDb = hasDatabase ? describe : describe.skip
@@ -101,6 +104,9 @@ beforeAll(async () => {
   await addPricedType(ids.near, 'sold-out', 4_900, 0, { widthFt: 5, lengthFt: 5 })
   // 'mid' is priced but has nothing rentable at all.
   await addPricedType(ids.mid, 'none-free', 8_900, 0)
+  // B-365: a second 10×20 elsewhere, cheaper than 'near's, so the per-size read
+  // has to take the minimum and sum the counts across facilities.
+  await addPricedType(ids.hidden, 'ten-b', 11_900, 3, { widthFt: 10, lengthFt: 20 })
 })
 
 afterAll(async () => {
@@ -251,6 +257,13 @@ describeDb('units from $X/mo', () => {
     // Absent rather than present-and-zero, so a caller cannot render "$0".
     expect(lowest.has(ids.mid)).toBe(false)
     expect(lowest.has(ids.far)).toBe(false)
+  })
+
+  it('prices each rentable size across facilities, smallest first (B-365)', async () => {
+    expect(await lowestAvailableWebRateBySize([ids.near, ids.mid, ids.hidden])).toEqual([
+      { widthFt: 5, lengthFt: 10, webRateCents: 9_900, availableUnits: 1 },
+      { widthFt: 10, lengthFt: 20, webRateCents: 11_900, availableUnits: 5 },
+    ])
   })
 
   it('returns an empty map for no facilities without touching the database', async () => {

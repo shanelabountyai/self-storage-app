@@ -11410,3 +11410,30 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** The facility-page and home-page copy is B-365's and B-366's. Page title and OpenGraph `siteName` still say "Self-Storage Platform" and `SITE.name`, and B-365 owns the metadata pass.
 
 **Verification.** Typecheck and lint are clean. 16 unit files, 245 tests, including dictionary parity, `us-english`, the accessibility-statement suite and two new `contrast-tokens` cases for the inverse surface. The a11y, smoke and i18n e2e specs against a production build: **494 passed, 4 skipped, 0 failed**. That covers axe on every public page, 320px reflow and both languages. The layout was not checked by eye, only by those specs. No schema change.
+
+## B-365 — the home page per the design kit's `HomeScreen` (2026-09-22)
+
+**Commit:** `TBD`
+
+**What it built.** `/` is laid out as the kit's `HomeScreen`. The hero has the footprint badge, the kit's headline ("Storage down the road, run by people you can call."), a lead that ends in the click-to-call number, and the existing `FacilitySearchForm` in a card with "No card needed to hold a unit.". Below it:
+
+- **Sizes open now.** Up to four sizes, each with its lowest web rate, square feet, units free and a link to `/storage/search?size=<band>`.
+- **A real person on the phone.** The protection-plan minimum ("from $X/mo"), autopay, the gate code in the account, and per-facility phone numbers.
+- **Our facilities.** Every active facility, with address, its own number (`phoneFor`) and its from-price, or "No units available right now — call".
+- **A dark CTA band.** "Hold a unit free", the hold window, "Find a unit" and the phone number.
+
+The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached for the inventory's five-minute window. `lowestAvailableWebRateByFacility` and the new `lowestAvailableWebRateBySize` now share one `availableRatedTypes` read, so both apply the same rule for what is sellable. `sizeBandFor(sqFt)` in `unit-filters.ts` maps a size to its search band. The metadata pass: the root title is `SITE.brand` (template `%s · Placeholder Storage`), the description is new, and OpenGraph `siteName` and the guides' breadcrumb root are the brand on every page.
+
+**What it decided.**
+
+- **Dropped from the kit under D-147:** the hero and portrait photos (no photo data at org level), the Self storage / Vehicle & RV / Containers picker (no such products), "First month $1", "Free cancellation any time before move-in", "Drive-up and climate units", the "Why people stay" eyebrow, manager names, "Answered locally", kiosk pay, "gate in the app at 6 sites", "Sites near Cedar Falls" (the visitor's location is unknown) and "All 7 locations" (no locations page yet).
+- **"Popular" became "Open now".** Nothing measures popularity. The four sizes shown are the ones with the most units free, smallest first.
+- **The hold window is stated only when every active facility uses the same one.** The sentence reuses `reserve.holdDays`. A single site-wide number would be wrong for the others.
+- **The protection plan item is omitted when no plan is on sale.** It never renders a hollow price.
+- **`SITE.name` stays on `publisher`** in the guide's JSON-LD. The breadcrumb's root and `siteName` are brand. The publisher is the legal operator.
+- The old "How it works" steps and the "Not sure what size" paragraph are gone with their dictionary keys. The kit replaces them, and the size guide link moves to the sizes section.
+
+**What it left behind.** The facilities list shows every active facility in state and city order. It carries a ponytail comment: a nearest-first cut and an "all locations" link belong to B-366's `LocationsScreen`. The size cards carry the band, not the exact size, into search, because search only filters by band. The layout was checked by the specs only, not by eye.
+
+**Verification.** Typecheck and lint are clean. Four unit files, 54 tests, including a new `lowestAvailableWebRateBySize` case (min across facilities, counts summed, sold-out and unpriced types excluded), dictionary parity and `us-english`. The smoke, i18n and a11y e2e specs against a production build: **494 passed, 4 skipped, 0 failed** (498, the same as B-364). The accessibility statement was re-read: no claim changes. No schema change.
+

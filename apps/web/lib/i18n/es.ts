@@ -57,22 +57,36 @@ export const es: Dictionary = {
   'lang.offerDismiss': 'No, gracias',
 
   // --- Homepage ----------------------------------------------------------
-  'home.h1': 'Bodegas que puede rentar hoy, sin hacer una llamada.',
-  'home.howHeading': 'Cómo funciona',
-  'home.step': 'Paso',
-  'home.step1.title': 'Encuentre una sucursal',
-  'home.step1.body':
-    'Busque por código postal o ciudad y compare precios y disponibilidad reales.',
-  'home.step2.title': 'Reserve gratis',
-  'home.step2.body':
-    'Aparte una unidad sin tarjeta y sin cuenta — solo su nombre y una fecha de entrada.',
-  'home.step3.title': 'Múdese en línea',
-  'home.step3.body':
-    'Firme el contrato, pague y reciba su código de la puerta sin ir a una oficina.',
-  'home.helpHeading': '¿No sabe qué tamaño necesita?',
-  'home.helpBodyBefore': 'La mayoría necesita menos espacio del que cree. Llame al',
-  'home.helpBodyMiddle': 'y lo vemos juntos, o consulte',
-  'home.helpSizeGuideLink': 'qué cabe en cada tamaño',
+  'home.h1': 'Bodegas cerca de casa, atendidas por personas a las que puede llamar.',
+  'home.leadBefore':
+    'Reserve una unidad en línea. Si algo sale mal — un código de la puerta, un camión de mudanza que no cabe — llame al',
+  'home.noCard': 'No necesita tarjeta para apartar una unidad.',
+  'home.checkOnline': 'Reserve, firme y pague en línea',
+  'home.sizesEyebrow': 'Disponibles ahora',
+  'home.sizesHeading': 'Elija el tamaño y le mostramos qué hay disponible',
+  'home.sizeGuideLink': 'Guía completa de tamaños',
+  'home.sizeSr': '{width} por {length} pies',
+  'home.sqFt': '{sqFt} pies cuadrados',
+  'home.openOne': '{count} unidad disponible',
+  'home.openOther': '{count} unidades disponibles',
+  'home.seeFacilities': 'Ver sucursales',
+  'home.seeFacilitiesSr': 'para una unidad de {width} por {length} pies',
+  'home.whyHeading': 'Una persona real al teléfono, y lo demás en línea',
+  'home.whyBody':
+    'Llame antes de decidir, o cuando algo salga mal. Todo lo demás — reservar, firmar, pagar — lo puede hacer desde aquí.',
+  'home.whyCallTitle': 'Números que llegan a una sucursal',
+  'home.whyCallBody': 'La página de cada sucursal indica su propio teléfono y horario de oficina.',
+  'home.whyProtectTitle': 'Planes de protección desde {price}/mes',
+  'home.whyProtectBody': 'Forman parte de su contrato, no de una aseguradora aparte.',
+  'home.whyPayTitle': 'Con pago automático o sin él',
+  'home.whyPayBody': 'Pague en línea con tarjeta, en la oficina, o active el pago automático.',
+  'home.whyGateTitle': 'Su código de la puerta, en línea',
+  'home.whyGateBody': 'Está en su cuenta desde el día de su mudanza.',
+  'home.facilitiesHeading': 'Nuestras sucursales',
+  'home.ctaHeading': 'Aparte una unidad gratis',
+  'home.ctaBody':
+    'Reserve sin tarjeta y sin cuenta. No se cobra nada hasta el día de su mudanza.',
+  'home.ctaFind': 'Buscar una unidad',
 
   // --- Brand + legal-page labels ----------------------------------------
   'site.tagline': 'Bodegas sencillas, rentadas en línea en minutos.',

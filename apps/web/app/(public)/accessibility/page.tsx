@@ -2865,6 +2865,11 @@ function reviewedOn(locale: Locale): string {
 // 44px targets and 320px reflow are all kept, and the a11y spec re-ran over
 // every public page. The new dark bands carry their own focus ring (7.89:1).
 // No claim here changes.
+//
+// Re-read 2026-09-22, at B-365. The home page was rebuilt to the kit's
+// `HomeScreen`: the same search form and label, new sections of real prices
+// and counts, a dark CTA band that uses the inverse focus ring. Axe re-ran over
+// it in both languages at 320px. No claim here changes.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

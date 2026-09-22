@@ -54,21 +54,38 @@ export const en = {
   'lang.offerDismiss': 'No, thanks',
 
   // --- Homepage ----------------------------------------------------------
-  'home.h1': 'Storage that you can rent today, without a phone call.',
-  'home.howHeading': 'How it works',
-  'home.step': 'Step',
-  'home.step1.title': 'Find a facility',
-  'home.step1.body': 'Search by zip or city and compare real prices and real availability.',
-  'home.step2.title': 'Reserve free',
-  'home.step2.body':
-    'Hold a unit with no card and no account — just your name and a move-in date.',
-  'home.step3.title': 'Move in online',
-  'home.step3.body':
-    'Sign the lease, pay, and get your gate code without visiting an office.',
-  'home.helpHeading': 'Not sure what size you need?',
-  'home.helpBodyBefore': 'Most people need less space than they expect. Call',
-  'home.helpBodyMiddle': 'and we will talk it through, or see',
-  'home.helpSizeGuideLink': 'what fits in each size',
+  // B-365 (D-147): the design kit's voice. Every number is interpolated from
+  // the registry; the kit's manager names, "Cedar Valley" and "First month $1"
+  // have no data behind them and are not here.
+  'home.h1': 'Storage down the road, run by people you can call.',
+  'home.leadBefore':
+    "Reserve a unit online. If anything goes sideways — a gate code, a moving truck that won't fit — call",
+  'home.noCard': 'No card needed to hold a unit.',
+  'home.checkOnline': 'Reserve, sign and pay online',
+  'home.sizesEyebrow': 'Open now',
+  'home.sizesHeading': "Pick the size, we'll show you what's open",
+  'home.sizeGuideLink': 'Full size guide',
+  'home.sizeSr': '{width} by {length} foot',
+  'home.sqFt': '{sqFt} sq ft',
+  'home.openOne': '{count} unit open',
+  'home.openOther': '{count} units open',
+  'home.seeFacilities': 'See facilities',
+  'home.seeFacilitiesSr': 'for a {width} by {length} foot unit',
+  'home.whyHeading': 'A real person on the phone, and the rest online',
+  'home.whyBody':
+    'Call before you commit, or when something goes wrong. Everything else — reserving, signing, paying — you can do from here.',
+  'home.whyCallTitle': 'Numbers that reach a facility',
+  'home.whyCallBody': 'Each facility page lists its own phone number and office hours.',
+  'home.whyProtectTitle': 'Protection plans from {price}/mo',
+  'home.whyProtectBody': 'Part of your lease, not a separate insurer.',
+  'home.whyPayTitle': 'Autopay or not',
+  'home.whyPayBody': 'Pay online by card, at the office, or turn on autopay.',
+  'home.whyGateTitle': 'Your gate code, online',
+  'home.whyGateBody': 'It is in your account from the day you move in.',
+  'home.facilitiesHeading': 'Our facilities',
+  'home.ctaHeading': 'Hold a unit free',
+  'home.ctaBody': 'Reserve with no card and no account. Nothing is charged until you move in.',
+  'home.ctaFind': 'Find a unit',
   // --- Brand + legal-page labels ----------------------------------------
   // `SITE.tagline` and `LEGAL_PAGES[].label` are English literals in
   // `site-config.ts`. They stay there — that file is the org-level defaults

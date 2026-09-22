@@ -105,7 +105,7 @@ export async function generateMetadata({
       title,
       description,
       url: absoluteUrl(siteOrigin(), path),
-      siteName: SITE.name,
+      siteName: SITE.brand,
       locale: 'en_US',
     },
     twitter: { card: 'summary_large_image', title, description },
