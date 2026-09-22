@@ -35,6 +35,14 @@ export function formatRate(cents: number): string {
   return `${cents < 0 ? '-' : ''}$${dollars % 1 === 0 ? dollars.toFixed(0) : dollars.toFixed(2)}`
 }
 
+/// US-101. Below ten miles, one decimal; above it, whole miles — more
+/// precision than that is more than a zip-centroid geocode can honestly claim.
+/// Shared by the search results and B-366's locations page so the two cannot
+/// print two different roundings of the same distance.
+export function formatMiles(miles: number): string {
+  return `${miles < 10 ? miles.toFixed(1) : Math.round(miles)} mi`
+}
+
 /// B-173. A `yyyy-mm-dd` calendar day written the way a person reads it.
 ///
 /// UTC on purpose: these are `@db.Date` days, and `new Date('2026-09-05')`

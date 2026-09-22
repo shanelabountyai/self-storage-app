@@ -19,7 +19,12 @@ export function UseMyLocation({
   /// routes to the same results page behaving differently is worse than either
   /// behaviour on its own.
   carry = '',
-}: { carry?: string } = {}) {
+  /// B-366. The locations page sorts itself nearest-first from `?lat=&lng=`
+  /// on its OWN url rather than jumping to the ranked, radius-limited search
+  /// results — browsing the full directory by distance is a different job
+  /// from a zip search. Every existing caller keeps the search page.
+  target = '/storage/search',
+}: { carry?: string; target?: string } = {}) {
   const router = useRouter()
   const t = useT()
   const [state, setState] = useState<'idle' | 'locating' | 'unavailable' | 'denied'>('idle')
@@ -41,7 +46,7 @@ export function UseMyLocation({
         const params = new URLSearchParams(carry)
         params.set('lat', latitude.toFixed(5))
         params.set('lng', longitude.toFixed(5))
-        router.push(`/storage/search?${params.toString()}`)
+        router.push(`${target}?${params.toString()}`)
       },
       // Covers an outright denial and a timeout alike: either way the answer to
       // the user is the same, and it must not be a dead end.

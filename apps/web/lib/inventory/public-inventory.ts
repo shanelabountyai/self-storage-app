@@ -332,6 +332,27 @@ export async function lowestAvailableWebRateBySize(
   )
 }
 
+/// B-366 (D-147). The size guide's "From $X/mo" line, across every active
+/// facility rather than one — the guide is not scoped to a city, so its price
+/// has to be the cheapest one anywhere, or absent when nobody rents that size
+/// today. Same rule as everywhere else: no rate in effect is no price shown,
+/// never a fabricated $0.
+async function sizePricing(): Promise<SizeFromRate[]> {
+  const facilities = await prisma.facility.findMany({
+    where: { status: 'active' },
+    select: { id: true },
+  })
+  return lowestAvailableWebRateBySize(facilities.map((f) => f.id))
+}
+
+/// Cached on the same TTL and tag as every other inventory read (FR-2.1), so a
+/// rate change invalidates this alongside the facility and home-page prices
+/// instead of drifting from them on its own schedule.
+export const cachedSizePricing = unstable_cache(sizePricing, ['size-guide-pricing'], {
+  revalidate: INVENTORY_CACHE_TTL_SECONDS,
+  tags: ['public-inventory'],
+})
+
 /// The cached display read. B-017 gave the facility page filter and sort
 /// parameters, which makes it a dynamic route — `searchParams` cannot be
 /// prerendered — so the route-segment `revalidate` that used to enforce

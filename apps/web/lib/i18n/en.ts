@@ -83,6 +83,7 @@ export const en = {
   'home.whyGateTitle': 'Your gate code, online',
   'home.whyGateBody': 'It is in your account from the day you move in.',
   'home.facilitiesHeading': 'Our facilities',
+  'home.allLocations': 'All locations',
   'home.ctaHeading': 'Hold a unit free',
   'home.ctaBody': 'Reserve with no card and no account. Nothing is charged until you move in.',
   'home.ctaFind': 'Find a unit',
@@ -147,6 +148,15 @@ export const en = {
     'filter through — choose a location and we will apply it there.',
   'search.sizeGuideBefore': 'Not sure what size you need? Read the',
   'search.sizeGuideLink': 'size guide',
+
+  // B-366. The all-locations directory, linked from the home page's
+  // facilities section and from the search results.
+  'locations.title': 'All locations',
+  'locations.metaDescription':
+    'Every facility we operate, with its address, phone number, and starting price.',
+  'locations.heading': 'All our locations',
+  'locations.intro': 'Call any facility directly, or search by zip code to see distances.',
+  'locations.nearestFirst': 'Nearest first, based on where you are.',
   'dead.call': 'Call {phone}',
   'dead.callSuffix': 'and we will find you a unit.',
   'card.noUnits': 'No units available right now —',

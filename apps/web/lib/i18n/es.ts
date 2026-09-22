@@ -83,6 +83,7 @@ export const es: Dictionary = {
   'home.whyGateTitle': 'Su código de la puerta, en línea',
   'home.whyGateBody': 'Está en su cuenta desde el día de su mudanza.',
   'home.facilitiesHeading': 'Nuestras sucursales',
+  'home.allLocations': 'Todas las sucursales',
   'home.ctaHeading': 'Aparte una unidad gratis',
   'home.ctaBody':
     'Reserve sin tarjeta y sin cuenta. No se cobra nada hasta el día de su mudanza.',
@@ -145,6 +146,14 @@ export const es: Dictionary = {
   'search.carryingAfter': '— elija una sucursal y lo aplicaremos allí.',
   'search.sizeGuideBefore': '¿No sabe qué tamaño necesita? Lea la',
   'search.sizeGuideLink': 'guía de tamaños',
+
+  // B-366. El directorio de todas las sucursales.
+  'locations.title': 'Todas las sucursales',
+  'locations.metaDescription':
+    'Todas las sucursales que operamos, con su dirección, teléfono y precio inicial.',
+  'locations.heading': 'Todas nuestras sucursales',
+  'locations.intro': 'Llame directamente a cualquier sucursal, o busque por código postal para ver distancias.',
+  'locations.nearestFirst': 'Las más cercanas primero, según su ubicación.',
   'dead.call': 'Llame al {phone}',
   'dead.callSuffix': 'y le buscamos una unidad.',
   'card.noUnits': 'No hay unidades disponibles en este momento —',

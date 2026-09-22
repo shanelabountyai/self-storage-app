@@ -8,12 +8,14 @@ import {
   type FacilityFromRate,
   type SizeFromRate,
 } from '@/lib/inventory/public-inventory'
+import { distanceMiles, type GeoPoint } from '@/lib/geo/geocode'
 
 // B-365 (D-147: take the voice, derive the facts). Every number the home page
 // states comes from here, read from the active facilities, so the page cannot
 // promise a price, a hold window or a plan the registry does not have.
 
 export type HomeFacility = {
+  id: string
   slug: string
   name: string
   addressLine1: string
@@ -21,6 +23,10 @@ export type HomeFacility = {
   state: string
   postalCode: string
   phone: string | null
+  /// Null when the facility has no coordinates on file. B-366's locations
+  /// page uses these to sort nearest-first; the home page ignores them.
+  latitude: number | null
+  longitude: number | null
   from: FacilityFromRate | null
 }
 
@@ -48,6 +54,8 @@ async function homeFacts(): Promise<HomeFacts> {
       state: true,
       postalCode: true,
       phone: true,
+      latitude: true,
+      longitude: true,
       reservationHoldGraceDays: true,
     },
     orderBy: [{ state: 'asc' }, { city: 'asc' }, { name: 'asc' }],
@@ -66,6 +74,7 @@ async function homeFacts(): Promise<HomeFacts> {
 
   return {
     facilities: facilities.map((f) => ({
+      id: f.id,
       slug: f.slug,
       name: f.name,
       addressLine1: f.addressLine1,
@@ -73,6 +82,8 @@ async function homeFacts(): Promise<HomeFacts> {
       state: f.state,
       postalCode: f.postalCode,
       phone: f.phone,
+      latitude: f.latitude,
+      longitude: f.longitude,
       from: fromRates.get(f.id) ?? null,
     })),
     sizes: [...sizes]
@@ -91,3 +102,34 @@ export const cachedHomeFacts = unstable_cache(homeFacts, ['home-facts'], {
   revalidate: INVENTORY_CACHE_TTL_SECONDS,
   tags: ['public-inventory'],
 })
+
+/// B-366. The locations page's nearest-first cut, pulled out as a pure
+/// function so the sort has a unit test rather than only a rendered page.
+/// Without `point` (nobody has shared their location) the input order is kept
+/// as-is — `cachedHomeFacts` already returns state/city/name order. With one,
+/// a facility missing coordinates sorts after every one that has them, rather
+/// than at a fabricated distance of zero.
+export function sortByDistance(
+  facilities: readonly HomeFacility[],
+  point: GeoPoint | undefined,
+): { facility: HomeFacility; distanceMiles?: number }[] {
+  if (!point) return facilities.map((facility) => ({ facility }))
+
+  return facilities
+    .map((facility) => ({
+      facility,
+      distanceMiles:
+        facility.latitude !== null && facility.longitude !== null
+          ? distanceMiles(point, { latitude: facility.latitude, longitude: facility.longitude })
+          : undefined,
+    }))
+    .sort((a, b) => {
+      if ((a.distanceMiles === undefined) !== (b.distanceMiles === undefined)) {
+        return a.distanceMiles === undefined ? 1 : -1
+      }
+      if (a.distanceMiles !== undefined && b.distanceMiles !== undefined) {
+        return a.distanceMiles - b.distanceMiles
+      }
+      return 0
+    })
+}

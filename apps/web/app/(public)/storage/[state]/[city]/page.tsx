@@ -95,31 +95,31 @@ function FacilityCard({ facility }: { facility: CityFacility }) {
   const address = `${facility.addressLine1}${facility.addressLine2 ? `, ${facility.addressLine2}` : ''}, ${facility.city}, ${facility.state} ${facility.postalCode}`
 
   return (
-    <li className="rounded-lg border p-4">
-      <h3 className="text-lg font-medium">
+    <li className="bg-card flex flex-col gap-2 rounded-xl border p-5">
+      <h3 className="font-heading text-lg font-bold">
         {/* The name is the link, not the card. A card-wide target swallows the
             address a reader may want to select and gives a screen reader one
             enormous link name — the same rule the search results follow. */}
-        <Link href={facilityPath(facility)} className="underline underline-offset-4">
+        <Link href={facilityPath(facility)} className="underline-offset-4 hover:underline">
           {facility.name}
         </Link>
       </h3>
 
-      <address className="text-muted-foreground mt-1 text-sm not-italic">{address}</address>
+      <address className="text-muted-foreground text-sm not-italic">{address}</address>
 
       {/* AC1's rating. Words and digits, no stars: a row of glyphs carries the
           score visually and says "black star black star" out loud, and 1.4.1
           forbids meaning carried by a visual treatment alone. The facility page
           has the reviews themselves; this is the comparison figure. */}
       {facility.rating && (
-        <p className="text-muted-foreground mt-1 text-sm">
+        <p className="text-muted-foreground text-sm">
           Rated {facility.rating.ratingValue.toFixed(1)} out of 5, from{' '}
           {facility.rating.reviewCount} review{facility.rating.reviewCount === 1 ? '' : 's'}
         </p>
       )}
 
       {facility.amenities.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-2">
+        <ul className="flex flex-wrap gap-2">
           {facility.amenities.map((amenity) => (
             <li key={amenity} className="bg-muted rounded-full px-3 py-1 text-xs">
               {amenity}
@@ -128,7 +128,7 @@ function FacilityCard({ facility }: { facility: CityFacility }) {
         </ul>
       )}
 
-      <p className="mt-3 font-medium">
+      <p className="mt-auto pt-1 font-medium">
         {facility.fromWebRateCents === null ? (
           // Never a price for a facility with nothing rentable, and never $0.
           <>
@@ -209,7 +209,7 @@ export default async function CityPage({
   ].filter((node): node is NonNullable<typeof node> => node !== null)
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12">
+    <div className="mx-auto w-full max-w-6xl px-4 py-12">
       {schema.map((node, index) => (
         <script
           key={index}
@@ -222,7 +222,7 @@ export default async function CityPage({
         Storage units in {label}
       </h1>
 
-      <div className="mt-4 flex flex-col gap-3">
+      <div className="mt-4 flex max-w-3xl flex-col gap-3">
         {intro.map((paragraph, index) => (
           <p key={index} className="text-pretty">
             {paragraph}
@@ -238,7 +238,7 @@ export default async function CityPage({
         <p className="text-muted-foreground mt-1 text-sm">
           Cheapest first. Prices are the online rate and update through the day.
         </p>
-        <ul className="mt-4 flex flex-col gap-4">
+        <ul className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {facilities.map((facility) => (
             <FacilityCard key={facility.id} facility={facility} />
           ))}
@@ -250,7 +250,7 @@ export default async function CityPage({
           printed a second time, twenty lines lower — which is padding, and
           padding is the thin content the unique-copy requirement is about. */}
       {facilities.length > 1 && amenities.length > 0 && (
-        <section aria-labelledby="amenities" className="mt-10">
+        <section aria-labelledby="amenities" className="mt-10 max-w-3xl">
           <h2 id="amenities" className="text-xl font-medium">
             What you will find in {first.city}
           </h2>
@@ -272,7 +272,7 @@ export default async function CityPage({
           from — nobody typed a zip to get here. Rather than print a distance
           from an invented origin (D-59), this hands over the search that can
           actually compute one, prefilled with the city. */}
-      <section aria-labelledby="nearby" className="mt-10">
+      <section aria-labelledby="nearby" className="mt-10 max-w-3xl">
         <h2 id="nearby" className="text-xl font-medium">
           Somewhere specific in {first.city}?
         </h2>
@@ -284,7 +284,7 @@ export default async function CityPage({
         </div>
       </section>
 
-      <p className="text-muted-foreground mt-10 text-sm text-pretty">
+      <p className="text-muted-foreground mt-10 max-w-3xl text-sm text-pretty">
         Not sure what size you need? Read the{' '}
         <Link href="/storage/size-guide" className="underline underline-offset-4">
           size guide

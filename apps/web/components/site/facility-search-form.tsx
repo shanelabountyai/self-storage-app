@@ -34,6 +34,7 @@ export async function FacilitySearchForm({
   labelKey = 'search.labelWhere',
   autoFocus = false,
   carry = '',
+  locationTarget = '/storage/search',
 }: {
   defaultValue?: string
   /// B-090 part 6. A message key rather than the text: the two callers that
@@ -51,6 +52,11 @@ export async function FacilitySearchForm({
   /// promised them it is being carried. The facility page's promo box carries
   /// its filters the same way and for the same reason (`carriedQuery`).
   carry?: string
+  /// B-366. Where "Use my location" lands. The typed zip always goes to the
+  /// ranked, radius-limited search results (the form's own `action`, below);
+  /// the locations page overrides this alone so geolocating sorts ITS OWN
+  /// directory by distance instead of jumping away from it.
+  locationTarget?: string
 }) {
   const options = await suggestions()
   const carried = [...new URLSearchParams(carry).entries()]
@@ -111,7 +117,7 @@ export async function FacilitySearchForm({
         </button>
       </form>
 
-      <UseMyLocation carry={carry} />
+      <UseMyLocation carry={carry} target={locationTarget} />
     </div>
   )
 }

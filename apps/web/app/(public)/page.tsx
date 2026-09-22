@@ -1,13 +1,13 @@
 import Link from 'next/link'
 import { ArrowRight, Check, CreditCard, KeyRound, Phone, ShieldCheck } from 'lucide-react'
 import { FacilitySearchForm } from '@/components/site/facility-search-form'
+import { FacilityCard } from '@/components/site/facility-card'
 import { SITE } from '@/lib/site-config'
-import { phoneFor } from '@/components/marketing/call-link'
 import { formatRate } from '@/lib/format'
-import { facilityPath, publicFootprint } from '@/lib/facility/public-facility'
-import { cachedHomeFacts, type HomeFacility } from '@/lib/marketing/home-facts'
+import { publicFootprint } from '@/lib/facility/public-facility'
+import { cachedHomeFacts } from '@/lib/marketing/home-facts'
 import { sizeBandFor } from '@/lib/inventory/unit-filters'
-import { dictionaryFor, plural, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, plural, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
 // Homepage (PRD 01 §6.1), laid out as the design kit's `HomeScreen` (B-365,
@@ -160,12 +160,17 @@ export default async function HomePage() {
 
       {facts.facilities.length > 0 && (
         <section aria-labelledby="facilities-heading" className="mx-auto w-full max-w-6xl px-4 py-12">
-          <h2 id="facilities-heading" className="font-heading text-2xl font-bold tracking-tight">
-            {t('home.facilitiesHeading')}
-          </h2>
-          {/* ponytail: every active facility, in state/city order. Fine at
-              demo scale; a nearest-first cut belongs with B-366's locations
-              screen, which is where "all locations" would link. */}
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 id="facilities-heading" className="font-heading text-2xl font-bold tracking-tight">
+              {t('home.facilitiesHeading')}
+            </h2>
+            {/* B-366. Every active facility, in state/city order — fine at
+                demo scale, and the locations page is where a nearest-first cut
+                (and a longer list) belongs instead of duplicating it here. */}
+            <Link href="/storage/locations" className="text-sm underline underline-offset-4">
+              {t('home.allLocations')}
+            </Link>
+          </div>
           <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {facts.facilities.map((facility) => (
               <FacilityCard key={facility.slug} facility={facility} dict={dict} />
@@ -228,53 +233,3 @@ function WhyItem({
   )
 }
 
-function FacilityCard({ facility, dict }: { facility: HomeFacility; dict: Dictionary }) {
-  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
-    translate(dict, key, vars)
-  const phone = phoneFor(facility.phone)
-  const { from } = facility
-  return (
-    <li className="bg-card flex flex-col gap-2 rounded-xl border p-5">
-      <h3 className="font-heading text-lg font-bold">
-        <Link href={facilityPath(facility)} className="underline-offset-4 hover:underline">
-          {facility.name}
-        </Link>
-      </h3>
-      <p className="text-muted-foreground text-sm">
-        {facility.addressLine1}, {facility.city}, {facility.state} {facility.postalCode}
-      </p>
-      <a
-        href={`tel:${phone.href}`}
-        className="inline-flex min-h-11 items-center gap-2 self-start text-sm underline underline-offset-4"
-      >
-        <Phone className="size-4" aria-hidden="true" />
-        <span className="sr-only">{t('chrome.callUsAt')}</span>
-        {phone.display}
-      </a>
-      <p className="mt-auto font-medium">
-        {from === null ? (
-          <>
-            {t('card.noUnits')}{' '}
-            <a href={`tel:${phone.href}`} className="underline underline-offset-4">
-              {t('card.call', { phone: phone.display })}
-            </a>
-          </>
-        ) : (
-          <>
-            <span aria-hidden="true">
-              {from.widthFt}×{from.lengthFt} {t('card.from')} {formatRate(from.webRateCents)}
-              <span className="text-muted-foreground font-normal">{t('card.perMonth')}</span>
-            </span>
-            <span className="sr-only">
-              {t('card.priceSr', {
-                width: from.widthFt,
-                length: from.lengthFt,
-                price: formatRate(from.webRateCents),
-              })}
-            </span>
-          </>
-        )}
-      </p>
-    </li>
-  )
-}

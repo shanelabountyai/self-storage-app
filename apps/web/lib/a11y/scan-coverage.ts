@@ -51,6 +51,10 @@ export const PUBLIC_SCAN_ROUTES = [
   // an error message that fails contrast is an error message nobody reads.
   '/storage/tx/austin/demo-austin-south?promo=NOT-A-REAL-CODE',
   '/storage/size-guide',
+  // B-366. The all-locations directory — a card grid plus the shared search
+  // form, which is different markup from both the city page's single-city
+  // list and the home page's own sample of it.
+  '/storage/locations',
   // B-082 part 3. The content hub's two templates. `climate-control` is the
   // richest guide — MDX prose, a CTA with a filter label, and an FAQ block of
   // <details> — and `packing-tips` is the same template with the FAQ and the

@@ -1,6 +1,14 @@
 import Link from 'next/link'
 import { SITE } from '@/lib/site-config'
-import { dimensionSpoken, parseDimension, UNIT_SIZES, UNIT_SIZE_ORDER } from '@storage/core/marketing'
+import { formatRate } from '@/lib/format'
+import { cachedSizePricing } from '@/lib/inventory/public-inventory'
+import {
+  dimensionKey,
+  dimensionSpoken,
+  parseDimension,
+  UNIT_SIZES,
+  UNIT_SIZE_ORDER,
+} from '@storage/core/marketing'
 
 export const metadata = {
   title: 'What size storage unit do I need?',
@@ -33,54 +41,73 @@ export const metadata = {
 // rest — it does not reproduce this page's seven entries.
 const SIZES = UNIT_SIZE_ORDER.map((key) => {
   const { widthFt, lengthFt } = parseDimension(key)!
-  return { ...UNIT_SIZES[key]!, spoken: dimensionSpoken(widthFt, lengthFt) }
+  return { ...UNIT_SIZES[key]!, widthFt, lengthFt, spoken: dimensionSpoken(widthFt, lengthFt) }
 })
 
-export default function SizeGuidePage() {
+export default async function SizeGuidePage() {
+  // B-366 (D-147). The cheapest current web rate anywhere for each dimension,
+  // so the guide states a real starting price rather than the kit's invented
+  // one. A size nobody has available today prints no badge — never a
+  // fabricated or stale figure.
+  const pricing = new Map(
+    (await cachedSizePricing()).map((rate) => [dimensionKey(rate.widthFt, rate.lengthFt), rate]),
+  )
+
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12">
+    <div className="mx-auto w-full max-w-4xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-balance">
         What size storage unit do I need?
       </h1>
-      <p className="text-muted-foreground mt-4 text-lg text-pretty">
+      <p className="text-muted-foreground mt-4 max-w-3xl text-lg text-pretty">
         Sizes are given in feet — a 10 × 10 unit is ten feet by ten feet. Every unit is the same
         height unless the facility page says otherwise.
       </p>
 
       <div className="mt-8 flex flex-col gap-6">
-        {SIZES.map((size) => (
-          <section
-            key={size.label}
-            aria-labelledby={`size-${size.sqFt}`}
-            className="rounded-lg border p-4"
-          >
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h2 id={`size-${size.sqFt}`} className="text-xl font-medium">
-                {/* The × is a multiplication sign and screen readers announce
-                    it as "times", with the unit missing entirely. Sighted
-                    readers get the compact form; everyone else gets the
-                    sentence. Same treatment as the facility page. */}
-                <span aria-hidden="true">{size.label}</span>
-                <span className="sr-only">{size.spoken}</span>
-              </h2>
-              <p className="text-muted-foreground text-sm">{size.sqFt} sq ft</p>
-            </div>
+        {SIZES.map((size) => {
+          const from = pricing.get(dimensionKey(size.widthFt, size.lengthFt))
+          return (
+            <section
+              key={size.label}
+              aria-labelledby={`size-${size.sqFt}`}
+              className="bg-card rounded-xl border p-5"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h2 id={`size-${size.sqFt}`} className="font-heading text-xl font-bold">
+                  {/* The × is a multiplication sign and screen readers announce
+                      it as "times", with the unit missing entirely. Sighted
+                      readers get the compact form; everyone else gets the
+                      sentence. Same treatment as the facility page. */}
+                  <span aria-hidden="true">{size.label}</span>
+                  <span className="sr-only">{size.spoken}</span>
+                </h2>
+                <div className="flex items-baseline gap-3">
+                  <p className="text-muted-foreground text-sm">{size.sqFt} sq ft</p>
+                  {from && (
+                    <p className="bg-accent text-accent-foreground rounded-full px-3 py-1 text-sm font-medium">
+                      From {formatRate(from.webRateCents)}
+                      <span className="font-normal">/mo</span>
+                    </p>
+                  )}
+                </div>
+              </div>
 
-            <p className="mt-2 font-medium text-pretty">{size.comparison}</p>
+              <p className="mt-2 font-medium text-pretty">{size.comparison}</p>
 
-            <h3 className="mt-3 text-sm font-medium">Usually holds</h3>
-            <ul className="mt-1 list-disc pl-5 text-sm">
-              {size.fits.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
+              <h3 className="mt-3 text-sm font-medium">Usually holds</h3>
+              <ul className="mt-1 list-disc pl-5 text-sm">
+                {size.fits.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
 
-            <p className="text-muted-foreground mt-3 text-sm text-pretty">{size.typical}</p>
-          </section>
-        ))}
+              <p className="text-muted-foreground mt-3 text-sm text-pretty">{size.typical}</p>
+            </section>
+          )
+        })}
       </div>
 
-      <section aria-labelledby="between" className="mt-10">
+      <section aria-labelledby="between" className="mt-10 max-w-3xl">
         <h2 id="between" className="text-xl font-medium">
           If you are between two sizes
         </h2>

@@ -29,6 +29,8 @@ export const revalidate = 0
 const STATIC_ROUTES: { path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]['changeFrequency'] }[] = [
   { path: '/', priority: 1, changeFrequency: 'weekly' },
   { path: '/storage/search', priority: 0.8, changeFrequency: 'daily' },
+  // B-366. The all-locations directory.
+  { path: '/storage/locations', priority: 0.7, changeFrequency: 'daily' },
   { path: '/storage/size-guide', priority: 0.6, changeFrequency: 'monthly' },
   // B-082 part 3. The hub; the guides under it are appended below from the same
   // catalog the routes are generated from, so a new guide reaches the sitemap

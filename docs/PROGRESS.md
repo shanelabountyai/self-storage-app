@@ -11389,6 +11389,30 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 **Verification.** Typecheck and lint are clean. `contrast-tokens`, `scroll-regions`, `customer-control-height` and `live-region-display` pass (21 tests). `e2e/a11y.spec.ts` against a production build: **250 passed**, 0 failed, both projects. That covers every axe-scanned page and state on the new palette, plus the body-font check, now asserting Source Sans 3. The full unit suite was not re-run, because the change touches CSS and one CSS-reading test and nothing a database suite reads. The accessibility statement was re-read: it states no ratio or typeface, so nothing changed. No schema change.
 
+## B-366 — find a unit, locations and size guide per the website kit (2026-09-22)
+
+**Commit:** `PENDING`
+
+**What it built.** The three remaining website-kit screens, restyled onto existing pages plus one new one:
+
+- **`FindUnitScreen` → `/storage/search`.** Wider container (`max-w-6xl`), results as a card grid (`sm:grid-cols-2 lg:grid-cols-3`) with the photo on top rather than beside the text, and the "call us" notices (`Dead`, the none-nearby closer) in a `bg-muted` panel. The `<details>` map disclosure, the GET form, and every string, role and accessible name are unchanged.
+- **`LocationsScreen` → new `/storage/locations`.** A flat, searchable directory of every active facility — distinct from the home page's own (unsorted) sample and from the city page's single-city list. Reads `cachedHomeFacts()`, the same source the home page uses. "Use my location" sorts THIS page nearest-first (`sortByDistance` in `lib/marketing/home-facts.ts`) rather than jumping to the radius-limited search results; a facility with no coordinates sorts after every one that has them. Linked from the home page's facilities section ("All locations"), added to the sitemap and to `PUBLIC_SCAN_ROUTES`.
+- **`SizeGuideScreen` → `/storage/size-guide`.** Cards restyled (`rounded-xl`, `bg-card`), and each size now carries a real "From $X/mo" badge from `cachedSizePricing()` — the cheapest current web rate for that dimension across every active facility, absent (never fabricated) when nobody has one available today.
+- **The city page's own facility grid** (`/storage/[state]/[city]`) restyled to match — wider container, card grid, `rounded-xl` cards.
+
+New shared code: `FacilityCard` (`components/site/facility-card.tsx`, extracted from B-365's home page so the locations page is not a second copy), `formatMiles` and `parseGeoPoint` (moved out of the search page into `lib/format.ts` / `lib/geo/geocode.ts` so the locations page reuses the same rounding and the same defensive parsing), and `cachedSizePricing` (`lib/inventory/public-inventory.ts`, same cache tag and TTL as every other inventory read). `HomeFacility` now carries `id`, `latitude` and `longitude`. `UseMyLocation` and `FacilitySearchForm` gained an optional `target` / `locationTarget` (default unchanged) so a caller other than the search page can point geolocation at itself.
+
+**What it decided.**
+
+- **"Facility" in the backlog line is the city page, not the single-facility `[slug]` page** — an owner call, asked because the two readings are very different in risk. The `[slug]` page is 1,398 lines of checkout, promo codes, reviews and FAQs with its own extensive a11y work; a "restyle per kit" item does not carry that page, and it is untouched.
+- **Dropped from `LocationsScreen`, per D-147's "add no route the data cannot fill":** the manager name per site (no such column — B-364 already made this call for the shell), the franchise CTA (no franchise program), and the regional map graphic (a placeholder standing in for nothing real, where the search page's precedent is to render a REAL map or none at all).
+- **The kit's interactive size picker and footprint diagram were not built.** The size guide keeps its existing linear per-size sections (richer than the kit's own single-line table — the "usually holds" list and the "typical" sentence carry real detail the kit's mock copy does not), restyled and now priced. A stateful picker is additive UI on a page that has never needed client JavaScript; add it if the flat list stops being enough.
+- **No map on `/storage/locations`.** `ponytail:` the search page's `ResultsMap` component already takes exactly the shape this page's facilities are in (id, name, address, href, price label, lat/lng) — reuse it behind the same `<details>` disclosure if a map earns its place here.
+
+**What it left behind.** The kit's "every price is mono" (JetBrains Mono) convention was not applied to `formatRate` output anywhere on the public site, including here — B-365's home page never adopted it either, and doing so on only the newly-touched pages would have made the inconsistency worse, not better. Unowned; a future item should do it everywhere at once or not at all.
+
+**Verification.** Typecheck clean. Full unit suite: **288 files, 4,708 passed, 8 skipped**, including a new `home-facts.test.ts` for `sortByDistance` (no point, nearest-first, missing-coordinates-sorts-last). e2e against a production build: `smoke`, `consent-banner`, `i18n` and `message-link-locale` — **266 passed, 4 skipped**; `a11y.spec.ts` — **258 passed, 0 failed**, which is what scans `/storage/locations` (axe, 320px reflow, forced text spacing) for the first time. The accessibility statement was re-read: it renders its exception list from `scan-coverage.ts` constants rather than a hand-written count, and the new route is in `PUBLIC_SCAN_ROUTES`, not an exception, so nothing on the page needed to change. No schema change.
+
 ## B-364 — the public shell per the design kit's website `Shell` (2026-09-22)
 
 **Commit:** `909716a`

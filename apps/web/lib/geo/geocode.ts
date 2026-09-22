@@ -135,6 +135,27 @@ const toRadians = (degrees: number) => (degrees * Math.PI) / 180
 /// Haversine rather than the cheaper equirectangular approximation: the cost
 /// difference is irrelevant for a handful of facilities, and haversine is
 /// correct at any separation instead of only over short ones.
+/// Parses `?lat=&lng=` off a URL — "Use my location"'s own output — into a
+/// point, or `undefined` when either is missing or out of range. Defensive on
+/// purpose: these arrive in a URL anyone can edit, and the search and
+/// locations pages both need one opinion of what counts as a real coordinate
+/// rather than ranking every facility against NaN.
+export function parseGeoPoint(query: { lat?: string; lng?: string }): GeoPoint | undefined {
+  const latitude = Number(query.lat)
+  const longitude = Number(query.lng)
+  if (
+    query.lat === undefined ||
+    query.lng === undefined ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  ) {
+    return undefined
+  }
+  return { latitude, longitude }
+}
+
 export function distanceMiles(a: GeoPoint, b: GeoPoint): number {
   const dLat = toRadians(b.latitude - a.latitude)
   const dLon = toRadians(b.longitude - a.longitude)
