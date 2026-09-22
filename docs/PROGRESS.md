@@ -11413,7 +11413,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-365 — the home page per the design kit's `HomeScreen` (2026-09-22)
 
-**Commit:** `TBD`
+**Commit:** `3b2bc46`
 
 **What it built.** `/` is laid out as the kit's `HomeScreen`. The hero has the footprint badge, the kit's headline ("Storage down the road, run by people you can call."), a lead that ends in the click-to-call number, and the existing `FacilitySearchForm` in a card with "No card needed to hold a unit.". Below it:
 

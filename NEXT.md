@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-365, the home page per the kit's `HomeScreen`** (D-146, D-147), plus the metadata pass (title and OpenGraph still say "Self-Storage Platform"). Read `ui_kits/website/HomeScreen.jsx` through `DesignSync` (project `84b81ef9-747f-4042-8f27-c32a0e41d567`). `publicFootprint()` already gives the facility count and cities. The import runs through B-370, then review block 10 resumes at **B-359**. D-147: keep the voice, derive the facts, drop the claims. `SITE.brand` is the wordmark and `SITE.name` stays the legal operator.
+**Next: B-366, find a unit, locations and size guide per the website kit** (D-146, D-147). Read `ui_kits/website/FindUnitScreen.jsx`, `LocationsScreen.jsx` and `SizeGuideScreen.jsx` through `DesignSync` (project `84b81ef9-747f-4042-8f27-c32a0e41d567`). Add no route the data cannot fill. The home page's facilities list has a ponytail comment waiting on a locations page (an "all locations" link and a nearest-first cut). The import runs through B-370, then review block 10 resumes at **B-359**.
+
+**B-365 is built** (2026-09-22, `3b2bc46`). The home page follows the kit's `HomeScreen`, and every fact comes from `cachedHomeFacts()`: sizes open now, the protection minimum, the facilities, and the hold window when every facility shares one. The title, OpenGraph `siteName` and breadcrumb root are now `SITE.brand`. `publisher` stays `SITE.name`. smoke, i18n and a11y: 494 passed, 4 skipped.
 
 **B-364 is built** (2026-09-22, `909716a`). Two-band header and a dark four-column footer per the kit's `Shell`. Facts come from `publicFootprint()`. Dark bands get their own focus ring through `[data-surface='inverse']`.
 
