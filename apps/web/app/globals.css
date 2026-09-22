@@ -7,9 +7,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  /* B-363 (D-146): the design system's three families. Archivo is display
+     only; body copy stays in Source Sans 3 and figures in JetBrains Mono. */
+  --font-sans: var(--font-source-sans);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-archivo);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,49 +51,55 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  /* B-363 (D-146, D-147). The "Storage business design system" palette —
+     warm paper and ink neutrals, a clay primary accent, pine for links and
+     focus — mapped onto the shadcn names every component already reads, so
+     the whole app moves at once. Where the kit's own value fails WCAG 2.1 AA
+     the substitution is named inline; D-147 has the measured ratios.
+     tests/contrast-tokens.test.ts does the arithmetic for real oklch now. */
+  --background: oklch(0.98 0.008 80); /* paper */
+  --foreground: oklch(0.235 0.018 62); /* ink-1 */
+  --card: oklch(1 0 0); /* surface */
+  --card-foreground: oklch(0.235 0.018 62);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  --popover-foreground: oklch(0.235 0.018 62);
+  /* clay-600, not the kit's clay-500: white on clay-500 is 4.44:1. */
+  --primary: oklch(0.515 0.13 45);
+  --primary-foreground: oklch(0.995 0.004 80); /* on-accent */
+  --secondary: oklch(0.958 0.01 78); /* surface-sunken */
+  --secondary-foreground: oklch(0.235 0.018 62);
+  --muted: oklch(0.958 0.01 78);
+  /* ink-3 darkened from L 0.56 (4.41:1 on paper, 4.13:1 on the well). */
+  --muted-foreground: oklch(0.52 0.014 62);
+  --accent: oklch(0.945 0.03 50); /* clay-100 */
+  --accent-foreground: oklch(0.235 0.018 62);
+  --destructive: oklch(0.535 0.165 27); /* red-500 */
   /* Decorative only — card edges, table rules, dividers. Exempt from 1.4.11
      because it carries no state and delimits nothing the user operates. */
-  --border: oklch(0.922 0 0);
+  --border: oklch(0.905 0.01 75); /* line-1 */
   /* The boundary of anything the user OPERATES: inputs, selects, outline
      buttons. Must clear 3:1 against --background (1.4.11 Non-text Contrast).
-     For achromatic oklch, relative luminance is exactly L³, so contrast against
-     white is 1.05/(L³+0.05) — the 3:1 floor is L = 0.669. At the old shared
-     0.922 this was 1.26:1, i.e. a white box on a white page whose only edge was
-     invisible. tests/contrast-tokens.test.ts asserts the arithmetic. */
-  --input: oklch(0.62 0 0);
-  /* Focus indicator, same 3:1 floor. Was 0.708 (2.59:1) and applied at /50
-     alpha, which composited to 1.54:1 — including on the skip link, the one
-     control that exists solely for keyboard users. */
-  --ring: oklch(0.55 0 0);
+     The kit's field border line-2 (L 0.845) is 1.52:1 — a white box on a
+     paper page whose only edge is invisible, the exact defect B-093 fixed —
+     so this keeps the kit's warm hue at the lightness that clears the floor. */
+  --input: oklch(0.62 0.014 75);
+  /* Focus indicator, same 3:1 floor. The kit's ring is pine at 45% alpha,
+     which composites below it; this is the same pine, solid (pine-600). */
+  --ring: oklch(0.505 0.12 175);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.625rem; /* the kit's --radius-md, 10px */
+  --sidebar: oklch(0.962 0.011 78); /* paper-2 */
+  --sidebar-foreground: oklch(0.235 0.018 62);
+  --sidebar-primary: oklch(0.515 0.13 45);
+  --sidebar-primary-foreground: oklch(0.995 0.004 80);
+  --sidebar-accent: oklch(0.945 0.03 50);
+  --sidebar-accent-foreground: oklch(0.235 0.018 62);
+  --sidebar-border: oklch(0.905 0.01 75);
+  --sidebar-ring: oklch(0.505 0.12 175);
 }
 
 .dark {
@@ -150,6 +158,11 @@
   }
   html {
     @apply font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
   }
 }
 /* WCAG 2.3.3 / PRD 01 §6.8: respect the OS "reduce motion" setting. Applied

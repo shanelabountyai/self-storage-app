@@ -11371,3 +11371,20 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 **What it left behind.** Nothing owned by an item.
 
 **Verification.** Typecheck and lint clean. The full unit suite: **4696 passed, 8 skipped**. `counter-overflow-db` covers the sentence both present and absent, for one past-due unit and for two. `e2e/admin-pos-together.spec.ts` (production build, desktop-chrome) asserts the warning and the amount field's `aria-describedby` on the region, then after the press: the confirmation in the pre-existing region, focus on the select holding `units:`, and a clean axe scan. That closes B-339's "no e2e coverage" gap. The scan is registered in `SCANNED_STATES` as `/admin/pos | several units paid together`. The change is staff-facing only, so the public accessibility statement is not affected. No schema change.
+
+## B-363 — the design system's tokens and fonts, app-wide (2026-09-22)
+
+**Commit:** _pending_
+
+**What it built.** The first item of the design-system import (D-146). The two questions D-146 left open were settled as D-147: every kit is in scope, and the copy keeps the kit's voice but takes its facts from the data. The import is split into B-363–B-370. This item maps the kit's `tokens/colors.css` onto the shadcn variables in `globals.css`: paper background, ink foreground, clay primary, clay-100 accent, warm line-1 border, red-500 destructive, paper-2 sidebar. Every surface picks the palette up without a markup change. The root layout loads Archivo (the heading family, applied to `h1`–`h3` by a base rule), Source Sans 3 (body) and JetBrains Mono through `next/font`, replacing Geist. `tests/contrast-tokens.test.ts` now does the full oklch → linear-sRGB conversion, with a pinned red-on-white value to check it, and asserts AA text contrast for button text, secondary text on four grounds, primary-coloured text and destructive.
+
+**What it decided.**
+
+- **AA beats the kit wherever the kit fails it** (D-147 has the ratios). Primary is clay-600, not clay-500. Secondary text is L 0.52, not ink-3's 0.56. The operable border is a warm L 0.62, not line-2. The focus ring is solid pine-600, not pine at 45% alpha. ink-4 is never used for text.
+- **The fonts are self-hosted through `next/font`, not the kit's Google Fonts `@import`.**
+- **`.dark` is untouched.** The kit has no dark theme and no toggle ships. The existing dark-token tests still guard it.
+- **The kit's radius already matched:** `--radius` 0.625rem is its `--radius-md`.
+
+**What it left behind.** Layout and copy belong to B-364–B-370. The hard-coded Tailwind status colours (`bg-red-50`, `bg-amber-50` and similar, about 200 uses) still use Tailwind's palette, not the kit's status tokens. The surface rows own them. The chart tokens stay achromatic until a chart is restyled.
+
+**Verification.** Typecheck and lint are clean. `contrast-tokens`, `scroll-regions`, `customer-control-height` and `live-region-display` pass (21 tests). `e2e/a11y.spec.ts` against a production build: **250 passed**, 0 failed, both projects. That covers every axe-scanned page and state on the new palette, plus the body-font check, now asserting Source Sans 3. The full unit suite was not re-run, because the change touches CSS and one CSS-reading test and nothing a database suite reads. The accessibility statement was re-read: it states no ratio or typeface, so nothing changed. No schema change.

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Archivo, JetBrains_Mono, Source_Sans_3 } from 'next/font/google'
 import { headers } from 'next/headers'
 import { PAY_TOKEN_HEADER, RESET_TOKEN_HEADER } from '@/lib/i18n'
 import { requestLinkLocale } from '@/lib/i18n/link-locale'
@@ -8,15 +8,11 @@ import { resetLinkLocale } from '@/lib/auth/flows'
 
 import './globals.css'
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-})
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-})
+// B-363 (D-146): the design system's families, self-hosted by next/font
+// rather than the kit's Google Fonts @import, so no request leaves the site.
+const archivo = Archivo({ variable: '--font-archivo', subsets: ['latin'] })
+const sourceSans = Source_Sans_3({ variable: '--font-source-sans', subsets: ['latin'] })
+const jetbrainsMono = JetBrains_Mono({ variable: '--font-jetbrains-mono', subsets: ['latin'] })
 
 export const metadata: Metadata = {
   // Without this, a page-level `alternates.canonical` renders as a relative
@@ -86,7 +82,7 @@ export default async function RootLayout({
   return (
     <html
       lang={locale}
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${archivo.variable} ${sourceSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">{children}</body>
     </html>

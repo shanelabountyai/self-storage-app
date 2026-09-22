@@ -2853,6 +2853,12 @@ function reviewedOn(locale: Locale): string {
 // only on letters that ask for payment, and never tells a tenant with no email
 // to sign in. Paper wording only, in the same `<p lang>` outside the letter;
 // this page makes no claim about printed letters, so nothing is added or withdrawn.
+//
+// Re-read 2026-09-22, at B-363. Every colour and font token changed to the
+// design system's (D-146), with AA substitutions where the kit fell short
+// (D-147); `tests/contrast-tokens.test.ts` now checks the chromatic values and
+// the a11y spec re-ran axe over them. This page states no contrast ratio or
+// typeface, so nothing is added or withdrawn.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

@@ -25,17 +25,27 @@ function token(block: ':root' | '.dark', name: string): string {
   return match[1].trim()
 }
 
-/// Relative luminance (WCAG 2.x definition) of an achromatic `oklch(L 0 0)`.
+/// Relative luminance (WCAG 2.x definition) of an `oklch(L C H)` value.
 ///
-/// For chroma 0 the oklab→LMS→linear-sRGB chain collapses: a = b = 0 makes all
-/// three cone responses equal L, each is cubed, and the three linear-sRGB rows
-/// each sum to 1. So linear R = G = B = L³, and since the luminance
-/// coefficients also sum to 1, Y = L³ exactly. No matrix needed — but the test
-/// below pins this against known values so the shortcut can't rot.
+/// B-363: the design system's neutrals are warm (non-zero chroma), so the old
+/// achromatic shortcut (Y = L³) no longer applies. This is the full
+/// oklch → oklab → LMS → linear-sRGB chain (Björn Ottosson's matrices), gamut
+/// clipped, then the WCAG luminance weights. For chroma 0 it still reduces to
+/// L³, which the pinned values below check.
 function luminanceOfOklch(value: string): number {
-  const match = /^oklch\(\s*([\d.]+)\s+0\s+0\s*\)$/.exec(value)
-  if (!match) throw new Error(`not an achromatic oklch value: ${value}`)
-  return Number(match[1]) ** 3
+  const match = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(value)
+  if (!match) throw new Error(`not an opaque oklch value: ${value}`)
+  const [L, C, H] = match.slice(1).map(Number)
+  const a = C * Math.cos((H * Math.PI) / 180)
+  const b = C * Math.sin((H * Math.PI) / 180)
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3
+  const clip = (v: number) => Math.min(1, Math.max(0, v))
+  const r = clip(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)
+  const g = clip(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
+  const bl = clip(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * bl
 }
 
 function contrast(a: string, b: string): number {
@@ -52,6 +62,12 @@ describe('the luminance shortcut itself', () => {
     expect(contrast('oklch(0.922 0 0)', 'oklch(1 0 0)')).toBeCloseTo(1.26, 2)
     // Black on white is the fixed point of the whole scale.
     expect(contrast('oklch(0 0 0)', 'oklch(1 0 0)')).toBeCloseTo(21, 5)
+  })
+
+  it('handles chroma: pure sRGB red on white is 4.00:1', () => {
+    // #ff0000 is oklch(0.628 0.2577 29.23); its WCAG contrast on white is a
+    // well-known 4.00:1. Loose tolerance for the rounded oklch coordinates.
+    expect(contrast('oklch(0.628 0.2577 29.23)', 'oklch(1 0 0)')).toBeCloseTo(4.0, 1)
   })
 
   it('puts the 3:1 floor where the arithmetic says it is', () => {
@@ -143,5 +159,27 @@ describe('1.4.11 — the selected-state indicator', () => {
     // font-weight bump this row is fixing.
     expect(contrast(token(':root', 'foreground'), token(':root', 'background'))).toBeGreaterThanOrEqual(3)
     expect(contrast(token('.dark', 'foreground'), token('.dark', 'background'))).toBeGreaterThanOrEqual(3)
+  })
+})
+
+// B-363 / SC 1.4.3. The design system's own tokens fail AA in three places
+// (D-147): white on clay-500, ink-3 as secondary text, and — covered above —
+// the field border and focus ring. These pin the substitutions.
+describe('1.4.3 — text on the design-system palette', () => {
+  const t = (name: string) => token(':root', name)
+
+  it('button text clears 4.5:1 on the primary fill', () => {
+    expect(contrast(t('primary-foreground'), t('primary'))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('secondary text clears 4.5:1 on the page, the well and the accent tint', () => {
+    for (const ground of ['background', 'card', 'muted', 'accent']) {
+      expect(contrast(t('muted-foreground'), t(ground))).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('primary-coloured text and the destructive colour clear 4.5:1 on the page', () => {
+    expect(contrast(t('primary'), t('background'))).toBeGreaterThanOrEqual(4.5)
+    expect(contrast(t('destructive'), t('background'))).toBeGreaterThanOrEqual(4.5)
   })
 })
