@@ -11391,7 +11391,7 @@ The task's label now tells the two causes apart per row: `taskLabel(type, detail
 
 ## B-366 — find a unit, locations and size guide per the website kit (2026-09-22)
 
-**Commit:** `PENDING`
+**Commit:** `bce4227`
 
 **What it built.** The three remaining website-kit screens, restyled onto existing pages plus one new one:
 
