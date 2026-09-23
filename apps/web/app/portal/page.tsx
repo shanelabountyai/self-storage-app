@@ -76,9 +76,12 @@ function LeaseCard({
   impersonated,
   dict,
   locale,
+  first,
 }: {
   lease: PortalLeaseSummary
   impersonated: boolean
+  /// B-372. The first card carries the ids the tab bar's Gate code and Help tabs land on.
+  first: boolean
   dict: Dictionary
   locale: Locale
 }) {
@@ -412,7 +415,9 @@ function LeaseCard({
       </dl>
 
       <div>
-        <h3 className="text-muted-foreground text-sm">{t('dash.gateCode')}</h3>
+        <h3 id={first ? 'gate-code' : undefined} className="text-muted-foreground text-sm">
+          {t('dash.gateCode')}
+        </h3>
         {lease.accessSuspended ? (
           <p className="mt-1 text-sm text-pretty">
             {t('dash.accessSuspended')}{' '}
@@ -447,6 +452,16 @@ function LeaseCard({
           </p>
         )}
       </div>
+
+      {/* B-372. Always visible: the tab bar's Help is a call to this number, and
+          the lines above show it only when something is owed, access is
+          suspended or the code is not ready. */}
+      <p id={first ? 'facility-phone' : undefined} className="text-sm text-pretty">
+        {t('dash.questionsCall')}{' '}
+        <a href={telHref} className="underline underline-offset-4">
+          {lease.facilityPhone}
+        </a>
+      </p>
     </section>
   )
 }
@@ -672,8 +687,9 @@ export default async function PortalHomePage() {
         </p>
       ) : (
         <>
-          {leases.map((lease) => (
+          {leases.map((lease, index) => (
             <LeaseCard
+              first={index === 0}
               key={lease.leaseId}
               lease={lease}
               impersonated={impersonated}

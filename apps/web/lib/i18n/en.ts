@@ -876,10 +876,9 @@ export const en = {
   'portal.notifications': 'Notifications',
   'portal.refer': 'Refer a friend',
   'portal.moveOut': 'Move out',
-  'portal.tabHome': 'Home',
   'portal.tabPay': 'Pay',
-  'portal.tabAccess': 'Access',
   'portal.tabHelp': 'Help',
+  'portal.tabHelpCall': 'Help: call {phone}',
   'portal.tabNav': 'Quick links',
 
   // --- Recurring charge parts (B-227, shared by /portal and /portal/methods)
@@ -903,6 +902,7 @@ export const en = {
   'dash.orCallToPayOrSplit': 'to pay by phone, or to ask about splitting it into payments.',
   'dash.orCallToPay': 'to pay by phone.',
   'dash.orCall': 'Or call',
+  'dash.questionsCall': 'Questions? Call',
   'dash.settlingAfter':
     "is on its way from your bank. Bank payments take about four business days to clear. Your balance updates when it arrives, and you won't be charged a late fee while it's in transit.",
   'dash.balanceBefore': 'You have a balance of',

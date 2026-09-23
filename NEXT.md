@@ -1,5 +1,7 @@
 # Next
 
+**B-372 is built** (2026-09-23). Next item: **B-373** (`83azzzs`). The portal tab bar is now Overview / Pay / Gate code / Help, one shared `isPortalPathActive` matcher for both navs.
+
 **B-371 is built** (2026-09-23). Next item: **B-372** (`83azzzr`). The revealed gate code now fits 320px; the POS tenant has a login and a real PIN in the seed. If `.env.test`'s `ACCESS_CODE_ENCRYPTION_KEY` is not 64 hex chars, no code renders locally: copy CI's.
 
 **Review block 11 is written** (2026-09-23). B-371–B-382 sit at `83azzzq`–`83azzzzb`, from the operator, UX and accessibility reviews over B-363–B-370. **Next item: B-371.** The revealed gate code overflows at 320px, which makes the public statement's reflow claim false on `/portal`. The refusals, the merges, two corrected reviewer claims and the clean reads are in the numbering note. Five manual passes were added to B-254. No owner question was raised.

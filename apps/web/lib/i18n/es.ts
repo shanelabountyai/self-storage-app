@@ -782,10 +782,9 @@ export const es: Dictionary = {
   'portal.notifications': 'Avisos',
   'portal.refer': 'Recomiende a un amigo',
   'portal.moveOut': 'Desocupar',
-  'portal.tabHome': 'Inicio',
   'portal.tabPay': 'Pagar',
-  'portal.tabAccess': 'Acceso',
   'portal.tabHelp': 'Ayuda',
+  'portal.tabHelpCall': 'Ayuda: llame al {phone}',
   'portal.tabNav': 'Accesos rápidos',
 
   // --- Recurring charge parts (B-227, shared by /portal and /portal/methods)
@@ -810,6 +809,7 @@ export const es: Dictionary = {
   'dash.orCallToPayOrSplit': 'para pagar por teléfono, o para preguntar por dividirlo en pagos.',
   'dash.orCallToPay': 'para pagar por teléfono.',
   'dash.orCall': 'O llame al',
+  'dash.questionsCall': '¿Preguntas? Llame al',
   'dash.settlingAfter':
     'viene en camino desde su banco. Los pagos bancarios tardan unos cuatro días hábiles en acreditarse. Su saldo se actualiza cuando llegue, y no le cobraremos cargo por atraso mientras esté en tránsito.',
   'dash.balanceBefore': 'Tiene un saldo de',

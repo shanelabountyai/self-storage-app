@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useT } from '@/components/i18n/locale-provider'
 import type { MessageKey } from '@/lib/i18n'
+import { isPortalPathActive as isActive } from '@/lib/portal/nav-match'
 
 // B-239. Lifted out of `app/portal/layout.tsx` so the nav can read
 // `usePathname()`. Three changes came with the move, and only the first is a
@@ -65,14 +66,6 @@ const MANAGE: NavLink[] = [
 // about colour ALONE, and the pill's shape/position is a second channel).
 const LINK_CLASS =
   'inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium hover:bg-accent aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground'
-
-/// `/portal` is exact — every route below it starts with it, so a prefix test
-/// would mark Overview current on all eleven. Everything else is a prefix, and
-/// the query string never participates: the Pay link carries `?lease=…`.
-function isActive(pathname: string, href: string): boolean {
-  const path = href.split('?')[0]
-  return path === '/portal' ? pathname === '/portal' : pathname.startsWith(path)
-}
 
 function NavItem({
   href,

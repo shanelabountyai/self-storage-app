@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { auth, signOut } from '@/auth'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { hasAnyPaymentPlan } from '@/lib/portal/payment-plan'
-import { navPayFor } from '@/lib/portal/dashboard'
+import { navPayFor, tabBarFacts } from '@/lib/portal/dashboard'
 import { formatRate } from '@/lib/format'
 import { PortalNav } from '@/components/portal/portal-nav'
 import { PortalTabBar } from '@/components/portal/portal-tab-bar'
@@ -64,7 +64,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
   // B-239 / B-315. The amount is on the control, not merely implied by it — and
   // only when the screen it opens asks for that same amount (`navPayFor`).
-  const navPay = await navPayFor(tenantId)
+  const [navPay, { phones, hasLease }] = await Promise.all([navPayFor(tenantId), tabBarFacts(tenantId)])
   const pay = navPay && {
     href: navPay.href,
     label:
@@ -140,7 +140,7 @@ export default async function PortalLayout({ children }: { children: React.React
       </main>
 
       {/* B-370 (D-146). Replaces B-239's sticky Pay bar; see the note there. */}
-      <PortalTabBar pay={pay} />
+      <PortalTabBar pay={pay} helpPhone={phones.length === 1 ? phones[0] : null} hasLease={hasLease} />
       </div>
     </LocaleProvider>
   )

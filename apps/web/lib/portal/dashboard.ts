@@ -326,6 +326,18 @@ export async function owingLeases(
     .filter((row) => row.balanceCents > 0)
 }
 
+/// B-372. The distinct facility phones of the tenant's own occupying units, and
+/// whether they hold any: what the tab bar's Help and Gate code tabs point at.
+/// Own leases only, as the gate code is (see `portalDashboardForTenant`).
+export async function tabBarFacts(tenantId: string): Promise<{ phones: string[]; hasLease: boolean }> {
+  const leases = await prisma.lease.findMany({
+    where: { tenantId, status: { in: [...OCCUPYING_LEASE_STATUSES] } },
+    select: { facility: { select: { phone: true } } },
+  })
+  const phones = new Set(leases.map((lease) => lease.facility.phone ?? SITE.phone.display))
+  return { phones: [...phones], hasLease: leases.length > 0 }
+}
+
 /// B-239 / B-278 / B-315. What the portal nav's Pay link opens, and the figure
 /// it quotes — null when nothing is owed.
 ///

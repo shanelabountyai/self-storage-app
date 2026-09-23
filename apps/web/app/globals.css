@@ -182,6 +182,13 @@
   html {
     @apply font-sans;
   }
+  /* B-372. Under `sm` the portal's fixed tab bar (min-h-14 plus its 1px border)
+     covers the bottom of the viewport; a focused control scrolls clear of it. */
+  @media (width < 40rem) {
+    html:has(#portal-tab-bar) {
+      scroll-padding-bottom: 3.75rem;
+    }
+  }
   h1,
   h2,
   h3 {
