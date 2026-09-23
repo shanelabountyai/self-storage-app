@@ -11735,7 +11735,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-384 — Shared primitives, so the kit's components exist once (2026-09-23)
 
-**Commit:** `SHA_PENDING`
+**Commit:** `49783ca`
 
 **What it built.** `components/ui/{card,alert,badge,empty-state,data-table}.tsx`; tokens `--shadow-1/2` (in `@theme`, so `shadow-1`/`shadow-2`), `--dur-fast/base`, `--ease-out`, `--overlay-scrim`, `--radius-field` (6px) and `--radius-card` (14px). `Button` and the admin `CONTROL_CLASS` now use the field radius. `Alert` owns B-383's rule (lead word via `title`, aria-hidden ⚠ on danger/warning, `role` defaults `alert`, `status` allowed). Converted: six alerts (access queue, overlocks x2, marketing x2, transfer), maintenance tickets (Card, Badge, EmptyState), billing runs (DataTable, EmptyState), delinquency (EmptyState). Every `role`/`aria-live` region is unchanged.
 

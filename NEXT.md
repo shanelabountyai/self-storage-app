@@ -1,6 +1,7 @@
 # Next
 
-**B-383 is built** (2026-09-23, `e6bca71`). **Next item: B-384** (`83azzzzd`), shared primitives. The Alert primitive should absorb B-383's lead words and ⚠ glyph. Fixed along the way: impersonation banner contrast (B-381 regression).
+**B-384 is built** (2026-09-23, `49783ca`). Alert/Card/Badge/EmptyState/DataTable exist in `components/ui`; Field is the admin one. Nothing queued: pick from `06-backlog.md`. The audit's other rows (staff restyle, customer-facing gaps, kit screens for facility page and checkout) still have no backlog row.
+
 
 
 **Design-kit gap audit written** (2026-09-23, `bd87d3f`, `docs/DESIGN_KIT_GAP_AUDIT.md`). D-148: the kit's unit legend wins; AA fixes and primitives first. **Next item: B-383** (`83azzzzc`), then B-384. The audit's other rows (staff restyle, customer-facing gaps, kit screens for the facility page and checkout) have no backlog row yet.
