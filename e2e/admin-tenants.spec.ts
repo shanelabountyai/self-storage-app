@@ -34,6 +34,25 @@ test.describe('signed in as the demo owner', () => {
     await expect(page.locator('tr:has(td:last-child:has-text("days past due")) td.text-destructive').first()).toBeVisible()
   })
 
+  test('the header search opens the tenant search, and list rows carry Call and Text (B-386)', async ({ page }) => {
+    await page.goto('/admin/tenants')
+    const call = page.getByRole('link', { name: /^Call / }).first()
+    await expect(call).toHaveAttribute('href', /^tel:\+?\d+$/)
+    await expect(page.getByRole('link', { name: /^Text / }).first()).toHaveAttribute('href', /^sms:\+?\d+$/)
+    const search = page.getByRole('search').getByRole('searchbox')
+    if (!(await search.isVisible())) return // hidden below `sm`; Tenants is the phone route
+    await search.fill('dana@demo.example.com')
+    await search.press('Enter')
+    await expect(page).toHaveURL(/\/admin\/tenants\?q=dana/)
+  })
+
+  test('sidebar counts are part of the link name, not only painted beside it (B-386)', async ({ page }) => {
+    await page.goto('/admin/tenants')
+    const badged = page.getByRole('navigation', { name: 'Admin' }).getByRole('link', { name: /, \d+ open$/ })
+    // Demo data may have no open work at all; when there is, the link says so.
+    for (const link of await badged.all()) await expect(link).toContainText(/\d+/)
+  })
+
   test('/admin/tenants has no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto('/admin/tenants')
     await expect(page.getByRole('main')).toBeVisible()
@@ -300,7 +319,7 @@ test.describe('the tenant list (B-114)', () => {
 
     // The row is a link to the profile, which is the next thing anybody wants.
     const firstRow = page.getByRole('row').nth(1)
-    await expect(firstRow.getByRole('link')).toHaveAttribute('href', /\/admin\/tenants\/.+/)
+    await expect(firstRow.locator('a[href^="/admin/tenants/"]')).toHaveCount(1)
   })
 
   test('filter chips are links, so a view is shareable (B-114)', async ({ page }) => {

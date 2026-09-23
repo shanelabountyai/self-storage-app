@@ -19,21 +19,21 @@ export function Header({ userName, facilities, cookieValue, canSeeAll }: Props) 
     <header className="print:hidden flex min-h-14 flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-card border-b px-6 py-2">
       <FacilitySwitcher facilities={facilities} cookieValue={cookieValue} canSeeAll={canSeeAll} />
 
-      {/* Universal search — deliberately a stub per the B-007 backlog line;
-          no destination exists to wire it to yet. Hidden below `sm`: it is
-          disabled and goes nowhere, so on a phone it is pure width. */}
-      <div className="hidden flex-1 sm:block">
+      {/* B-386. Submits to the tenants screen, whose `?q=` already searches
+          name, phone, email and unit number. Hidden below `sm` for width; the
+          Tenants nav link is the phone route to the same search. */}
+      <form action="/admin/tenants" method="get" role="search" className="hidden flex-1 sm:block">
         <label htmlFor="admin-search" className="sr-only">
-          Search tenants, units, invoices
+          Search tenants
         </label>
         <input
           id="admin-search"
+          name="q"
           type="search"
-          placeholder="Search tenants, units, invoices…"
-          disabled
-          className="border-input bg-background h-11 w-full rounded-md border px-3 text-sm disabled:opacity-60"
+          placeholder="Search tenants by name, phone, email or unit…"
+          className="border-input bg-background h-11 w-full rounded-md border px-3 text-sm"
         />
-      </div>
+      </form>
 
       <div className="flex items-center gap-3">
         {/* PRD 02 US-43: "a 'new inquiry' action reachable in one click from

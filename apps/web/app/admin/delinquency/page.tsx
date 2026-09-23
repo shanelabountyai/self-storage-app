@@ -11,6 +11,7 @@ import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
 import { TaskAssignment } from '@/components/admin/task-assignment'
 import { formatCents } from '@/lib/format'
+import { ContactLinks } from '@/components/admin/contact-links'
 
 export const metadata = { title: 'Delinquency queue' }
 
@@ -142,6 +143,9 @@ export default async function DelinquencyQueuePage({
                         Due {formatDate(task.businessDate)}
                         {task.priority === 'high' && <span className="font-medium"> · High priority</span>}
                       </p>
+                      <div className="mt-2">
+                        <ContactLinks name={task.subject.label} phone={task.phone} />
+                      </div>
                     </div>
                     {task.overdue && (
                       <span className="rounded-full border border-danger-border bg-danger-bg px-2.5 py-0.5 text-xs font-semibold text-danger-fg">

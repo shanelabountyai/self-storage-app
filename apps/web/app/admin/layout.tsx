@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { ForbiddenError } from '@/lib/rbac/authorize'
 import { needsMfaEnrollment } from '@/lib/auth/mfa'
 import { groupedNavItems } from '@/lib/admin/nav'
+import { navCounts } from '@/lib/admin/nav-counts'
+import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { getSwitcherData } from '@/lib/admin/context'
 import { Header } from '@/components/admin/header'
 import { SideNav } from '@/components/admin/side-nav'
@@ -49,6 +51,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   const navGroups = groupedNavItems(actor)
+  // The counts follow the switcher: one site, or every site the actor can see.
+  const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
+  const counts = await navCounts(
+    actor,
+    selected.mode === 'single' ? [selected.facility.id] : facilities.map((f) => f.id),
+  )
 
   return (
     // B-112. The admin density. `CONTROL_CLASS` defaults to §6.2's 44px
@@ -80,7 +88,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         canSeeAll={canSeeAll}
       />
       <div className="flex flex-1 flex-col sm:flex-row">
-        <SideNav groups={navGroups} />
+        <SideNav groups={navGroups} counts={counts} />
         {/* B-116. `contain: layout` (Tailwind's arbitrary-property syntax)
             is load-bearing, not decoration. Units, unit types and settings all
             carry a table wrapped in `overflow-x-auto` — correctly clipped and

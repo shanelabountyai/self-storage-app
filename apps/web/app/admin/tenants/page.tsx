@@ -11,6 +11,7 @@ import {
   type TenantFilter,
 } from '@/lib/admin/tenant-list'
 import { formatCents } from '@/lib/format'
+import { ContactLinks } from '@/components/admin/contact-links'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Tenants' }
@@ -216,6 +217,9 @@ export default async function TenantsPage({
                     Facility &amp; unit
                   </th>
                   <th scope="col" className="px-3 py-2 font-semibold">
+                    Reach
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Lease
                   </th>
                   <th scope="col" className="px-3 py-2 text-right font-semibold">
@@ -245,6 +249,9 @@ export default async function TenantsPage({
                           : row.units
                               .map((unit) => `${unit.facilityName} — ${unit.unitNumber}`)
                               .join(', ')}
+                      </td>
+                      <td className="px-3 py-2">
+                        <ContactLinks name={row.name} phone={row.phone} />
                       </td>
                       <td className="px-3 py-2">{row.statusLabel}</td>
                       <td className={`px-3 py-2 text-right font-mono tabular-nums ${late ? 'text-destructive font-semibold' : ''}`}>

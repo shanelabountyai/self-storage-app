@@ -20,7 +20,7 @@ const GROUPS = [
 /// figure this queue exists for, and the one it omitted. Every group here
 /// filters to a Lease-entityType task (see GROUPS above), so `task.entityId`
 /// is a lease id throughout; nothing here re-derives that, it relies on it.
-export type DelinquencyTaskRow = TaskRow & { balanceCents: number; daysPastDue: number }
+export type DelinquencyTaskRow = TaskRow & { balanceCents: number; daysPastDue: number; phone: string | null }
 export type DelinquencyQueueGroup = { type: string; heading: string; tasks: DelinquencyTaskRow[] }
 
 export async function delinquencyQueue(actor: Actor, facilityId: string): Promise<DelinquencyQueueGroup[]> {
@@ -47,10 +47,11 @@ export async function delinquencyQueue(actor: Actor, facilityId: string): Promis
     }),
     prisma.lease.findMany({
       where: { id: { in: leaseIds } },
-      select: { id: true, invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true } } },
+      select: { id: true, tenant: { select: { phone: true } }, invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true } } },
     }),
   ])
   const balanceByLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))
+  const phoneByLease = new Map(leases.map((lease) => [lease.id, lease.tenant.phone]))
   const now = new Date()
   const agingByLease = new Map(leases.map((lease) => [lease.id, daysPastDue(lease.invoices, now)]))
 
@@ -60,6 +61,7 @@ export async function delinquencyQueue(actor: Actor, facilityId: string): Promis
       ...task,
       balanceCents: balanceByLease.get(task.entityId) ?? 0,
       daysPastDue: agingByLease.get(task.entityId) ?? 0,
+      phone: phoneByLease.get(task.entityId) ?? null,
     })),
   }))
 }

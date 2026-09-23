@@ -8,7 +8,7 @@ function isActive(pathname: string, href: string): boolean {
   return href === '/admin' ? pathname === '/admin' : pathname.startsWith(href)
 }
 
-export function SideNav({ groups }: { groups: readonly VisibleNavGroup[] }) {
+export function SideNav({ groups, counts }: { groups: readonly VisibleNavGroup[]; counts: Record<string, number> }) {
   const pathname = usePathname()
 
   // A fixed 192px column beside the content left ~200px for a max-w-3xl
@@ -48,7 +48,7 @@ export function SideNav({ groups }: { groups: readonly VisibleNavGroup[] }) {
             </h2>
             <ul className="flex flex-col gap-1">
               {group.items.map((item) => (
-                <NavLink key={item.key} href={item.href} label={item.label} active={isActive(pathname, item.href)} />
+                <NavLink key={item.key} href={item.href} label={item.label} count={counts[item.key]} active={isActive(pathname, item.href)} />
               ))}
             </ul>
           </div>
@@ -60,7 +60,7 @@ export function SideNav({ groups }: { groups: readonly VisibleNavGroup[] }) {
         {today && (
           <ul className="flex flex-row gap-1 overflow-x-auto">
             {today.items.map((item) => (
-              <NavLink key={item.key} href={item.href} label={item.label} active={isActive(pathname, item.href)} />
+              <NavLink key={item.key} href={item.href} label={item.label} count={counts[item.key]} active={isActive(pathname, item.href)} />
             ))}
           </ul>
         )}
@@ -81,6 +81,7 @@ export function SideNav({ groups }: { groups: readonly VisibleNavGroup[] }) {
                         key={item.key}
                         href={item.href}
                         label={item.label}
+                        count={counts[item.key]}
                         active={isActive(pathname, item.href)}
                       />
                     ))}
@@ -95,7 +96,7 @@ export function SideNav({ groups }: { groups: readonly VisibleNavGroup[] }) {
   )
 }
 
-function NavLink({ href, label, active }: { href: string; label: string; active: boolean }) {
+function NavLink({ href, label, count, active }: { href: string; label: string; count?: number; active: boolean }) {
   return (
     <li>
       <Link
@@ -114,6 +115,17 @@ function NavLink({ href, label, active }: { href: string; label: string; active:
           <span aria-hidden="true" className="absolute top-2 bottom-2 left-0 w-[3px] rounded-full bg-(--inverse-ring)" />
         )}
         {label}
+        {count ? (
+          // The count is in the link's name ("Delinquency, 3 open"), not only
+          // painted beside it. The visible badge is hidden from AT so it is not
+          // read twice.
+          <>
+            <span className="sr-only">, {count} open</span>
+            <span aria-hidden="true" className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs tabular-nums">
+              {count}
+            </span>
+          </>
+        ) : null}
       </Link>
     </li>
   )

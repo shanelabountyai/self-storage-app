@@ -11744,3 +11744,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** ~50 tinted alert boxes, ~55 tables and ~77 hand-written empty states still hand-roll the markup; a later row converts them. Pre-mounted alert regions were left as they are (the primitive would mount the region with content).
 
 **Verification.** typecheck and lint clean; contrast-tokens 21 passed; a11y, a11y-own-spec-routes, admin-billing-runs, admin-transfer 328 passed; admin, admin-tasks, admin-auctions 607 passed. Accessibility statement re-read: no claim changed.
+
+## B-386 — Header search, Call/Text and sidebar counts (2026-09-23)
+
+**Commit:** `SHA` (recorded in a follow-up).
+
+**What it built.** The header search is live: a `role="search"` GET form to `/admin/tenants?q=` (name, phone, email, unit). `ContactLinks` renders `tel:`/`sms:` links (44px, `aria-label` "Call/Text {name}") on the tenants list (new Reach column) and on each delinquency card. `lib/admin/nav-counts.ts` gives Delinquency, Walkthrough and Rate Increases an open-work badge; the count is in the link's accessible name ("Delinquency, 3 open") and the painted badge is `aria-hidden`.
+
+**What it decided.** Counts follow the facility switcher (one site, or every site the actor can see) and are permission-gated with nav.ts's own `anyOf`, so a hidden link costs no query; zero shows no badge. Delinquency counts open overlock/notice tasks (the queue's types), not the overdue subset. **Call/Text is not on the tenant SEARCH results:** a link named "Call {name}" matches every `getByRole('link', { name: '{name}' })` substring locator in the suite; the list and queue rows do not collide. The search label is "Search tenants" (a label containing "name" broke `getByLabel('Name')`).
+
+**What it left behind.** The header search stays hidden below `sm` (Tenants nav is the phone route). Sidebar counts are not live; they refresh on navigation. No unit test on `navCounts`; the e2e asserts the accessible-name shape only when demo data has open work.
+
+**Verification.** typecheck, lint clean; admin-nav and delinquency-queue unit 17 passed; e2e admin-tenants, admin, admin-tasks, impersonation 666 passed + 4 skipped = 670. Stale `B-221 refusal fixture` task rows left by my killed runs failed admin-tasks on a unique constraint until deleted. Accessibility statement: staff-only change, no claim touched.

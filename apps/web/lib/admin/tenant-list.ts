@@ -52,6 +52,7 @@ const ENDING_SOON_DAYS = 30
 export type TenantListRow = {
   tenantId: string
   name: string
+  phone: string | null
   units: { facilityName: string; unitNumber: string }[]
   /// Already in plain words. B-109's rule: admin may use industry vocabulary,
   /// it may not render enum identifiers.
@@ -102,7 +103,7 @@ export async function listTenants(
       startDate: true,
       endDate: true,
       tenantId: true,
-      tenant: { select: { firstName: true, lastName: true } },
+      tenant: { select: { firstName: true, lastName: true, phone: true } },
       facility: { select: { name: true } },
       unit: { select: { number: true } },
       invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true } },
@@ -127,6 +128,7 @@ export async function listTenants(
   type Aggregate = {
     tenantId: string
     name: string
+    phone: string | null
     units: { facilityName: string; unitNumber: string }[]
     statuses: string[]
     balanceCents: number
@@ -145,6 +147,7 @@ export async function listTenants(
     const entry = byTenant.get(lease.tenantId) ?? {
       tenantId: lease.tenantId,
       name: `${lease.tenant.firstName} ${lease.tenant.lastName}`,
+      phone: lease.tenant.phone,
       units: [],
       statuses: [],
       balanceCents: 0,
@@ -200,6 +203,7 @@ export async function listTenants(
     rows: matching.slice(start, start + TENANT_PAGE_SIZE).map((entry) => ({
       tenantId: entry.tenantId,
       name: entry.name,
+      phone: entry.phone,
       units: entry.units,
       statusLabel: statusLabelFor(entry.statuses),
       balanceCents: entry.balanceCents,
