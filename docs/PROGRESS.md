@@ -11636,3 +11636,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** The size guide is still English-only (B-017), so its new link is too. The home size card's figure is still the cheapest across every city; the search page now shows the per-facility price. Reviewer's claim that search "drops the size" was false (recorded in the backlog row); the price mismatch was the true part.
 
 **Verification.** Typecheck clean; lint clean; a11y, i18n and smoke e2e: 528 passed, 4 skipped, including two new specs (band price equals the facility page's first unit; size-guide links carry `size=`, footer lists locations). Accessibility statement re-read: no claim about search pricing or the size guide.
+
+## B-377 — The home search sits above the fold on a phone, and the lexicon holds (2026-09-23)
+
+**Commit:** `c89adf0`
+
+**What it built.** Below `sm` the hero's footprint badge is hidden (it stays in the utility strip; DOM order unchanged, so SC 1.3.2 holds), the lead is one short sentence, the hero's top padding is halved and the h1 is `text-3xl` (back to `text-5xl` from `sm`). At 375×667 the ZIP input and its submit button are fully inside the viewport, in English and Spanish. `home.whyProtectBody` no longer says "lease" or "insurer" ("Added to your monthly rent. Covers what you store, up to the plan limit."); the home page says "reserve" throughout ("Reserve a unit free", "No card needed to reserve a unit"), in both languages.
+
+**What it decided.** The h1 is untouched (D-147). The verb is "reserve", the word the rest of the flow already uses; "hold" stays where it names the hold itself (`reserve.hold*`, the hold window).
+
+**What it left behind.** The first measurement failed by 23px on the button, so the padding and h1 size were cut as well as the badge and lead. Found on a clean `main`, not caused here: `tests/live-region-display.test.ts` fails on `/storage/locations/page.tsx`'s `role="status"` with `empty:hidden` (B-374's always-mounted region). Unowned. Accessibility statement re-read: no claim about the home hero.
+
+**Verification.** Typecheck and lint clean; i18n, smoke and a11y e2e: 532 passed, 4 skipped, including a new spec (both languages: search control inside 375×667, no "lease" on `/`). Unit: 4712 passed, 1 failed (the pre-existing one above).
