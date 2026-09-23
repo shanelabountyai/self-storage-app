@@ -86,7 +86,7 @@ export type DirectProse = {
   authIgnore: string
   /// B-287. Leads the reset email when staff, not the recipient, caused it:
   /// they were just given sight of a business account. Says why the mail came
-  /// and that the link is optional for somebody who already has a password.
+  /// only; the two ways in follow as `authAccountAccessSignIn` and `authAccountAccessIntro`.
   /// B-325: fact first (B-342 moved its expiry paragraph to
   /// `authAccountAccessRecovery`), at most one conditional per
   /// sentence (`tests/auth-email-conditionals.test.ts`).
@@ -95,6 +95,8 @@ export type DirectProse = {
   /// `authIntro`: a "reset your password" mail nobody asked for, from a
   /// business the reader may not know, reads as phishing.
   authAccountAccessSubject: (account: string, site: string) => string
+  /// B-360. The route for a member who already has a password; its URL is linked in HTML.
+  authAccountAccessSignIn: (url: string) => string
   authAccountAccessIntro: string
   /// B-342. Its own line so the `/forgot-password` URL can be linked in HTML.
   authAccountAccessRecovery: (url: string) => string
@@ -398,9 +400,10 @@ const en: CommsProse = {
     authExpiry: (minutes) => `This link expires in ${minutes} minutes.`,
     authIgnore: 'If you did not request this, you can ignore this email.',
     authAccountAccess: (account, site) =>
-      `${site} gave you access to see the business account ${account}. When you sign in, you can see what it owes.\n\nIf you already have a password, sign in as usual. If not, use the link below to choose one.`,
+      `${site} gave you access to see the business account ${account}. When you sign in, you can see what it owes.`,
     authAccountAccessSubject: (account, site) => `You can now see ${account} at ${site}`,
-    authAccountAccessIntro: 'Use this link to set up your sign-in:',
+    authAccountAccessSignIn: (url) => `Already have a password? Sign in here: ${url}`,
+    authAccountAccessIntro: 'New here? Choose a password with this link:',
     authAccountAccessRecovery: (url) => `If the link has expired, ask for a new one here: ${url}`,
 
     emailChangeConfirmSubject: 'Confirm your new email address',
@@ -585,9 +588,10 @@ const es: CommsProse = {
       `Este enlace vence en ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}.`,
     authIgnore: 'Si usted no lo pidió, puede ignorar este correo.',
     authAccountAccess: (account, site) =>
-      `${site} le dio acceso para ver la cuenta de empresa ${account}. Al iniciar sesión, puede ver lo que debe la cuenta.\n\nSi ya tiene contraseña, inicie sesión como siempre. Si no, use el enlace de abajo para elegir una.`,
+      `${site} le dio acceso para ver la cuenta de empresa ${account}. Al iniciar sesión, puede ver lo que debe la cuenta.`,
     authAccountAccessSubject: (account, site) => `Ya puede ver ${account} en ${site}`,
-    authAccountAccessIntro: 'Use este enlace para configurar su inicio de sesión:',
+    authAccountAccessSignIn: (url) => `¿Ya tiene contraseña? Inicie sesión aquí: ${url}`,
+    authAccountAccessIntro: '¿Es nuevo? Elija una contraseña con este enlace:',
     authAccountAccessRecovery: (url) => `Si el enlace ya venció, pida uno nuevo aquí: ${url}`,
 
     emailChangeConfirmSubject: 'Confirme su nueva dirección de correo',

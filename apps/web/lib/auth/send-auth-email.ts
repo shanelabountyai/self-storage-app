@@ -58,6 +58,7 @@ export async function sendAuthEmail({
   const minutes = Math.round((expiresAt.getTime() - Date.now()) / 60_000)
   const say = proseFor(locale).direct
   const forgotUrl = new URL('/forgot-password', url).href
+  const loginUrl = new URL('/login', url).href
   // B-300. The ignore sentence is omitted exactly when `accountName` is set: a
   // business-account member did NOT request this mail, and telling them to
   // ignore it tells them to discard the access it was sent to give them.
@@ -67,6 +68,7 @@ export async function sendAuthEmail({
       ? [say.authIntro[purpose], url, say.authExpiry(minutes), say.authIgnore]
       : [
           say.authAccountAccess(accountName, SITE.name),
+          say.authAccountAccessSignIn(loginUrl),
           say.authAccountAccessIntro,
           url,
           say.authExpiry(minutes),
@@ -96,7 +98,7 @@ export async function sendAuthEmail({
     subject,
     // Escaped since B-287 put a staff-typed account name in the text. B-342
     // links the two URLs we wrote, never anything staff typed.
-    html: `<p>${[url, forgotUrl]
+    html: `<p>${[url, forgotUrl, loginUrl]
       .reduce(
         (html, href) => html.replaceAll(escapeHtml(href), `<a href="${escapeHtml(href)}">${escapeHtml(href)}</a>`),
         escapeHtml(text),

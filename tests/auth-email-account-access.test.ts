@@ -37,6 +37,8 @@ for (const locale of ['en', 'es'] as const) {
       const recovery = say.authAccountAccessRecovery('https://example.test/forgot-password')
       expect(text).toContain(recovery)
       expect(html).toContain('<a href="https://example.test/forgot-password">')
+      expect(text).toContain(say.authAccountAccessSignIn('https://example.test/login'))
+      expect(html).toContain('<a href="https://example.test/login">')
     })
   })
 }
