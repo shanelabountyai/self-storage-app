@@ -11591,7 +11591,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-373 — The header's clay button no longer competes with checkout or a page's own CTA (2026-09-23)
 
-**Commit:** `PENDING`
+**Commit:** `d339e18`
 
 **What it built.** The proxy sets `x-st-checkout` on `/checkout` and below (deleted from inbound requests first, as with the other proxy headers); the public layout reads it and hands `SiteHeader` `minimal`. Minimal = wordmark, the `tel:` strip, the footprint line and the language toggle: no Guides, Pay bill or Find storage. Everywhere else "Find storage" is an outline button, so a facility page has one filled primary.
 
