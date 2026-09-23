@@ -204,6 +204,8 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'invoice.number', description: 'Invoice number', sample: '000142' },
     { field: 'invoice.amount', description: 'Amount outstanding on the updated invoice', sample: '$129.00' },
     { field: 'invoice.due_date', description: 'When the updated invoice is due', sample: 'Tuesday, September 1' },
+    { field: 'invoice.previous_number', description: 'Number of the voided invoice this one replaces', sample: '000141' },
+    { field: 'invoice.previous_amount', description: 'Amount that was outstanding on the voided invoice', sample: '$129.00' },
     { field: 'links.pay_now', description: 'One-tap link to pay', sample: 'https://example.com/pay/abc123' },
   ],
   'payment.succeeded': [

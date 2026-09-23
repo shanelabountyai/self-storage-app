@@ -547,5 +547,9 @@ describeDb('B-327 — re-billing a voided rent period', () => {
     expect(messages[0]).toMatchObject({ recipientTenantId: tenantId, templateKey: 'invoice_reissued', status: 'sent' })
     expect(messages[0].subjectSnapshot).toContain('corregida')
     expect(messages[0].bodySnapshot).toContain('$129.00')
+    // B-359: both numbers and the voided amount are named.
+    expect(messages[0].bodySnapshot).toContain(original.number)
+    expect(messages[0].bodySnapshot).toContain(reissue.number)
+    expect(events[0].payload).toMatchObject({ replacesOutstandingCents: original.totalCents - original.amountPaidCents })
   })
 })

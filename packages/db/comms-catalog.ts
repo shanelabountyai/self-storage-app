@@ -723,7 +723,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     bodyText: [
       'Hi {{tenant.first_name}},',
       '',
-      'We corrected your rent invoice for unit {{unit.number}} at {{facility.name}}. The earlier invoice is cancelled, and this one replaces it.',
+      'We corrected your rent invoice for unit {{unit.number}} at {{facility.name}}. Invoice {{invoice.previous_number}} for {{invoice.previous_amount}} is cancelled. Invoice {{invoice.number}} replaces it.',
       '',
       'Amount: {{invoice.amount}}',
       'Due: {{invoice.due_date}}',
@@ -737,7 +737,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       bodyText: [
         'Hola {{tenant.first_name}}:',
         '',
-        'Corregimos su factura de renta de la unidad {{unit.number}} en {{facility.name}}. La factura anterior quedó cancelada y esta la reemplaza.',
+        'Corregimos su factura de renta de la unidad {{unit.number}} en {{facility.name}}. La factura {{invoice.previous_number}} por {{invoice.previous_amount}} quedó cancelada. La factura {{invoice.number}} la reemplaza.',
         '',
         'Monto: {{invoice.amount}}',
         'Vence: {{invoice.due_date}}',
@@ -753,6 +753,9 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'facility.name',
       'invoice.amount',
       'invoice.due_date',
+      'invoice.number',
+      'invoice.previous_number',
+      'invoice.previous_amount',
       'links.pay_now',
       'facility.phone',
     ],

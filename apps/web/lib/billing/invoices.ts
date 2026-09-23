@@ -318,7 +318,7 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
       const replaced = await tx.invoice.findFirst({
         where: { leaseId: lease.id, kind: 'rent', periodStart: period.start, status: 'void' },
         orderBy: { createdAt: 'desc' },
-        select: { id: true, number: true },
+        select: { id: true, number: true, totalCents: true, amountPaidCents: true },
       })
 
       const sequence = await nextInvoiceNumber(tx, facilityId)
@@ -426,6 +426,7 @@ async function createInvoiceForPeriod(input: CreateInput): Promise<string | 'ski
               dueDate: iso(dueDate),
               replacesInvoiceId: replaced.id,
               replacesNumber: replaced.number,
+              replacesOutstandingCents: replaced.totalCents - replaced.amountPaidCents,
             },
           },
           tx,

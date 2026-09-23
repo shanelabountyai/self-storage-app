@@ -1292,7 +1292,19 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
 
   'invoice.due_soon': invoiceContext,
   'invoice.due_today': invoiceContext,
-  'invoice.reissued': invoiceContext,
+  'invoice.reissued': async (event, recipient) => {
+    // B-359. Names what was replaced, from the event payload: the voided
+    // invoice's figures as they stood when this one was raised.
+    const payload = (event.payload ?? {}) as { replacesNumber?: string; replacesOutstandingCents?: number }
+    return {
+      ...(await invoiceContext(event, recipient)),
+      'invoice.previous_number': payload.replacesNumber ?? '',
+      'invoice.previous_amount': formatCents(
+        payload.replacesOutstandingCents ?? 0,
+        LOCALE_TAG[recipient.locale],
+      ),
+    }
+  },
 
   // CN-6's receipt. The amount comes off the Payment row rather than the event
   // payload for the same reason — a partial refund between the charge and the

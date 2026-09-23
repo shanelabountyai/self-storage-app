@@ -11516,3 +11516,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** No in-bar "More" and no masked-by-default gate code or access log (no data behind the log). Unowned.
 
 **Verification.** Typecheck clean. Production build: **450 passed, 4 skipped** across portal, checkout-unit-lost, a11y-own-spec-routes, smoke and i18n (desktop and mobile-chrome). The first run failed 1 (the label collision above), fixed. Accessibility statement re-read: it makes no claim about the sticky Pay bar, so unchanged.
+
+## B-359 — The "updated invoice" email says what it replaced (2026-09-23)
+
+**Commit:** `(pending)`
+
+**What it built.** `invoice.reissued` carries `replacesOutstandingCents` beside the existing `replacesNumber`; its context extender adds `invoice.previous_number`, `invoice.previous_amount` and (via `invoiceContext`) `invoice.number`. The `invoice_reissued` body, EN and ES, now reads "Invoice {previous_number} for {previous_amount} is cancelled. Invoice {number} replaces it." All three fields are in `requiredMergeFields` and the merge schema.
+
+**What it decided.** The voided invoice's figures are read at reissue time from the payload, not looked up at send time. Amount is total minus paid, per the backlog line.
+
+**What it left behind.** Nothing. Templates are seeded state: run `db:migrate:test` when switching branches (B-206). Accessibility statement re-read: no claim about email, unchanged.
+
+**Verification.** Typecheck clean. `merge-fields`, `comms-catalog-locale` and `void-rebill-db` pass; the last now asserts both invoice numbers appear in the sent body.
