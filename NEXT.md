@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-369, admin per the admin kit** (D-146, D-147). Read `ui_kits/admin/AdminShell.jsx`, `PortfolioScreen.jsx`, `RatesScreen.jsx` and `SitesScreen.jsx` through `DesignSync` (project `84b81ef9-747f-4042-8f27-c32a0e41d567`). Depends on B-368 (done). The import runs through B-370, then review block 10 resumes at **B-359**.
+**Next: B-370, the mobile kit applied to the portal at phone width** (D-146, D-147). Read `ui_kits/mobile` (home, pay, access, tab bar) through `DesignSync` (project `84b81ef9-747f-4042-8f27-c32a0e41d567`). Depends on B-367 (done). Then review block 10 resumes at **B-359**. Also: 3 `admin-reports.spec.ts` specs (duplicate content x2, structured data) fail on clean main, unowned.
+
+**B-369 is built** (2026-09-23, `9fcaea7`). Admin dashboard, portfolio roll-up and rate-changes tables per the kit. No `/admin/sites` page exists and none was built.
 
 **B-368 is built** (2026-09-23, `af60391`). The staff shell (dark inverse `SideNav`, accent-bar active state, card header) plus tenants, delinquency, units and the `/admin/pos` walk-in list restyled to the kit's `AppShell`. Sidebar is 192px until `lg`, 240px from there: 244px throughout failed the ledger page's 320px/200%-zoom/forced-spacing check. 995 e2e passed, 5 skipped. Not built (no data or route behind them): the kit's tenant modal, sort headers, "Open main gate", the occupancy meter.
 
