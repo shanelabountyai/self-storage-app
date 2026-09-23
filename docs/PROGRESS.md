@@ -11489,7 +11489,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-368 — the staff counter screens per the staff-app kit (2026-09-23)
 
-**Commit:** `pending`
+**Commit:** `af60391`
 
 **What it built.** The staff shell and four screens restyled to the kit's `AppShell` visual language, on the existing routes and permissions.
 
