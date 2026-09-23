@@ -1,3 +1,5 @@
+import { DataTable } from '@/components/ui/data-table'
+import { EmptyState } from '@/components/ui/empty-state'
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { outstandingRuns, recentRuns } from '@/lib/admin/billing-runs'
@@ -84,12 +86,12 @@ export default async function BillingRunsPage() {
       </p>
 
       {runs.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No runs recorded yet.</p>
+        <EmptyState>No runs recorded yet.</EmptyState>
       ) : (
         <ScrollRegion aria-label="Nightly job runs">
-          <table className="w-full min-w-2xl text-sm">
+          <DataTable className="min-w-2xl">
             <caption className="sr-only">Recent nightly job runs with their per-item outcomes</caption>
-            <thead>
+            <DataTable.Head>
               <tr className="border-b text-left">
                 <th scope="col" className="py-2 font-medium">Job</th>
                 <th scope="col" className="py-2 font-medium">Facility</th>
@@ -100,10 +102,10 @@ export default async function BillingRunsPage() {
                 <th scope="col" className="py-2 font-medium">Finished</th>
                 {canRerun && <th scope="col" className="py-2 font-medium">Re-run</th>}
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {runs.map((run) => (
-                <tr key={run.id} className="border-b align-top">
+                <DataTable.Row key={run.id} className="align-top">
                   {/* 1.3.1: headers on both axes — the job names the row the
                       way the thead names the column. */}
                   <th scope="row" className="py-2 text-left font-normal">
@@ -185,10 +187,10 @@ export default async function BillingRunsPage() {
                       )}
                     </td>
                   )}
-                </tr>
+                </DataTable.Row>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       )}
     </div>

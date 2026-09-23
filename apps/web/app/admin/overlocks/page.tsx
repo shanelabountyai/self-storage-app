@@ -5,6 +5,7 @@ import { overlockReconciliation } from '@/lib/delinquency/overlock-reconciliatio
 import { overlockRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { ScrollRegion } from '@/components/ui/scroll-region'
+import { Alert } from '@/components/ui/alert'
 
 export const metadata = { title: 'Overlocks' }
 
@@ -73,11 +74,15 @@ export default async function OverlocksPage({
           (`delinquency.stuck-overlocks`) queues the removals; this says how
           many are waiting for somebody to walk out. */}
       {stuckCount > 0 && (
-        <p role="alert" className="rounded-lg border-2 border-danger-border bg-danger-bg p-4 text-danger-fg">
-          <span className="font-semibold">
-            {stuckCount} {stuckCount === 1 ? 'unit is' : 'units are'} locked with no tenant
-          </span>
-          <span className="mt-1 block text-sm text-pretty">
+        <Alert
+          tone="danger"
+          title={
+            <>
+              {stuckCount} {stuckCount === 1 ? 'unit is' : 'units are'} locked with no tenant
+            </>
+          }
+        >
+          <span className="mt-1 block">
             The lease has ended and the lock is still on, so the unit cannot be rented. A removal is
             queued for each of them on{' '}
             <Link href="/admin/tasks?type=overlock_remove" className="underline underline-offset-2">
@@ -85,16 +90,15 @@ export default async function OverlocksPage({
             </Link>
             .
           </span>
-        </p>
+        </Alert>
       )}
 
       {mismatchCount > 0 && (
-        <p role="alert" className="rounded-lg border-2 border-danger-border bg-danger-bg p-4 text-danger-fg">
-          <span className="font-semibold">{mismatchCount} mismatched over 24 hours</span>
-          <span className="mt-1 block text-sm text-pretty">
+        <Alert tone="danger" title={`${mismatchCount} mismatched over 24 hours`}>
+          <span className="mt-1 block">
             System and physical state disagree, and have for over a day.
           </span>
-        </p>
+        </Alert>
       )}
 
       {rows.length === 0 ? (

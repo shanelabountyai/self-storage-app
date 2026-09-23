@@ -25,6 +25,7 @@ import {
   saveCopyAction,
   saveGbpAction,
 } from './actions'
+import { Alert } from '@/components/ui/alert'
 
 export const metadata = { title: 'Marketing profile' }
 
@@ -158,16 +159,15 @@ export default async function MarketingProfilePage() {
             rather than live as you type — a warning that flickers while
             somebody edits is one they stop reading. */}
         {profile.duplicates.length > 0 && (
-          <p role="alert" className="rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg">
-            <span className="font-semibold">This description is nearly identical to another.</span>
-            <span className="mt-1 block text-pretty">
+          <Alert tone="warning" title="This description is nearly identical to another.">
+            <span className="mt-1 block">
               {profile.duplicates
                 .map((match) => `${match.facilityName} (${Math.round(match.similarity * 100)}%)`)
                 .join(', ')}
               . Two pages saying the same thing compete with each other instead of ranking
               separately — the fix is a sentence about what is actually different here.
             </span>
-          </p>
+          </Alert>
         )}
 
         <label className="flex flex-col gap-1 text-sm">
@@ -312,12 +312,11 @@ export default async function MarketingProfilePage() {
         </p>
 
         {profile.gbp.stale && (
-          <p role="alert" className="rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg">
-            <strong className="font-semibold">Out of date. </strong>
+          <Alert tone="warning" title="Out of date.">
             {profile.gbp.verifiedAt
               ? `Last checked ${formatDate(profile.gbp.verifiedAt)} — more than 90 days ago.`
               : 'Never checked.'}
-          </p>
+          </Alert>
         )}
 
         <div className="border-input rounded-lg border p-4 text-sm">

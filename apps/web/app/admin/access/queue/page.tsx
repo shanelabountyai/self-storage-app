@@ -4,6 +4,7 @@ import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { manualQueue } from '@/lib/access/manual-queue'
 import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
+import { Alert } from '@/components/ui/alert'
 
 export const metadata = { title: 'Keypad queue' }
 
@@ -59,16 +60,20 @@ export default async function KeypadQueuePage() {
       {overdue.length > 0 && (
         // US-6 AC2's escalation. A heading that says the number, not a colour —
         // WCAG 1.4.1, and also the thing a manager reads from across the room.
-        <p role="alert" className="rounded-lg border-2 border-danger-border bg-danger-bg p-4 text-danger-fg">
-          <span className="font-semibold">
-            {overdue.length} overdue — more than {slaHours} business{' '}
-            {slaHours === 1 ? 'hour' : 'hours'} old
-          </span>
-          <span className="mt-1 block text-sm text-pretty">
+        <Alert
+          tone="danger"
+          title={
+            <>
+              {overdue.length} overdue — more than {slaHours} business{' '}
+              {slaHours === 1 ? 'hour' : 'hours'} old
+            </>
+          }
+        >
+          <span className="mt-1 block">
             Counted against this facility&apos;s office hours, so a change raised after closing is
             not late until somebody has had a chance to do it.
           </span>
-        </p>
+        </Alert>
       )}
 
       {/* B-170. Keying in a change removes its card, and with it any region

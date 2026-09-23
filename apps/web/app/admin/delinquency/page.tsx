@@ -1,3 +1,4 @@
+import { EmptyState } from '@/components/ui/empty-state'
 import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
@@ -98,7 +99,7 @@ export default async function DelinquencyQueuePage({
           that would otherwise have carried the message and the focus. */}
       <AnnounceRegion>
       {groups.length === 0 ? (
-        <p className="text-muted-foreground text-sm">Nothing due right now.</p>
+        <EmptyState>Nothing due right now.</EmptyState>
       ) : (
         groups.map((group) => (
           <section key={group.type} aria-labelledby={`group-${group.type}`} className="flex flex-col gap-3">

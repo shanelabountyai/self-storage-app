@@ -11732,3 +11732,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** The `Alert` primitive that would own the icon is B-384. **Bug found (B-381's):** the impersonation banner became `bg-warning-bg text-white` (light tint, white text), failing axe colour-contrast on `impersonation.spec.ts`; it is now `bg-warning-fg`, and its `ring-offset-amber-900` (not caught by the grep, which does not cover `ring-offset-`) is a token too.
 
 **Verification.** contrast-tokens 21 passed; typecheck clean; a11y, admin, pos, tenants, transfer, move-out, reports, impersonation, portal and smoke against a production build: 1374 passed, 6 skipped. Accessibility statement re-read: no claim changed.
+
+## B-384 — Shared primitives, so the kit's components exist once (2026-09-23)
+
+**Commit:** `SHA_PENDING`
+
+**What it built.** `components/ui/{card,alert,badge,empty-state,data-table}.tsx`; tokens `--shadow-1/2` (in `@theme`, so `shadow-1`/`shadow-2`), `--dur-fast/base`, `--ease-out`, `--overlay-scrim`, `--radius-field` (6px) and `--radius-card` (14px). `Button` and the admin `CONTROL_CLASS` now use the field radius. `Alert` owns B-383's rule (lead word via `title`, aria-hidden ⚠ on danger/warning, `role` defaults `alert`, `status` allowed). Converted: six alerts (access queue, overlocks x2, marketing x2, transfer), maintenance tickets (Card, Badge, EmptyState), billing runs (DataTable, EmptyState), delinquency (EmptyState). Every `role`/`aria-live` region is unchanged.
+
+**What it decided.** **Field:** not built, `components/admin/form.tsx`'s `Field` already carries label, hint, error, `aria-invalid` and `aria-describedby`; a second one would fork B-213's behaviour. **Adopt-or-not for §2 #33:** Modal, Toast, Tabs, Switch, SegmentedControl, NumberStepper, Tooltip are *not needed now* (live regions replace toast, `<details>` replaces modal, native controls replace the rest); adopt each only when a screen needs it, with its a11y pattern. `DataTable` is class-level chrome on the native table (caption, `th scope`, `ScrollRegion` untouched), no sorting. `--overlay-scrim` has no reader until a Modal exists. Card radius is 14px (kit); the shadcn `--radius` stays 10px so nothing else moved.
+
+**What it left behind.** ~50 tinted alert boxes, ~55 tables and ~77 hand-written empty states still hand-roll the markup; a later row converts them. Pre-mounted alert regions were left as they are (the primitive would mount the region with content).
+
+**Verification.** typecheck and lint clean; contrast-tokens 21 passed; a11y, a11y-own-spec-routes, admin-billing-runs, admin-transfer 328 passed; admin, admin-tasks, admin-auctions 607 passed. Accessibility statement re-read: no claim changed.

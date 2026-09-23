@@ -552,4 +552,4 @@ export function FieldSet({
 // when its content exceeds this cap; the dropdown's own option list is
 // unaffected and still shows the full text.
 export const CONTROL_CLASS =
-  'border-input bg-background h-(--control-h,2.75rem) max-w-full rounded-md border px-2'
+  'border-input bg-background h-(--control-h,2.75rem) max-w-full rounded-(--radius-field) border px-2'

@@ -11,6 +11,7 @@ import { formatCents, formatDay } from '@/lib/format'
 import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { completeTransferAction } from './actions'
+import { Alert } from '@/components/ui/alert'
 
 export const metadata = { title: 'Transfer unit' }
 
@@ -194,10 +195,9 @@ export default async function TransferPage({
           </div>
 
           {preview && !preview.ok && (
-            <p role="alert" className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-danger-fg">
-              <strong className="font-semibold">Cannot transfer. </strong>
+            <Alert tone="danger" title="Cannot transfer.">
               {TRANSFER_PROBLEM_COPY[preview.problem]}
-            </p>
+            </Alert>
           )}
 
           {preview?.ok && (

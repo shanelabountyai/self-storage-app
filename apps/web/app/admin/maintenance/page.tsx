@@ -2,6 +2,9 @@ import { prisma } from '@storage/db'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { ticketsForFacility } from '@/lib/admin/maintenance'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { createTicketAction, updateTicketStatusAction } from './actions'
 
 export const metadata = { title: 'Maintenance' }
@@ -47,11 +50,12 @@ export default async function MaintenancePage({
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium">Open tickets ({tickets.length})</h2>
         {tickets.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Nothing open.</p>
+          <EmptyState>Nothing open.</EmptyState>
         ) : (
           <ul className="flex flex-col gap-3">
             {tickets.map((ticket) => (
-              <li key={ticket.id} className="border-input rounded-lg border p-4">
+              <li key={ticket.id}>
+                <Card className="p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="font-medium">
@@ -59,7 +63,12 @@ export default async function MaintenancePage({
                     </p>
                     <p className="text-muted-foreground text-sm">
                       {formatDate(ticket.createdAt)}
-                      {ticket.priority === 'high' && <span className="font-medium"> · High priority</span>}
+                      {ticket.priority === 'high' && (
+                        <>
+                          {' '}
+                          <Badge tone="warning">High priority</Badge>
+                        </>
+                      )}
                       {ticket.blocksAvailability && ' · Holding unit off the rentable list'}
                     </p>
                     {ticket.notes && <p className="mt-1 text-sm text-pretty">{ticket.notes}</p>}
@@ -89,6 +98,7 @@ export default async function MaintenancePage({
                     Update
                   </button>
                 </form>
+                </Card>
               </li>
             ))}
           </ul>
