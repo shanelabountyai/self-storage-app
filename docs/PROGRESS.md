@@ -11543,7 +11543,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-361 — The receipt email's details table drops its "Detail / Value" header row (2026-09-23)
 
-**Commit:** `SHA`
+**Commit:** `e7d1258`
 
 **What it built.** `EmailTable` takes `keyValue`: `tableHtml` then omits the `<thead>` and left-aligns the value cells. The receipt's details table sets it, so the email opens with the caption and the `th scope="row"` labels, no "Detail"/"Dato". The now-unused `receiptDetailsColumns` prose is removed.
 
