@@ -1,5 +1,7 @@
 # Next
 
+**B-374 is built** (2026-09-23, `52f77db`). Next item: **B-375** (`83azzzu`). "Use my location" resets after a same-route push; the locations status region is always mounted.
+
 **B-373 is built** (2026-09-23). Next item: **B-374** (`83azzzt`). The header is minimal on `/checkout`; "Find storage" is outline everywhere else.
 
 **B-372 is built** (2026-09-23). Next item: **B-373** (`83azzzs`). The portal tab bar is now Overview / Pay / Gate code / Help, one shared `isPortalPathActive` matcher for both navs.

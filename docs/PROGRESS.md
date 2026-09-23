@@ -11603,7 +11603,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-374 — "Use my location" no longer sticks on "Finding you…" (2026-09-23)
 
-**Commit:** `SHA_PENDING`
+**Commit:** `52f77db`
 
 **What it built.** `UseMyLocation` returns to idle before it `router.push`es, so a same-route navigation (`/storage/locations`, `/storage/search`) leaves the button reading "Use my location". The locations page's `role="status"` is now always mounted and empty until there is a point, so the nearest-first sentence is written into a region that already exists.
 
