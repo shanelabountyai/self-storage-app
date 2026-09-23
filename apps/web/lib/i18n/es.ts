@@ -782,6 +782,11 @@ export const es: Dictionary = {
   'portal.notifications': 'Avisos',
   'portal.refer': 'Recomiende a un amigo',
   'portal.moveOut': 'Desocupar',
+  'portal.tabHome': 'Inicio',
+  'portal.tabPay': 'Pagar',
+  'portal.tabAccess': 'Acceso',
+  'portal.tabHelp': 'Ayuda',
+  'portal.tabNav': 'Accesos rápidos',
 
   // --- Recurring charge parts (B-227, shared by /portal and /portal/methods)
   'charge.rent': 'la renta',

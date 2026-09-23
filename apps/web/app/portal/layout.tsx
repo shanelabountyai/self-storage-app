@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { User } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { auth, signOut } from '@/auth'
@@ -7,6 +6,7 @@ import { hasAnyPaymentPlan } from '@/lib/portal/payment-plan'
 import { navPayFor } from '@/lib/portal/dashboard'
 import { formatRate } from '@/lib/format'
 import { PortalNav } from '@/components/portal/portal-nav'
+import { PortalTabBar } from '@/components/portal/portal-tab-bar'
 import { ForbiddenError } from '@/lib/rbac/authorize'
 import { currentImpersonation, hasStaleImpersonationCookie } from '@/lib/impersonation/context'
 import { ImpersonationBanner } from '@/components/impersonation/banner'
@@ -134,28 +134,13 @@ export default async function PortalLayout({ children }: { children: React.React
         // at 320px — where the last thing is often the "call the office"
         // number. The padding is the reflow fix, and it exists only while the
         // bar does.
-        className={`mx-auto w-full max-w-4xl flex-1 p-6 ${pay ? 'pb-24 sm:pb-6' : ''}`}
+        className="mx-auto w-full max-w-4xl flex-1 p-6 pb-24 sm:pb-6"
       >
         {children}
       </main>
 
-      {/* B-239. The phone-only half. A past-due tenant reads this product on a
-          phone, and on a phone the nav row scrolls off the top — so the pay
-          action is pinned instead of merely present. LAST in the DOM on
-          purpose (SC 2.4.3): a keyboard user meets it after the page content
-          rather than being teleported to a fixed element mid-page, and the nav
-          link above is the route they reach first. `sm:hidden` because at
-          desktop width the nav never leaves the viewport's top. */}
-      {pay && (
-        <div className="bg-background fixed inset-x-0 bottom-0 border-t p-3 sm:hidden">
-          <Link
-            href={pay.href}
-            className="bg-primary text-primary-foreground flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
-          >
-            {pay.label}
-          </Link>
-        </div>
-      )}
+      {/* B-370 (D-146). Replaces B-239's sticky Pay bar; see the note there. */}
+      <PortalTabBar pay={pay} />
       </div>
     </LocaleProvider>
   )

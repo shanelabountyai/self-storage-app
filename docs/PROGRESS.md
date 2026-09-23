@@ -11504,3 +11504,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** The kit's `Modal` tenant drawer, sort headers, header "Open main gate" and site-picker badges are not built (no data or route behind them). The unit map is still the list/grid pair with filters, not the kit's `OccupancyMeter` plus detail panel; B-369 is admin, not this. Unowned.
 
 **Verification.** Typecheck and lint clean. Against a production build: **995 passed, 5 skipped** (1000) across `a11y`, `a11y-own-spec-routes`, `admin`, `admin-tenants`, `admin-pos`, `admin-pos-together` and `admin-tasks`. The first run failed 2 (`/admin/tenants/[tenantId]/ledger/[leaseId]` at 320px, forced text spacing: a `$161.00` painted 2px past the edge) from the wider sidebar; fixed as above. Accessibility statement re-read and given an entry. No schema change.
+
+## B-370: mobile kit as the portal's phone-width layout (D-146, D-147)
+
+**Commit:** (SHA in follow-up)
+
+**What it built.** `components/portal/portal-tab-bar.tsx`: the kit's `MobileTabBar` as a fixed bottom bar under `sm` (Home, Pay, Access, Help; 56px targets, accent on the current tab, `aria-current="page"`). Pay carries the amount ("Pay $X") when something is owed and points at the same href the header link does. It replaces B-239's lone sticky Pay bar and stays last in the DOM (SC 2.4.3). `<main>` keeps `pb-24` at phone width always, since the bar is always there. New keys `portal.tab*` in en and es.
+
+**What it decided.** The bar is a shortcut row, not the IA: the full eleven-link header nav stays, so nothing is reachable only from the bar. Kept over the kit: the kit's home/pay/access screens are not rebuilt, since B-367 already restyled those routes and the gate code lives on Overview. "Help" opens Contact details, not a call to a named site manager (no manager field, D-147). "Access" is `/portal/access` (who can get in), not a gate-code screen. The bar's `aria-label` is "Quick links" and must not contain "Your account": Playwright's role-name match is a substring and the phone project failed on the collision.
+
+**What it left behind.** No in-bar "More" and no masked-by-default gate code or access log (no data behind the log). Unowned.
+
+**Verification.** Typecheck clean. Production build: **450 passed, 4 skipped** across portal, checkout-unit-lost, a11y-own-spec-routes, smoke and i18n (desktop and mobile-chrome). The first run failed 1 (the label collision above), fixed. Accessibility statement re-read: it makes no claim about the sticky Pay bar, so unchanged.

@@ -876,6 +876,11 @@ export const en = {
   'portal.notifications': 'Notifications',
   'portal.refer': 'Refer a friend',
   'portal.moveOut': 'Move out',
+  'portal.tabHome': 'Home',
+  'portal.tabPay': 'Pay',
+  'portal.tabAccess': 'Access',
+  'portal.tabHelp': 'Help',
+  'portal.tabNav': 'Quick links',
 
   // --- Recurring charge parts (B-227, shared by /portal and /portal/methods)
   'charge.rent': 'rent',
