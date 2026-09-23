@@ -11552,3 +11552,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Accessibility statement re-read: no claim about email, unchanged.
 
 **Verification.** Typecheck clean; full unit suite 4708 passed. `receipt-balance-scope-db` now asserts no "Detail", no `scope="col"`, caption and left-aligned row cells.
+
+## B-362 — Two customer states are scanned or declared (2026-09-23)
+
+**Commit:** `PENDING`
+
+**What it built.** axe now runs on `/login?reason=pay_link_expired` in both languages (`e2e/pay-link.spec.ts`) and on the bare `/portal/pay` choose-a-unit state (`e2e/portal.spec.ts`), each with a `SCANNED_STATES` entry and an `a11y-state` tag. A tenant with no leases on bare `/portal/pay` is a `STATE_EXCEPTIONS` row, EN and ES, because no demo tenant reaches it.
+
+**What it decided.** All three scanned states are `layout: 'excepted'`, each with a reason: short single-column content inside shells whose reflow is already measured. Not added to `STATE_REACH`.
+
+**What it left behind.** Nothing. Accessibility statement re-read: it renders both lists, and no count is written on the page.
+
+**Verification.** Typecheck clean; `a11y-scan-coverage` 14 passed; `pay-link`, `portal` and `a11y-own-spec-routes` e2e 220 passed against a production build.

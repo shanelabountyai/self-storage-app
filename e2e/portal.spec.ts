@@ -572,9 +572,11 @@ test.describe('signed in as the tenant on a payment plan', () => {
   })
 
   // B-349. Pia holds two leases, so a bare URL cannot pick one for her.
+  // a11y-state: /portal/pay | choose a unit
   test('a bare /portal/pay asks a two-unit tenant to choose, not "not found"', async ({ page }) => {
     await page.goto('/portal/pay')
     await expect(page.getByText(/more than one unit/i)).toBeVisible()
+    await assertNoAxeViolations(page, { state: 'choose a unit' })
     await expect(page.getByText(/couldn.t find that unit/i)).toHaveCount(0)
     await page.getByRole('link', { name: 'Back to my account' }).click()
     await expect(page).toHaveURL(/\/portal$/)

@@ -465,6 +465,33 @@ export type ScannedState = {
 }
 
 export const SCANNED_STATES: readonly ScannedState[] = [
+  // B-362. The two customer states B-336 and B-349 shipped that had a spec
+  // but no axe scan. `layout: 'excepted'` for each: a short single-column
+  // message on a page whose form is already measured at every width.
+  {
+    route: '/login',
+    state: 'pay link expired',
+    spec: 'e2e/pay-link.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the same short single-column sign-in form the at-rest /login measures at every width, with one more paragraph above it and its magic-link disclosure already open',
+  },
+  {
+    route: '/login',
+    state: 'pay link expired, Spanish',
+    spec: 'e2e/pay-link.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the English state above with longer strings inside the same single column; the tightest translated layout — the facility page — is measured in Spanish above',
+  },
+  {
+    route: '/portal/pay',
+    state: 'choose a unit',
+    spec: 'e2e/portal.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'one sentence and one link in the portal shell, which every portal route already measures at every width',
+  },
   // B-281. Staff-facing, but it is the paper a renter leaves with.
   {
     route: '/admin/pos/done',
@@ -950,6 +977,18 @@ export type StateException = {
 /// The states a route can be in that no scan reaches, and why — the same bar
 /// as `SCAN_EXCEPTIONS`: genuinely blocked, not merely unscanned yet.
 export const STATE_EXCEPTIONS: readonly StateException[] = [
+  // B-362. B-349's bare `/portal/pay` for a tenant with no leases. Every demo
+  // tenant holds one or more, so the state cannot be reached; the two-unit
+  // state beside it is scanned (`SCANNED_STATES` above).
+  {
+    route: '/portal/pay',
+    state: 'no units',
+    audience: 'portal',
+    reason:
+      'a bare /portal/pay for a tenant who holds no lease, which no demo tenant is; the choose-a-unit state for a tenant with several is scanned',
+    reasonEs:
+      '/portal/pay sin parámetros para un inquilino que no tiene ningún contrato, y ningún inquilino de demostración está en ese caso; el estado de elegir unidad para quien tiene varias sí se revisa',
+  },
   // B-090 part 6 (D-122). Declared rather than left for the route loops to
   // quietly not reach. Every public route renders in Spanish and only the
   // facility page is scanned in it (`SCANNED_STATES` above), so the rest are

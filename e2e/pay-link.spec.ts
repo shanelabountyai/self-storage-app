@@ -137,6 +137,11 @@ test.describe('the receipt screen', () => {
         'href',
         `tel:${SITE.phone.href}`,
       )
+      // a11y-state: /login | pay link expired
+      // a11y-state: /login | pay link expired, Spanish
+      await assertNoAxeViolations(page, {
+        state: locale === 'en' ? 'pay link expired' : 'pay link expired, Spanish',
+      })
       // B-356. Checkout sets no password, so the magic-link route is open
       // without a click, and still returns to this lease's payment.
       const magic = page.locator('details')
