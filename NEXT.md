@@ -1,5 +1,7 @@
 # Next
 
+**Smoke "checkout goes back" is green on mobile-chrome** (2026-09-23): the test now focuses the sr-only step button and presses Enter, since B-378 leaves it keyboard-only below `sm`. Nothing queued and no open red: pick from `06-backlog.md`.
+
 **B-382 is built** (2026-09-23, `79d1614`). Review block 11 is finished. Nothing queued: pick the next open item from `06-backlog.md`. **Open red, unowned:** smoke "checkout goes back" fails on mobile-chrome since B-378 (aria-hidden stepper `<p>` intercepts the click); it needs a row or a fix first. Manual passes for B-382 are owed under B-254.
 
 

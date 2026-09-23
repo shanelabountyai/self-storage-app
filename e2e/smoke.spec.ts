@@ -1166,7 +1166,11 @@ test('checkout goes back, from the control and from the progress indicator', asy
   await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
 
   const progress = page.getByRole('navigation', { name: 'Checkout progress' })
-  await progress.getByRole('button', { name: /Your details/ }).click()
+  // Focus + Enter, not click: below `sm` the row is sr-only (B-378), keyboard-
+  // reachable but 1px, so a pointer click lands on the summary line above it.
+  const detailsStep = progress.getByRole('button', { name: /Your details/ })
+  await detailsStep.focus()
+  await detailsStep.press('Enter')
   await expect(page.getByRole('heading', { name: 'Your details' })).toBeVisible()
   await expect(page.getByLabel('Email', { exact: true })).toHaveValue(email)
 
