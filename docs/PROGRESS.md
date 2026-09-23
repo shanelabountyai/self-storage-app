@@ -11663,7 +11663,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-379 — English SEO prose is marked `lang="en"` under Spanish (2026-09-23)
 
-**Commit:** `SHA_PENDING`
+**Commit:** `3366e9b`
 
 **What it built.** `components/i18n/english-body.tsx`, a server component that renders a `<div>` with `lang="en"` when the locale is `es` and no attribute otherwise. It wraps the size guide, the guides index and every guide page (all English end to end), the generated city and size intros, and the facility FAQ list. New `e2e/i18n.spec.ts` cases assert a `[lang="en"]` ancestor under Spanish and none under English for the size guide, one guide body, the city intro and a facility FAQ answer.
 
