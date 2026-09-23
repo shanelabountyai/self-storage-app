@@ -11651,7 +11651,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-378 — The checkout stepper is one line at 360px (2026-09-23)
 
-**Commit:** see the follow-up SHA commit.
+**Commit:** `55a4279`
 
 **What it built.** Below `sm` the six-step `<ol>` is `sr-only` and a visible, `aria-hidden` line (`stepAnnouncement`, e.g. "Your unit — step 2 of 6") stands in for it; from `sm` up nothing changes. The row stays in the accessibility tree with every `step.ofTotal`/current/completed word unchanged, and a completed step's go-back button stays in the tab order: `focus-within:not-sr-only` reveals the row while a control in it has focus, so the focus ring is never on an invisible element (2.4.7).
 

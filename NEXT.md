@@ -1,5 +1,7 @@
 # Next
 
+**B-378 is built** (2026-09-23, `55a4279`). Next item: **B-379** (`83azzzy`). The checkout stepper is one visible line below `sm`; the row is still tabbable and revealed on focus.
+
 **B-377 is built** (2026-09-23, `c89adf0`). Next item: **B-378** (`83azzzx`). The red `live-region-display` test is fixed.
 
 
