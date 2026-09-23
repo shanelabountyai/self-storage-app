@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: B-370, the mobile kit applied to the portal at phone width** (D-146, D-147). Read `ui_kits/mobile` (home, pay, access, tab bar) through `DesignSync` (project `84b81ef9-747f-4042-8f27-c32a0e41d567`). Depends on B-367 (done). Then review block 10 resumes at **B-359**. Also: 3 `admin-reports.spec.ts` specs (duplicate content x2, structured data) fail on clean main, unowned.
+**Next: review block 10 resumes at B-359** (`docs/prds/06-backlog.md`). The design-system import (B-363–B-370) is finished. Also: 3 `admin-reports.spec.ts` specs (duplicate content x2, structured data) fail on clean main, unowned.
+
+**B-370 is built** (2026-09-23, `1d6ad5a`). A fixed bottom tab bar under `sm` (Home, Pay, Access, Help) replaces B-239's sticky Pay bar; the header nav is unchanged. Its `aria-label` must not contain "Your account" (substring locator collision). 450 e2e passed, 4 skipped.
 
 **B-369 is built** (2026-09-23, `9fcaea7`). Admin dashboard, portfolio roll-up and rate-changes tables per the kit. No `/admin/sites` page exists and none was built.
 
