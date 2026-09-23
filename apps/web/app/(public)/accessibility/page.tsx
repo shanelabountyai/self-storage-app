@@ -1615,14 +1615,15 @@ function reviewedOn(locale: Locale): string {
 // `components/admin/side-nav.tsx`, not because conformance required it — and
 // a AAA courtesy must never be written up as an AA obligation met.
 //
-// **(2) The sticky pay bar's non-obstruction at 320px is asserted by
-// construction, not by measurement.** `expectNoHorizontalOverflow` — which is
-// what the portal reflow loop actually runs — measures horizontal overflow and
-// cannot see a fixed element sitting on top of the last paragraph on the page.
-// The `pb-24` on `<main>` is the fix, and nothing automated will notice if a
-// later change removes it. Said here rather than left implicit, because the
-// page's own text is careful that automated coverage is "a floor, not a
-// ceiling" and this is precisely one of the gaps that phrase is about.
+// **(2) The phone tab bar's non-obstruction at 320px was asserted by
+// construction, not by measurement, until B-372.** B-239's sticky pay bar was
+// replaced by B-370's fixed bottom tab bar. `expectNoHorizontalOverflow` — which
+// is what the portal reflow loop actually runs — measures horizontal overflow
+// and cannot see a fixed element sitting on top of the last paragraph on the
+// page. The `pb-24` on `<main>` is the fix; `e2e/portal-tab-bar.spec.ts`'s
+// focus-above-the-bar check now notices if it goes. Said here rather than left
+// implicit, because the page's own text is careful that automated coverage is
+// "a floor, not a ceiling".
 
 // Re-read 2026-09-04, at B-242 (a search result names the size its price
 // belongs to, and carries a photo). **Customer-facing**, on `/storage/search`,
@@ -2907,6 +2908,12 @@ function reviewedOn(locale: Locale): string {
 // WCAG, 320px reflow, 200% zoom and forced text spacing. That run caught the
 // wider sidebar squeezing content at 640px, so it widens only from `lg`. No
 // claim here changes.
+//
+// Re-read 2026-09-23, at B-370 (backfilled at B-380; no entry was written at
+// the time). B-239's lone sticky Pay bar became a fixed four-tab bar under `sm`
+// (Home, Pay, Access, Help; 56px targets, `aria-current="page"`, last in the
+// DOM for SC 2.4.3). The statement makes no claim about the bar, so no line
+// changes.
 //
 // Re-read 2026-09-23, at B-371. `a11y.true.resize` ("the page reflows to 320px
 // wide without sideways scrolling") was FALSE on `/portal` from B-367 until

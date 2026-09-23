@@ -11505,6 +11505,18 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **Verification.** Typecheck and lint clean. Against a production build: **995 passed, 5 skipped** (1000) across `a11y`, `a11y-own-spec-routes`, `admin`, `admin-tenants`, `admin-pos`, `admin-pos-together` and `admin-tasks`. The first run failed 2 (`/admin/tenants/[tenantId]/ledger/[leaseId]` at 320px, forced text spacing: a `$161.00` painted 2px past the edge) from the wider sidebar; fixed as above. Accessibility statement re-read and given an entry. No schema change.
 
+## B-369 — the admin dashboard, portfolio roll-up and rate changes per the admin kit (2026-09-23)
+
+**Commit:** `9fcaea7`. **Backfilled** by B-380: the commit shipped without an entry.
+
+**What it built.** Three staff screens restyled to the kit's `AppShell` visual language, on the existing routes: the admin dashboard tiles (card surface, `rounded-xl`, mono figures), the portfolio roll-up (`facility-rollup.tsx`) and both tables on `/admin/rate-increases` (bordered card table, tinted uppercase header row, mono money). Page headings move to the kit's `text-2xl font-bold`.
+
+**What it decided.** Restyle only: no route, permission or column added or removed.
+
+**What it left behind.** The row promised "sites screens". **No `/admin/sites` page exists and none was built**; the kit's sites screen has no route or data behind it. Not built, and unowned. Visual review of B-364–B-366 and B-368–B-370 was spec-only: no screenshots were taken at real widths.
+
+**Verification.** Recorded at the time only as green in `NEXT.md`; not re-run for this backfill. Accessibility statement: no claim changes.
+
 ## B-370: mobile kit as the portal's phone-width layout (D-146, D-147)
 
 **Commit:** `1d6ad5a`
@@ -11515,7 +11527,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **What it left behind.** No in-bar "More" and no masked-by-default gate code or access log (no data behind the log). Unowned.
 
-**Verification.** Typecheck clean. Production build: **450 passed, 4 skipped** across portal, checkout-unit-lost, a11y-own-spec-routes, smoke and i18n (desktop and mobile-chrome). The first run failed 1 (the label collision above), fixed. Accessibility statement re-read: it makes no claim about the sticky Pay bar, so unchanged.
+**Verification.** Typecheck clean. Production build: **450 passed, 4 skipped** across portal, checkout-unit-lost, a11y-own-spec-routes, smoke and i18n (desktop and mobile-chrome). The first run failed 1 (the label collision above), fixed. Accessibility statement re-read: it makes no claim about the sticky Pay bar, so unchanged. **Its statement log entry was missing** and was backfilled by B-380. Visual review was spec-only: no screenshots at real widths.
 
 ## B-359 — The "updated invoice" email says what it replaced (2026-09-23)
 
@@ -11672,3 +11684,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Other D-123 surfaces I did not find are not covered; the four named in the row are. The guide pages' JSON-LD scripts sit inside the wrapper, which is harmless.
 
 **Verification.** Typecheck and lint clean; `i18n.spec.ts` 12 new/B-268 cases passed. The first full-file run had one mobile-chrome failure in B-268 (reservation redirect) that passed on rerun; it does not touch these pages. Accessibility statement re-read: no language claim, so no visible change (comment log entry added).
+
+## B-380 — B-369's entry, B-370's statement log entry, and a stale comment (2026-09-23)
+
+**Commit:** see the SHA follow-up below.
+
+**What it built.** Records only. A dated, backfilled B-369 entry above; B-370's missing entry in the statement's comment log; the `(2)` note in the statement file now names the tab bar (not B-239's sticky pay bar) and the B-372 check that covers `pb-24`. B-370's entry and B-369's each note that visual review was spec-only, with no screenshots at real widths.
+
+**What it decided.** B-369's "left behind" names the sites screen as not built and unowned, per the backlog row. No claim on the public page changes and `LAST_REVIEWED` is not bumped.
+
+**What it left behind.** Nothing.
+
+**Verification.** `grep -n "B-369" docs/PROGRESS.md` finds a heading with `9fcaea7`; the comment log names B-370; no statement comment calls a "sticky pay bar" current (the remaining mention describes B-239 as replaced). Typecheck and lint run before commit.
