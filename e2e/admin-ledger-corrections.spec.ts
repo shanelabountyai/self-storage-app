@@ -89,8 +89,9 @@ test.describe('a correction announces itself outside the form it removes (B-333)
 
     const facility = await prisma.facility.upsert({
       where: { slug: SLUG },
-      update: {},
+      update: { status: 'inactive' },
       create: {
+        status: 'inactive', // off the public site, so it cannot skew the demo cities' reports
         name: 'E2E — Ledger corrections',
         slug: SLUG,
         addressLine1: '1 Correction Way',

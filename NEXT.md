@@ -2,7 +2,7 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Review block 10 is finished** (B-362 built 2026-09-23, `9986fde`). Nothing is queued: pick the next open item from `docs/prds/06-backlog.md`. Also: 3 `admin-reports.spec.ts` specs (duplicate content x2, structured data) fail on clean main, unowned.
+**Review block 10 is finished** (B-362 built 2026-09-23, `9986fde`). Nothing is queued: pick the next open item from `docs/prds/06-backlog.md`. The 3 `admin-reports.spec.ts` failures are fixed: the B-333 and B-358 fixture facilities were left active in Austin, adding a second facility and one with no hours. Both now end inactive. B-243 stays open: D-63 says build it against a real provider key or not at all.
 
 **B-362 is built** (2026-09-23, `9986fde`). axe now scans `/login`'s pay-link-expired state (EN, ES) and bare `/portal/pay`'s choose-a-unit state; the no-units state is a `STATE_EXCEPTIONS` row.
 

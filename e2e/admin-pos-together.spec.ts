@@ -24,6 +24,13 @@ let facilityId = ''
 test.describe.configure({ mode: 'serial' })
 
 test.describe('pay several units together at the counter (B-358)', () => {
+  // The counter needs the facility active, but a leftover active Austin facility
+  // skews the demo cities' duplicate-content and structured-data reports.
+  test.afterAll(async ({}, testInfo) => {
+    if (testInfo.project.name !== 'desktop-chrome') return
+    await prisma.facility.updateMany({ where: { slug: SLUG }, data: { status: 'inactive' } })
+  })
+
   test.beforeAll(async ({}, testInfo) => {
     // One project only: a fixed-slug fixture in the one shared database, and
     // focus and announcement are not viewport-dependent.
@@ -32,7 +39,7 @@ test.describe('pay several units together at the counter (B-358)', () => {
     facilityId = (
       await prisma.facility.upsert({
         where: { slug: SLUG },
-        update: {},
+        update: { status: 'active' },
         create: {
           name: 'E2E — Counter together',
           slug: SLUG,
