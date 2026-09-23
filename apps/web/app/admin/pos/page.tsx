@@ -205,7 +205,7 @@ export default async function PosPage({
                     <input type="hidden" name="unitTypeId" value={unitType.id} />
                     <button
                       type="submit"
-                      className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-semibold"
+                      className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-semibold"
                     >
                       Start move-in
                     </button>

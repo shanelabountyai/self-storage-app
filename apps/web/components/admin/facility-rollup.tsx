@@ -57,7 +57,7 @@ export function FacilityRollup({
             >
               {row.facilityName}
             </Link>
-            <span className="text-muted-foreground font-mono tabular-nums">{row.summary}</span>
+            <span className="text-muted-foreground tabular-nums">{row.summary}</span>
           </li>
         ))}
       </ul>

@@ -40,6 +40,8 @@ test.describe('signed in as the demo owner', () => {
     await expect(page.getByRole('heading', { name: 'Walk-in move-in' })).toBeVisible()
     await expect(page.getByText(/in store/).first()).toBeVisible()
     await expect(page.getByRole('button', { name: 'Start move-in' }).first()).toBeVisible()
+    // B-375: a wall of filled primary buttons is a wall of equal emphasis.
+    await expect(page.locator('form button.bg-primary', { hasText: 'Start move-in' })).toHaveCount(0)
   })
 
   test('taking cash records a receipt number and works out the change', async ({ page }) => {

@@ -26,6 +26,14 @@ test.describe('signed in as the demo owner', () => {
     await signInAsDemoOwner(page)
   })
 
+  test('a balance is red only when the row is past due (B-375)', async ({ page }) => {
+    await page.goto('/admin/tenants')
+    await expect(page.getByRole('main')).toBeVisible()
+    // Red balance with a "Current" days column would be rent not yet due.
+    await expect(page.locator('tr:has(td:last-child:text-is("Current")) td.text-destructive')).toHaveCount(0)
+    await expect(page.locator('tr:has(td:last-child:has-text("days past due")) td.text-destructive').first()).toBeVisible()
+  })
+
   test('/admin/tenants has no WCAG 2.1 AA violations', async ({ page }) => {
     await page.goto('/admin/tenants')
     await expect(page.getByRole('main')).toBeVisible()

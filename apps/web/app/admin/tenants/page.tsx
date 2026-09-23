@@ -239,7 +239,7 @@ export default async function TenantsPage({
                           {row.name}
                         </Link>
                       </th>
-                      <td className="px-3 py-2 font-mono text-xs">
+                      <td className="px-3 py-2 text-sm">
                         {row.units.length === 0
                           ? '—'
                           : row.units
@@ -247,7 +247,7 @@ export default async function TenantsPage({
                               .join(', ')}
                       </td>
                       <td className="px-3 py-2">{row.statusLabel}</td>
-                      <td className={`px-3 py-2 text-right font-mono tabular-nums ${row.balanceCents > 0 ? 'text-destructive font-semibold' : ''}`}>
+                      <td className={`px-3 py-2 text-right font-mono tabular-nums ${late ? 'text-destructive font-semibold' : ''}`}>
                         {formatCents(row.balanceCents)}
                       </td>
                       {/* 1.4.1: the state is in words. A row tinted amber and
