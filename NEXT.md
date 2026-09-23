@@ -1,5 +1,7 @@
 # Next
 
+**Review block 11 is written** (2026-09-23). B-371–B-382 sit at `83azzzq`–`83azzzzb`, from the operator, UX and accessibility reviews over B-363–B-370. **Next item: B-371.** The revealed gate code overflows at 320px, which makes the public statement's reflow claim false on `/portal`. The refusals, the merges, two corrected reviewer claims and the clean reads are in the numbering note. Five manual passes were added to B-254. No owner question was raised.
+
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
 **Review block 10 is finished** (B-362 built 2026-09-23, `9986fde`). Nothing is queued: pick the next open item from `docs/prds/06-backlog.md`. The 3 `admin-reports.spec.ts` failures are fixed: the B-333 and B-358 fixture facilities were left active in Austin, adding a second facility and one with no hours. Both now end inactive. B-243 stays open: D-63 says build it against a real provider key or not at all.
