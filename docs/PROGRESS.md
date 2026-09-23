@@ -11507,7 +11507,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-370: mobile kit as the portal's phone-width layout (D-146, D-147)
 
-**Commit:** (SHA in follow-up)
+**Commit:** `1d6ad5a`
 
 **What it built.** `components/portal/portal-tab-bar.tsx`: the kit's `MobileTabBar` as a fixed bottom bar under `sm` (Home, Pay, Access, Help; 56px targets, accent on the current tab, `aria-current="page"`). Pay carries the amount ("Pay $X") when something is owed and points at the same href the header link does. It replaces B-239's lone sticky Pay bar and stays last in the DOM (SC 2.4.3). `<main>` keeps `pb-24` at phone width always, since the bar is always there. New keys `portal.tab*` in en and es.
 
