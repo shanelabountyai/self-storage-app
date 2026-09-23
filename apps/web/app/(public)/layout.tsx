@@ -3,7 +3,9 @@ import { SiteFooter } from '@/components/site/site-footer'
 import { LanguageOffer } from '@/components/site/language-offer'
 import { ConsentBanner } from '@/components/marketing/consent-banner'
 import { LocaleProvider } from '@/components/i18n/locale-provider'
+import { headers } from 'next/headers'
 import {
+  CHECKOUT_HEADER,
   dictionaryFor,
   translate,
 } from '@/lib/i18n'
@@ -27,6 +29,8 @@ export default async function PublicLayout({ children }: { children: React.React
   const [locale, spanishWanted] = await Promise.all([requestLinkLocale(), shouldOfferSpanish()])
   const offerSpanish = spanishWanted && locale !== 'es'
   const dict = dictionaryFor(locale)
+  // B-373. Mid-checkout the header offers no exits: PRD 01 §6.1, one primary CTA.
+  const minimalHeader = (await headers()).has(CHECKOUT_HEADER)
 
   return (
     <LocaleProvider locale={locale} dict={dict}>
@@ -41,7 +45,7 @@ export default async function PublicLayout({ children }: { children: React.React
       </a>
 
       {offerSpanish && <LanguageOffer />}
-      <SiteHeader locale={locale} />
+      <SiteHeader locale={locale} minimal={minimalHeader} />
       <main id="main" tabIndex={-1} className="flex-1">
         {children}
       </main>

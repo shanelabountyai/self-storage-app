@@ -51,6 +51,10 @@ export const RESET_TOKEN_HEADER = 'x-st-reset-token'
 /// `messageLinkLocale` (lib/i18n/link-locale.ts) is what tells them apart.
 export const MESSAGE_LINK_HEADER = 'x-st-message-link'
 
+/// B-373. Set by the proxy on `/checkout` and below, so the public layout can
+/// render the funnel's minimal header without a client component reading the path.
+export const CHECKOUT_HEADER = 'x-st-checkout'
+
 /// B-321. The paths `MESSAGE_LINK_HEADER` is set for. Shared by the proxy that
 /// sets it and the resolver that reads it, so the two cannot match different
 /// routes.

@@ -20,6 +20,21 @@ test('the first tab stop is the skip link', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused()
 })
 
+test('the header leaves the funnel only where it should (B-373)', async ({ page }) => {
+  await page.goto('/')
+  const findStorage = page.getByRole('banner').getByRole('link', { name: 'Find storage' })
+  await expect(findStorage).not.toHaveClass(/bg-primary/)
+
+  // Mid-checkout: no exits, but the phone and the language toggle stay.
+  await page.goto('/checkout')
+  const header = page.getByRole('banner')
+  await expect(header.locator('a[href="/storage/search"], a[href="/login"]')).toHaveCount(0)
+  await expect(header.locator('a[href^="tel:"]')).not.toHaveCount(0)
+  await expect(header.getByRole('group', { name: 'Language' })).toBeVisible()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused()
+})
+
 test('search submits to a shareable URL', async ({ page }) => {
   await page.goto('/')
   await page.getByLabel('Where do you need storage?').fill('78704')

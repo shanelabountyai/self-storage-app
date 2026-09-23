@@ -1,5 +1,7 @@
 # Next
 
+**B-373 is built** (2026-09-23). Next item: **B-374** (`83azzzt`). The header is minimal on `/checkout`; "Find storage" is outline everywhere else.
+
 **B-372 is built** (2026-09-23). Next item: **B-373** (`83azzzs`). The portal tab bar is now Overview / Pay / Gate code / Help, one shared `isPortalPathActive` matcher for both navs.
 
 **B-371 is built** (2026-09-23). Next item: **B-372** (`83azzzr`). The revealed gate code now fits 320px; the POS tenant has a login and a real PIN in the seed. If `.env.test`'s `ACCESS_CODE_ENCRYPTION_KEY` is not 64 hex chars, no code renders locally: copy CI's.

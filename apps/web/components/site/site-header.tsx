@@ -17,7 +17,7 @@ import { dictionaryFor, translate, type Locale } from '@/lib/i18n'
 // Tap targets are ≥44×44px (§6.2) — that is what the `min-h-11` / `py-2.5`
 // sizing is for, not visual padding. Nothing here depends on hover (§6.2), so
 // it works on touch and via keyboard alike.
-export async function SiteHeader({ locale }: { locale: Locale }) {
+export async function SiteHeader({ locale, minimal = false }: { locale: Locale; minimal?: boolean }) {
   const dict = dictionaryFor(locale)
   const t = (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
@@ -73,6 +73,8 @@ export async function SiteHeader({ locale }: { locale: Locale }) {
             {/* B-082 part 3. The content hub, one click from every page, and
                 never `sm:`-only: content that disappears on reflow is what
                 1.4.10 is about. */}
+            {!minimal && (
+              <>
             <Link
               href="/guides"
               className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium"
@@ -88,13 +90,15 @@ export async function SiteHeader({ locale }: { locale: Locale }) {
               <span className="sr-only">{t('chrome.payBillSr')}</span>
             </Link>
 
-            {/* The kit's one clay primary per view. */}
+            {/* B-373. Secondary: a page's own call to action is the one primary. */}
             <Link
               href="/storage/search"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+              className="hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
             >
               {t('chrome.findStorage')}
             </Link>
+              </>
+            )}
 
             {/* B-090 part 6. Last: a preference, not a destination, and in the
                 header on every public page because the visitor who needs it

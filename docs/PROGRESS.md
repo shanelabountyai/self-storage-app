@@ -11588,3 +11588,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Accessibility statement re-read: no claim names the tab labels; the stale "sticky pay bar" code comment is B-380's.
 
 **Verification.** Typecheck clean; `nav-match` unit test; `portal-tab-bar`, `portal`, `a11y-own-spec-routes` e2e 220 passed against a production build (last-focusable-clears-bar at 375px, axe EN/ES).
+
+## B-373 — The header's clay button no longer competes with checkout or a page's own CTA (2026-09-23)
+
+**Commit:** `PENDING`
+
+**What it built.** The proxy sets `x-st-checkout` on `/checkout` and below (deleted from inbound requests first, as with the other proxy headers); the public layout reads it and hands `SiteHeader` `minimal`. Minimal = wordmark, the `tel:` strip, the footprint line and the language toggle: no Guides, Pay bill or Find storage. Everywhere else "Find storage" is an outline button, so a facility page has one filled primary.
+
+**What it decided.** Only `/checkout` is minimal; the footer is untouched. The skip link is unchanged and still first.
+
+**What it left behind.** Nothing. Accessibility statement re-read: it makes no claim about the header's buttons.
+
+**Verification.** Typecheck and lint clean; smoke (new B-373 spec), a11y `/checkout` axe and forced-spacing, and checkout-unit-lost e2e passed against a production build.
