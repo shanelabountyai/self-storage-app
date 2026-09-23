@@ -11519,7 +11519,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-359 — The "updated invoice" email says what it replaced (2026-09-23)
 
-**Commit:** `(pending)`
+**Commit:** `8454820`
 
 **What it built.** `invoice.reissued` carries `replacesOutstandingCents` beside the existing `replacesNumber`; its context extender adds `invoice.previous_number`, `invoice.previous_amount` and (via `invoiceContext`) `invoice.number`. The `invoice_reissued` body, EN and ES, now reads "Invoice {previous_number} for {previous_amount} is cancelled. Invoice {number} replaces it." All three fields are in `requiredMergeFields` and the merge schema.
 
