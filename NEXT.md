@@ -2,7 +2,9 @@
 
 **Review block 10 is written** (2026-09-21): B-350–B-362 at `83azzv`–`83azzzh`, from the operator, UX and accessibility reviews over B-329–B-349. 22 refusals and the clean reads are recorded in the numbering note. No owner question was raised.
 
-**Next: review block 10 resumes at B-362** (B-361 built 2026-09-23, `e7d1258`) (`docs/prds/06-backlog.md`). The design-system import (B-363–B-370) is finished. Also: 3 `admin-reports.spec.ts` specs (duplicate content x2, structured data) fail on clean main, unowned.
+**Review block 10 is finished** (B-362 built 2026-09-23, `9986fde`). Nothing is queued: pick the next open item from `docs/prds/06-backlog.md`. Also: 3 `admin-reports.spec.ts` specs (duplicate content x2, structured data) fail on clean main, unowned.
+
+**B-362 is built** (2026-09-23, `9986fde`). axe now scans `/login`'s pay-link-expired state (EN, ES) and bare `/portal/pay`'s choose-a-unit state; the no-units state is a `STATE_EXCEPTIONS` row.
 
 **B-370 is built** (2026-09-23, `1d6ad5a`). A fixed bottom tab bar under `sm` (Home, Pay, Access, Help) replaces B-239's sticky Pay bar; the header nav is unchanged. Its `aria-label` must not contain "Your account" (substring locator collision). 450 e2e passed, 4 skipped.
 

@@ -11555,7 +11555,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-362 — Two customer states are scanned or declared (2026-09-23)
 
-**Commit:** `PENDING`
+**Commit:** `9986fde`
 
 **What it built.** axe now runs on `/login?reason=pay_link_expired` in both languages (`e2e/pay-link.spec.ts`) and on the bare `/portal/pay` choose-a-unit state (`e2e/portal.spec.ts`), each with a `SCANNED_STATES` entry and an `a11y-state` tag. A tenant with no leases on bare `/portal/pay` is a `STATE_EXCEPTIONS` row, EN and ES, because no demo tenant reaches it.
 
