@@ -11687,7 +11687,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-380 — B-369's entry, B-370's statement log entry, and a stale comment (2026-09-23)
 
-**Commit:** see the SHA follow-up below.
+**Commit:** `a4448b2`
 
 **What it built.** Records only. A dated, backfilled B-369 entry above; B-370's missing entry in the statement's comment log; the `(2)` note in the statement file now names the tab bar (not B-239's sticky pay bar) and the B-372 check that covers `pb-24`. B-370's entry and B-369's each note that visual review was spec-only, with no screenshots at real widths.
 
