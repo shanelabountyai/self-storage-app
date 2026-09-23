@@ -11528,3 +11528,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Templates are seeded state: run `db:migrate:test` when switching branches (B-206). Accessibility statement re-read: no claim about email, unchanged.
 
 **Verification.** Typecheck clean. `merge-fields`, `comms-catalog-locale` and `void-rebill-db` pass; the last now asserts both invoice numbers appear in the sent body.
+
+## B-360 — The account-access email offers two labelled routes (2026-09-23)
+
+**Commit:** `1e81f7c`
+
+**What it built.** `authAccountAccess` now carries only why the mail came. Two labelled routes follow, EN and ES: "Already have a password? Sign in here: {origin}/login", then "New here? Choose a password with this link:" and the set-up URL. `/login` is an `<a>` in the HTML, as `/forgot-password` is. Nothing repeats the set-up instruction.
+
+**What it decided.** Future sends only, as B-342. `/login` is derived from the token URL's origin, as `/forgot-password` is.
+
+**What it left behind.** Nothing. Accessibility statement re-read: no claim about email, unchanged.
+
+**Verification.** Typecheck and lint clean. `auth-email-account-access` (now asserts the sign-in line and the `/login` anchor), `auth-email-conditionals` and `billing-account-members-db` pass.
