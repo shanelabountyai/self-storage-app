@@ -83,14 +83,14 @@ export default async function WalkthroughPage({
             {walkthroughTasks.map((task) => (
               <li
                 key={task.id}
-                className={task.overdue ? 'rounded-lg border-2 border-red-500 p-4' : 'border-input rounded-lg border p-4'}
+                className={task.overdue ? 'rounded-lg border-2 border-danger-border p-4' : 'border-input rounded-lg border p-4'}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <p className="font-medium">Walkthrough for {formatDate(task.businessDate)}</p>
                   {/* 1.4.1: a skipped day stays visible as text, not just a
                       re-dated row that quietly vanished. */}
                   {task.overdue && (
-                    <span className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-900">
+                    <span className="rounded-md border border-danger-border bg-danger-bg px-2 py-1 text-xs font-medium text-danger-fg">
                       Skipped — still open
                     </span>
                   )}
@@ -121,11 +121,11 @@ export default async function WalkthroughPage({
                 {group.tasks.map((task) => (
                   <li
                     key={task.id}
-                    className={task.overdue ? 'rounded-lg border-2 border-red-500 p-3 text-sm' : 'border-input rounded-lg border p-3 text-sm'}
+                    className={task.overdue ? 'rounded-lg border-2 border-danger-border p-3 text-sm' : 'border-input rounded-lg border p-3 text-sm'}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>{task.label}</span>
-                      {task.overdue && <span className="text-xs font-medium text-red-900">Overdue</span>}
+                      {task.overdue && <span className="text-xs font-medium text-danger-fg">Overdue</span>}
                     </div>
                   </li>
                 ))}

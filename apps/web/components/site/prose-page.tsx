@@ -24,7 +24,7 @@ export function ProsePage({
       {draftNotice && (
         <div
           role="note"
-          className="mt-6 rounded-md border border-yellow-500/50 bg-yellow-50 p-4 text-sm dark:bg-yellow-950/40"
+          className="mt-6 rounded-md border border-warning-border bg-warning-bg p-4 text-sm"
         >
           <p className="font-medium">This is an unreviewed draft, not legal advice.</p>
           <p className="mt-1">

@@ -92,7 +92,7 @@ export default async function AccessPage() {
             // Said before the form rather than after the submit. Anyone added
             // now starts suspended, and letting somebody hand out a code that
             // does not work is worse than telling them why.
-            <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+            <p className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg">
               {t('acc.unitSuspended')}
             </p>
           )}
@@ -143,7 +143,7 @@ export default async function AccessPage() {
                       </p>
                     )}
                     {person.suspended && !unit.tenantSuspended && (
-                      <p className="mt-1 text-amber-700">{t('acc.codeSwitchedOff')}</p>
+                      <p className="mt-1 text-warning-fg">{t('acc.codeSwitchedOff')}</p>
                     )}
                     {!person.addedByTenant && (
                       <p className="text-muted-foreground mt-1 text-xs">{t('acc.addedAtOffice')}</p>
@@ -292,7 +292,7 @@ function PhoneUnlockSection({
       </p>
 
       {impersonated && (
-        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-pretty text-amber-900">
+        <p className="rounded-md border border-warning-border bg-warning-bg p-3 text-sm text-pretty text-warning-fg">
           {t('acc.impersonatedNoUnlock')}
         </p>
       )}
@@ -306,7 +306,7 @@ function PhoneUnlockSection({
           ) : key.credentialId ? (
             <>
               {key.suspended && (
-                <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+                <p className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg">
                   {t('acc.suspendedHere')}
                 </p>
               )}

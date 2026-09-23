@@ -59,7 +59,7 @@ export default async function KeypadQueuePage() {
       {overdue.length > 0 && (
         // US-6 AC2's escalation. A heading that says the number, not a colour —
         // WCAG 1.4.1, and also the thing a manager reads from across the room.
-        <p role="alert" className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
+        <p role="alert" className="rounded-lg border-2 border-danger-border bg-danger-bg p-4 text-danger-fg">
           <span className="font-semibold">
             {overdue.length} overdue — more than {slaHours} business{' '}
             {slaHours === 1 ? 'hour' : 'hours'} old
@@ -80,7 +80,7 @@ export default async function KeypadQueuePage() {
             key={item.taskId}
             className={
               item.overdue
-                ? 'rounded-lg border-2 border-red-500 p-4'
+                ? 'rounded-lg border-2 border-danger-border p-4'
                 : 'border-input rounded-lg border p-4'
             }
           >

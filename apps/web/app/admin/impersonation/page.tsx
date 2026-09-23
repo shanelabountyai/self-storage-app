@@ -172,7 +172,7 @@ export default async function ImpersonationOversightPage({
             {flags.map((flag) => (
               <li
                 key={`${flag.impersonatorStaffId}-${flag.day}`}
-                className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-pretty text-amber-900"
+                className="rounded-md border border-warning-border bg-warning-bg p-3 text-sm text-pretty text-warning-fg"
               >
                 <strong>{flag.impersonatorName}</strong> opened {flag.distinctSubjects} different
                 accounts on {flag.day}. That is above the {FREQUENCY_FLAG_DISTINCT_SUBJECTS} a day

@@ -73,7 +73,7 @@ export default async function LeaseNoticesPage({
         </Link>
       </div>
 
-      <p role="note" className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-950 text-pretty">
+      <p role="note" className="rounded-lg border-2 border-warning-border bg-warning-bg p-4 text-sm text-warning-fg text-pretty">
         <strong className="block">Draft only — not legal advice.</strong>
         {NOTICE_DISCLAIMER}
       </p>
@@ -93,7 +93,7 @@ export default async function LeaseNoticesPage({
                 // The refusal, with its reason. US-27's reconciliation gate is
                 // the important one: it means nobody knows what this tenant
                 // owes, and no document may state a number.
-                <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-950 text-pretty">
+                <p role="alert" className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-danger-fg text-pretty">
                   <strong className="block">Cannot generate this notice.</strong>
                   {preview.problem.message}
                 </p>
@@ -111,7 +111,7 @@ export default async function LeaseNoticesPage({
                         // everywhere it renders. Serving a lien notice to an
                         // address post already came back from is the exact
                         // failure that AC exists to prevent.
-                        <strong className="ml-2 rounded border border-red-300 bg-red-50 px-1 text-xs text-red-900">
+                        <strong className="ml-2 rounded border border-danger-border bg-danger-bg px-1 text-xs text-danger-fg">
                           Mail has come back from this address
                         </strong>
                       )}
@@ -194,11 +194,11 @@ export default async function LeaseNoticesPage({
                   {notice.supersededAt ? (
                     <span className="rounded-md border px-2 py-1 text-xs font-medium">Superseded</span>
                   ) : notice.deliveredAt ? (
-                    <span className="rounded-md border border-green-300 bg-green-50 px-2 py-1 text-xs font-medium text-green-900">
+                    <span className="rounded-md border border-success-border bg-success-bg px-2 py-1 text-xs font-medium text-success-fg">
                       Served
                     </span>
                   ) : (
-                    <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900">
+                    <span className="rounded-md border border-warning-border bg-warning-bg px-2 py-1 text-xs font-medium text-warning-fg">
                       Not yet served
                     </span>
                   )}

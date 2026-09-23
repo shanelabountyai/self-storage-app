@@ -86,7 +86,7 @@ export default async function FormerTenantsPage({
                   </td>
                   <td className="py-2">{row.unitNumber}</td>
                   <td className="py-2">{formatDate(row.moveOutDate)}</td>
-                  <td className="py-2 text-right font-medium tabular-nums text-red-800">
+                  <td className="py-2 text-right font-medium tabular-nums text-danger-fg">
                     {formatCents(row.balanceCents)}
                   </td>
                   {/* B-231. The other half of "a read, not a queue": it was a

@@ -87,7 +87,7 @@ export default async function CounterCardDonePage({
       {receipt.status === 'failed' && (
         <p
           role="alert"
-          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
+          className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg"
         >
           {receipt.failureReason ?? 'The card was declined.'} Nothing has been charged. Try another
           card, or take cash or a check.{' '}

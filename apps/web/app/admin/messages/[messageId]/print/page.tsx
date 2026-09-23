@@ -99,7 +99,7 @@ export default async function MessagePrintPage({
           {!letter.to.ok && (
             <p
               role="note"
-              className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 text-pretty print:hidden"
+              className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-danger-fg text-pretty print:hidden"
             >
               This tenant&apos;s address of record is missing its {letter.to.missing.join(', ')}, so
               the envelope block below is incomplete and there is nothing here to print yet. Add the

@@ -84,7 +84,7 @@ export default async function GateHealthPage() {
           <section
             key={row.facilityId}
             aria-labelledby={`facility-${row.facilityId}`}
-            className={`flex flex-col gap-3 rounded-lg border p-4 ${urgent ? 'border-red-300' : 'border-input'}`}
+            className={`flex flex-col gap-3 rounded-lg border p-4 ${urgent ? 'border-danger-border' : 'border-input'}`}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 id={`facility-${row.facilityId}`} className="text-base font-medium">
@@ -96,7 +96,7 @@ export default async function GateHealthPage() {
             </div>
 
             {concerns.length === 0 ? (
-              <p className="text-sm text-green-700">
+              <p className="text-sm text-success-fg">
                 Nothing outstanding. Last reconciled {row.reconciliation ? formatDate(row.reconciliation.businessDate) : 'never'}.
               </p>
             ) : (
@@ -104,7 +104,7 @@ export default async function GateHealthPage() {
                 {concerns.map((concern) => (
                   <li
                     key={concern.message}
-                    className={concern.level === 'urgent' ? 'font-medium text-red-700' : 'text-amber-700'}
+                    className={concern.level === 'urgent' ? 'font-medium text-danger-fg' : 'text-warning-fg'}
                   >
                     {concern.message}
                   </li>
@@ -119,7 +119,7 @@ export default async function GateHealthPage() {
               </div>
               <div>
                 <dt className="text-muted-foreground text-xs">Gave up</dt>
-                <dd className={row.commands.deadLettered > 0 ? 'font-medium text-red-700' : ''}>
+                <dd className={row.commands.deadLettered > 0 ? 'font-medium text-danger-fg' : ''}>
                   {row.commands.deadLettered}
                 </dd>
               </div>

@@ -39,7 +39,7 @@ function Delta({ value, format }: { value: number | null; format: (v: number) =>
   if (value === 0) return <span className="text-muted-foreground text-xs">unchanged</span>
   const up = value > 0
   return (
-    <span className={`text-xs ${up ? 'text-green-800' : 'text-red-800'}`}>
+    <span className={`text-xs ${up ? 'text-success-fg' : 'text-danger-fg'}`}>
       {up ? 'up' : 'down'} {format(Math.abs(value))} on the month before
     </span>
   )
@@ -153,7 +153,7 @@ export default async function OwnerKpiPage() {
             {latest!.facilityIds.length < facilityCount && (
               // The failure this prevents: one site not closing its books looks
               // exactly like the portfolio falling off a cliff.
-              <p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-pretty text-amber-900">
+              <p role="status" className="rounded-md border border-warning-border bg-warning-bg p-3 text-sm text-pretty text-warning-fg">
                 Only {latest!.facilityIds.length} of {facilityCount} facilities have closed{' '}
                 {monthLabel(latest!)}. These totals cover those sites alone, so they are not
                 comparable with a month where every site filed.

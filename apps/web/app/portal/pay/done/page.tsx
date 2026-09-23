@@ -94,7 +94,7 @@ export default async function PaymentDonePage({
            decline happened before this document existed, so nothing here just
            changed (B-245). The Stripe decline mirror in `portal-payment.tsx`
            keeps its alert — that one fills after a press and takes focus. */
-        <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+        <p className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg">
           {/* B-260: Stripe's own decline reason is passed through as it
               arrives — it is the processor's message about this card, not our
               copy, and the Element that produced it is already localised. */}

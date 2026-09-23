@@ -161,7 +161,7 @@ function LeaseCard({
       )}
 
       {owesMoney && lease.accessSuspended && (
-        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+        <div className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg">
           {/* B-232 / D-16. The number that actually reopens the gate.
               This said "Pay your full balance of $487.50" — hardcoding D-16's
               DEFAULT threshold of zero as though it were the rule, on one
@@ -407,7 +407,7 @@ function LeaseCard({
             </Link>
           </dd>
           {lease.autopayNeedsCard && (
-            <p className="mt-1 text-sm text-pretty text-red-800">
+            <p className="mt-1 text-sm text-pretty text-danger-fg">
               {t('dash.autopayNeedsCard')}
             </p>
           )}

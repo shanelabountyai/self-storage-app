@@ -119,7 +119,7 @@ export function PromoCodeEntry({ action, carry, outcome, value, dict, children }
       <p
         id="promo-outcome"
         role="status"
-        className={`mt-2 text-sm empty:mt-0 ${failed ? 'text-red-700' : 'font-medium'}`}
+        className={`mt-2 text-sm empty:mt-0 ${failed ? 'text-danger-fg' : 'font-medium'}`}
       >
         {parts ? <MessageSegments segments={parts} /> : ''}
       </p>

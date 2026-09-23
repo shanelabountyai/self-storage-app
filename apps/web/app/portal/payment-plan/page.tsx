@@ -165,7 +165,7 @@ export default async function PortalPaymentPlanPage() {
                           false. */}
                       <td className="py-1 capitalize">
                         {installment.status === 'missed' ? (
-                          <span className="font-medium text-red-800">{t('plan.missed')}</span>
+                          <span className="font-medium text-danger-fg">{t('plan.missed')}</span>
                         ) : installment.status === 'late' ? (
                           <span className="font-medium normal-case">
                             {t('plan.lateBy', {

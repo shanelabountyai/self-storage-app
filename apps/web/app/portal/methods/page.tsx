@@ -189,7 +189,7 @@ export default async function PaymentMethodsPage() {
                      on file is true when the page is drawn and unchanged while
                      it is read — page content, not a status message (B-245). It
                      keeps its words, its styling and this position. */
-                  <p className="mt-2 text-sm text-pretty text-red-800">
+                  <p className="mt-2 text-sm text-pretty text-danger-fg">
                     {t('meth.noCardWarning')}
                   </p>
                 )}

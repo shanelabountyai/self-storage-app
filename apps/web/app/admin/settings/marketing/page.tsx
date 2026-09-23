@@ -118,7 +118,7 @@ export default async function MarketingProfilePage() {
               className={
                 check.ok
                   ? 'border-input rounded-lg border p-3 text-sm'
-                  : 'rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950'
+                  : 'rounded-lg border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg'
               }
             >
               {/* Never colour alone (WCAG 1.4.1): the word says which it is. */}
@@ -158,7 +158,7 @@ export default async function MarketingProfilePage() {
             rather than live as you type — a warning that flickers while
             somebody edits is one they stop reading. */}
         {profile.duplicates.length > 0 && (
-          <p role="alert" className="rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
+          <p role="alert" className="rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg">
             <span className="font-semibold">This description is nearly identical to another.</span>
             <span className="mt-1 block text-pretty">
               {profile.duplicates
@@ -312,7 +312,7 @@ export default async function MarketingProfilePage() {
         </p>
 
         {profile.gbp.stale && (
-          <p role="alert" className="rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
+          <p role="alert" className="rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg">
             {profile.gbp.verifiedAt
               ? `Last checked ${formatDate(profile.gbp.verifiedAt)} — more than 90 days ago.`
               : 'Never checked.'}

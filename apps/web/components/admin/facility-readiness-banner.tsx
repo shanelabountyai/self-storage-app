@@ -18,7 +18,7 @@ export async function FacilityReadinessBanner({ facilityId }: { facilityId: stri
   return (
     <section
       aria-labelledby="readiness-heading"
-      className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950"
+      className="flex flex-col gap-2 rounded-lg border border-warning-border bg-warning-bg p-4 text-warning-fg"
     >
       <h2 id="readiness-heading" className="text-base font-medium">
         This facility is not ready to operate

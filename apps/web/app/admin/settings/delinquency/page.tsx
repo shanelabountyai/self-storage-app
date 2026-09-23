@@ -108,7 +108,7 @@ export default async function DelinquencyTimelinePage({
           footer — this is the single most consequential screen in the product
           and the one where a wrong number ends in somebody's property being
           sold. Never colour alone (WCAG 1.4.1): the heading says it. */}
-      <div role="note" className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-amber-950">
+      <div role="note" className="rounded-lg border-2 border-warning-border bg-warning-bg p-4 text-warning-fg">
         <p className="font-semibold">This is not legal advice</p>
         <p className="mt-1 text-sm text-pretty">{TIMELINE_DISCLAIMER}</p>
         <p className="mt-2 text-sm">

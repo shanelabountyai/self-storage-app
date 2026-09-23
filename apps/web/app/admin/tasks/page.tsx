@@ -228,7 +228,7 @@ export default async function TasksPage({
                 {/* 1.4.1: never colour alone — "Overdue" is text, not just a
                     red border. */}
                 {task.overdue && (
-                  <span className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-900">
+                  <span className="rounded-md border border-danger-border bg-danger-bg px-2 py-1 text-xs font-medium text-danger-fg">
                     Overdue
                   </span>
                 )}

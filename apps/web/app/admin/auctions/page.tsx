@@ -107,7 +107,7 @@ export default async function AuctionsPage({
                 key={surplus.caseId}
                 className={
                   surplus.overdue
-                    ? 'rounded-lg border-2 border-red-500 p-3 text-sm'
+                    ? 'rounded-lg border-2 border-danger-border p-3 text-sm'
                     : 'border-input rounded-lg border p-3 text-sm'
                 }
               >
@@ -117,7 +117,7 @@ export default async function AuctionsPage({
                   </Link>
                   {/* 1.4.1: the state is text, not a colour. */}
                   {surplus.overdue ? (
-                    <span className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-900">
+                    <span className="rounded-md border border-danger-border bg-danger-bg px-2 py-1 text-xs font-medium text-danger-fg">
                       Holding period expired
                     </span>
                   ) : (
@@ -332,15 +332,15 @@ export default async function AuctionsPage({
                     </p>
                   </div>
                   {one.containsVehicle ? (
-                    <span className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-900">
+                    <span className="rounded-md border border-danger-border bg-danger-bg px-2 py-1 text-xs font-medium text-danger-fg">
                       Blocked — vehicle
                     </span>
                   ) : one.readiness.ready ? (
-                    <span className="rounded-md border border-green-300 bg-green-50 px-2 py-1 text-xs font-medium text-green-900">
+                    <span className="rounded-md border border-success-border bg-success-bg px-2 py-1 text-xs font-medium text-success-fg">
                       Ready to schedule
                     </span>
                   ) : (
-                    <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900">
+                    <span className="rounded-md border border-warning-border bg-warning-bg px-2 py-1 text-xs font-medium text-warning-fg">
                       {one.readiness.blockers.length} blocker
                       {one.readiness.blockers.length === 1 ? '' : 's'}
                     </span>

@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -211,5 +212,31 @@ describe('the inverse surface', () => {
       readFileSync(fileURLToPath(new URL('../apps/web/components/ui/button.tsx', import.meta.url)), 'utf8'),
     )![1]
     expect(variant).not.toMatch(/(^|\s)(hover:|aria-expanded:)?text-(foreground|muted-foreground)\b/)
+  })
+})
+
+// B-381 / SC 1.4.3, 1.4.11. Status colours are tokens now; a hard-coded Tailwind
+// palette class is a colour nobody measured.
+describe('status colours', () => {
+  const families = ['success', 'warning', 'danger', 'info']
+
+  it.each([':root', '.dark'] as const)('every pair clears its floor in %s', (block) => {
+    const t = (name: string) => token(block, name)
+    for (const f of families) {
+      for (const ground of ['background', 'card', `${f}-bg`]) {
+        expect(contrast(t(`${f}-fg`), t(ground)), `${f}-fg on ${ground}`).toBeGreaterThanOrEqual(4.5)
+      }
+      for (const ground of ['background', 'card']) {
+        expect(contrast(t(`${f}-border`), t(ground)), `${f}-border on ${ground}`).toBeGreaterThanOrEqual(3)
+      }
+    }
+  })
+
+  it('no hard-coded status palette class remains in app or components', () => {
+    const hits = execSync(
+      `grep -rEo "(bg|text|border|ring)-(red|amber|green|emerald|yellow)-[0-9]+" apps/web/app apps/web/components || true`,
+      { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' },
+    )
+    expect(hits.trim()).toBe('')
   })
 })

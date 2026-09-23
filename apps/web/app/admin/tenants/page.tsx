@@ -255,7 +255,7 @@ export default async function TenantsPage({
                           tint, and this is the column somebody acts on. */}
                       <td className="px-3 py-2 text-right tabular-nums">
                         {late ? (
-                          <span className="font-medium text-amber-800">
+                          <span className="font-medium text-warning-fg">
                             {row.daysPastDue} days past due
                           </span>
                         ) : (

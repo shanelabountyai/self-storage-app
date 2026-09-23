@@ -115,7 +115,7 @@ export default async function WaitlistPage({
                   // to be spotted by comparing two columns.
                   const actionable = row.waiting > 0 && row.availableNow > 0
                   return (
-                  <tr key={row.unitTypeId} className={`border-input border-b ${actionable ? 'bg-amber-50 dark:bg-amber-950' : ''}`}>
+                  <tr key={row.unitTypeId} className={`border-input border-b ${actionable ? 'bg-warning-bg' : ''}`}>
                     <th scope="row" className="py-2 pr-4 text-left font-normal">
                       <span aria-hidden="true">
                         {row.widthFt}×{row.lengthFt}
@@ -130,7 +130,7 @@ export default async function WaitlistPage({
                     <td className="py-2 pr-4 tabular-nums">
                       {row.availableNow}
                       {actionable && (
-                        <span className="ml-2 text-xs font-medium text-amber-800 dark:text-amber-200">
+                        <span className="ml-2 text-xs font-medium text-warning-fg">
                           waiting + free — call somebody
                         </span>
                       )}

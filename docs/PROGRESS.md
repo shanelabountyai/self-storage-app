@@ -11696,3 +11696,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing.
 
 **Verification.** `grep -n "B-369" docs/PROGRESS.md` finds a heading with `9fcaea7`; the comment log names B-370; no statement comment calls a "sticky pay bar" current (the remaining mention describes B-239 as replaced). Typecheck and lint run before commit.
+
+## B-381 — Status colours are tokens (2026-09-23)
+
+**Commit:** `SHA_PENDING`
+
+**What it built.** `success`, `warning`, `danger` and `info` token triples (`-bg` tint, `-fg` text, `-border`) in `globals.css`, light and `.dark`, registered in `@theme inline`. All 228 hard-coded `bg|text|border-(red|amber|green|yellow)-N` uses across 53 files moved to them (yellow folded into warning), and the redundant `dark:` variants were deleted since the tokens switch by theme. `tests/contrast-tokens.test.ts` asserts every `-fg` at 4.5:1 on background, card and its own tint, every `-border` at 3:1 on background and card (both themes), and greps `app` and `components` for any palette class returning. The allow-list is empty.
+
+**What it decided.** Meaningful borders are a single solid 3:1 token, so `border-red-300` (about 1.5:1 on its tint) and the `/50` alpha border on the prose-page note became full-strength. Badge rings use the border token at `/30` (decorative; the word label carries the state). `info` has no consumer yet and exists because the row named it.
+
+**What it left behind.** Nothing owned. Visual review was by contrast arithmetic and axe, not screenshots. **Found, not caused (confirmed on a stashed baseline):** `smoke.spec.ts` "checkout goes back, from the control and from the progress indicator" fails on mobile-chrome: B-378's collapsed stepper leaves a `<p aria-hidden>` ("Protection - step 3 of 6") intercepting the click on the "Your details" progress button.
+
+**Verification.** contrast-tokens 19 passed; typecheck and lint clean; a11y and smoke against a production build 428 passed, 4 skipped, that one test excluded. Accessibility statement re-read: it makes no colour-specific claim that changed.

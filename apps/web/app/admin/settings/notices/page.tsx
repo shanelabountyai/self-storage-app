@@ -54,7 +54,7 @@ export default async function NoticeTemplatesPage() {
 
       {/* US-29's guardrail. Persistent, not dismissible — the person approving a
           sale eight months from now is not the person reading this today. */}
-      <p role="note" className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-950 text-pretty">
+      <p role="note" className="rounded-lg border-2 border-warning-border bg-warning-bg p-4 text-sm text-warning-fg text-pretty">
         <strong className="block">Draft only — not legal advice.</strong>
         {NOTICE_DISCLAIMER}
       </p>

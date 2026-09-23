@@ -90,7 +90,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
         ref={errorRef}
         tabIndex={-1}
         role="alert"
-        className="text-sm font-medium text-red-700"
+        className="text-sm font-medium text-danger-fg"
       >
         {error ?? ''}
       </p>

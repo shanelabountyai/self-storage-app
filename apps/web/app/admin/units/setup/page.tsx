@@ -124,7 +124,7 @@ export default async function AdminUnitsSetupPage({
         {layoutPlan && (
           <div className="flex flex-col gap-3 rounded-md border p-3">
             {layoutPlan.issues.length > 0 ? (
-              <ul className="text-sm text-red-700 dark:text-red-400">
+              <ul className="text-sm text-danger-fg">
                 {layoutPlan.issues.map((issue, i) => (
                   <li key={i}>
                     {issue.index >= 0 ? `Row ${issue.index + 1}: ` : ''}{issue.field} — {issue.message}
@@ -139,7 +139,7 @@ export default async function AdminUnitsSetupPage({
                 </p>
                 <ul className="text-xs">
                   {layoutPlan.rows.map((row) => (
-                    <li key={row.number} className={row.action === 'error' ? 'text-red-700 dark:text-red-400' : ''}>
+                    <li key={row.number} className={row.action === 'error' ? 'text-danger-fg' : ''}>
                       {row.number}: {row.detail}
                     </li>
                   ))}

@@ -75,7 +75,7 @@ export default async function LedgerPage({
         className={
           ledger.reconciliation.reconciles
             ? 'border-input rounded-lg border p-4'
-            : 'rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-amber-950'
+            : 'rounded-lg border-2 border-warning-border bg-warning-bg p-4 text-warning-fg'
         }
       >
         <h2 id="reconcile-heading" className="text-sm font-medium">

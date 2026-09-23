@@ -86,7 +86,7 @@ export default async function ProtectionPage() {
             //
             // B-295: document position is what does that work, not a live
             // region. A lapsed waiver is true when the page is drawn (B-245).
-            <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900">
+            <p className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg">
               {t('prot.expired', { date: formatDay(unit.waiver.expiresAt!, locale) })}
             </p>
           )}

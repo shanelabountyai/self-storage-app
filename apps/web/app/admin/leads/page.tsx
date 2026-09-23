@@ -123,7 +123,7 @@ export default async function LeadsPage({
               key={lead.id}
               className={
                 lead.overdue
-                  ? 'rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950'
+                  ? 'rounded-lg border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg'
                   : 'border-input rounded-lg border p-3 text-sm'
               }
             >

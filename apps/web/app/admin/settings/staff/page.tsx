@@ -85,12 +85,12 @@ export default async function StaffSecurityPage() {
                   {row.enrolled && row.enrolledAt ? (
                     <>On since {formatDate(row.enrolledAt)}</>
                   ) : (
-                    <span className="font-medium text-amber-700">Not set up</span>
+                    <span className="font-medium text-warning-fg">Not set up</span>
                   )}
                 </td>
                 <td className="py-2 pr-4">
                   {row.enrolled ? (
-                    <span className={row.unusedRecoveryCodes <= 2 ? 'font-medium text-red-700' : ''}>
+                    <span className={row.unusedRecoveryCodes <= 2 ? 'font-medium text-danger-fg' : ''}>
                       {row.unusedRecoveryCodes} left
                     </span>
                   ) : (

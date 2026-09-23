@@ -532,7 +532,7 @@ export default async function AdminUnitsPage({
                     <td className="py-1">{row.outcome === 'apply' ? 'Will change' : 'Skipped'}</td>
                     <td className="py-1">
                       {row.outcome === 'apply' ? `${row.from} → ${row.to}` : row.skipReason}
-                      {row.warning && <span className="block text-yellow-700 dark:text-yellow-400">{row.warning}</span>}
+                      {row.warning && <span className="block text-warning-fg">{row.warning}</span>}
                     </td>
                   </tr>
                 ))}

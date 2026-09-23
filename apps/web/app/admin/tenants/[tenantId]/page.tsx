@@ -297,7 +297,7 @@ export default async function TenantProfilePage({
           {entry.message.problem && (
             <p
               role="note"
-              className="mt-2 rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-900"
+              className="mt-2 rounded-md border border-danger-border bg-danger-bg p-2 text-xs text-danger-fg"
             >
               {entry.message.problem}
             </p>
@@ -396,7 +396,7 @@ export default async function TenantProfilePage({
             <dd
               className={
                 profile.totalBalanceCents > 0
-                  ? "font-semibold text-red-900"
+                  ? "font-semibold text-danger-fg"
                   : "font-medium"
               }
             >
@@ -405,7 +405,7 @@ export default async function TenantProfilePage({
           </div>
           <div className="flex items-baseline gap-1.5">
             <dt className="text-muted-foreground">Days past due</dt>
-            <dd className={maxDaysPastDue > 0 ? "font-semibold text-red-900" : "font-medium"}>
+            <dd className={maxDaysPastDue > 0 ? "font-semibold text-danger-fg" : "font-medium"}>
               {maxDaysPastDue === 0 ? "None" : maxDaysPastDue}
             </dd>
           </div>
@@ -415,7 +415,7 @@ export default async function TenantProfilePage({
           </div>
           <div className="flex items-baseline gap-1.5">
             <dt className="text-muted-foreground">Hold</dt>
-            <dd className={profile.holds.length > 0 ? "font-semibold text-amber-900" : "font-medium"}>
+            <dd className={profile.holds.length > 0 ? "font-semibold text-warning-fg" : "font-medium"}>
               {profile.holds.length === 0
                 ? "None"
                 : profile.holds.length === 1
@@ -464,7 +464,7 @@ export default async function TenantProfilePage({
               key={row.facilityName}
               className={
                 row.suspended
-                  ? "rounded-lg border-2 border-red-600 bg-red-50 p-3 text-sm font-medium text-red-950"
+                  ? "rounded-lg border-2 border-danger-border bg-danger-bg p-3 text-sm font-medium text-danger-fg"
                   : "text-muted-foreground text-sm"
               }
             >
@@ -490,7 +490,7 @@ export default async function TenantProfilePage({
         // reached", which is the whole message even in greyscale.
         <div
           role="note"
-          className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950"
+          className="rounded-lg border-2 border-danger-border bg-danger-bg p-4 text-danger-fg"
         >
           <p className="font-semibold">Email cannot be reached</p>
           <p className="mt-1 text-sm text-pretty">
@@ -515,7 +515,7 @@ export default async function TenantProfilePage({
             <div
               key={hold.id}
               role="note"
-              className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-amber-950"
+              className="rounded-lg border-2 border-warning-border bg-warning-bg p-4 text-warning-fg"
             >
               <p className="font-semibold">
                 On hold — {hold.label} · Unit {hold.unitNumber}
@@ -648,7 +648,7 @@ export default async function TenantProfilePage({
                       {formatCents(lease.monthlyRateCents)}/mo
                     </td>
                     <td
-                      className={`py-2 text-right tabular-nums ${lease.balanceCents > 0 ? "font-medium text-red-800" : ""}`}
+                      className={`py-2 text-right tabular-nums ${lease.balanceCents > 0 ? "font-medium text-danger-fg" : ""}`}
                     >
                       {formatCents(lease.balanceCents)}
                     </td>
@@ -689,7 +689,7 @@ export default async function TenantProfilePage({
                   </dd>
                   <dt className="text-muted-foreground">Total balance</dt>
                   <dd
-                    className={`tabular-nums ${lease.balanceCents > 0 ? "font-medium text-red-800" : ""}`}
+                    className={`tabular-nums ${lease.balanceCents > 0 ? "font-medium text-danger-fg" : ""}`}
                   >
                     {formatCents(lease.balanceCents)}
                   </dd>
@@ -704,7 +704,7 @@ export default async function TenantProfilePage({
                   {lease.creditCents > 0 && (
                     <>
                       <dt className="text-muted-foreground">Credit on account</dt>
-                      <dd className="font-medium tabular-nums text-green-800">
+                      <dd className="font-medium tabular-nums text-success-fg">
                         {formatCents(lease.creditCents)}
                       </dd>
                     </>
@@ -841,7 +841,7 @@ export default async function TenantProfilePage({
                         does not run. */}
                     <td className="py-1 capitalize">
                       {installment.status === "missed" ? (
-                        <span className="font-medium text-red-800">Missed</span>
+                        <span className="font-medium text-danger-fg">Missed</span>
                       ) : installment.status === "late" ? (
                         <span className="font-medium normal-case">
                           Late — pay by {calendarDate(installment.graceEndsOn)}
@@ -1092,7 +1092,7 @@ export default async function TenantProfilePage({
         {profile.address?.returnedMailAt && (
           <p
             role="alert"
-            className="border-input rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+            className="border-input rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-danger-fg"
           >
             Mail sent to this address was returned on{" "}
             {formatDate(profile.address.returnedMailAt)}. Confirm a current

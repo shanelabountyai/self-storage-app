@@ -73,7 +73,7 @@ export default async function OverlocksPage({
           (`delinquency.stuck-overlocks`) queues the removals; this says how
           many are waiting for somebody to walk out. */}
       {stuckCount > 0 && (
-        <p role="alert" className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
+        <p role="alert" className="rounded-lg border-2 border-danger-border bg-danger-bg p-4 text-danger-fg">
           <span className="font-semibold">
             {stuckCount} {stuckCount === 1 ? 'unit is' : 'units are'} locked with no tenant
           </span>
@@ -89,7 +89,7 @@ export default async function OverlocksPage({
       )}
 
       {mismatchCount > 0 && (
-        <p role="alert" className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
+        <p role="alert" className="rounded-lg border-2 border-danger-border bg-danger-bg p-4 text-danger-fg">
           <span className="font-semibold">{mismatchCount} mismatched over 24 hours</span>
           <span className="mt-1 block text-sm text-pretty">
             System and physical state disagree, and have for over a day.
@@ -119,7 +119,7 @@ export default async function OverlocksPage({
                   <td className="py-2">
                     {/* 1.4.1: text, not a colour swatch. */}
                     {row.mismatch ? (
-                      <span className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-900">
+                      <span className="rounded-md border border-danger-border bg-danger-bg px-2 py-1 text-xs font-medium text-danger-fg">
                         Mismatch
                       </span>
                     ) : (

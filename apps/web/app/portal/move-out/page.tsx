@@ -299,7 +299,7 @@ export default async function PortalMoveOutPage({
         <p
           id="preview-problem"
           tabIndex={-1}
-          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
+          className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg"
         >
           {t(PORTAL_MOVE_OUT_PROBLEM_KEYS[previewProblem], {
             days: MAX_MOVE_OUT_DAYS_AHEAD,

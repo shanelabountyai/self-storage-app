@@ -170,7 +170,7 @@ function EnrolledPanel({ unusedRecoveryCodes, dict }: { unusedRecoveryCodes: num
       <p className="text-sm text-pretty">{t('mfa.enrolled.body')}</p>
 
       <p
-        className={`text-sm text-pretty ${unusedRecoveryCodes <= 2 ? 'font-medium text-red-700' : 'text-muted-foreground'}`}
+        className={`text-sm text-pretty ${unusedRecoveryCodes <= 2 ? 'font-medium text-danger-fg' : 'text-muted-foreground'}`}
       >
         {unusedRecoveryCodes === 0
           ? t('mfa.enrolled.noneLeft')

@@ -311,7 +311,7 @@ export default async function MoveOutPage({
       {settlement.needsManagerOverride && (
         <p
           role="alert"
-          className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-pretty text-red-900"
+          className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg"
         >
           This lease owes more than the{" "}
           {formatCents(preview.writeOffThresholdCents)} write-off threshold. A

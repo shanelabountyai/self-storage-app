@@ -102,7 +102,7 @@ export default async function RentRollPage({
                     {row.gapCents > 0 ? `+${formatCents(row.gapCents)}` : formatCents(row.gapCents)}
                   </td>
                   <td className="py-2 text-right tabular-nums">{row.monthsSinceLastChange ?? '—'}</td>
-                  <td className={`py-2 text-right tabular-nums ${row.balanceCents > 0 ? 'font-medium text-red-800' : ''}`}>
+                  <td className={`py-2 text-right tabular-nums ${row.balanceCents > 0 ? 'font-medium text-danger-fg' : ''}`}>
                     {formatCents(row.balanceCents)}
                   </td>
                   <td className="py-2">{formatDate(row.startDate)}</td>

@@ -84,7 +84,7 @@ export default async function ManagementPackPage({
         <p
           className={
             pack.driftCount > 0
-              ? 'mt-2 rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-pretty text-amber-950'
+              ? 'mt-2 rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-pretty text-warning-fg'
               : 'text-muted-foreground mt-2 max-w-prose text-sm text-pretty'
           }
           /* B-245: no `role="alert"`. The drift warning is the first thing on

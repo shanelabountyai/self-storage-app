@@ -321,7 +321,7 @@ function PushPanel({
               {row.facilityName}{' '}
               <span
                 className={
-                  row.report.matches ? 'text-muted-foreground' : 'font-medium text-amber-700'
+                  row.report.matches ? 'text-muted-foreground' : 'font-medium text-warning-fg'
                 }
               >
                 — {describe(row.report)}

@@ -347,7 +347,7 @@ export default async function PortalTransferPage({
               <p
                 id="preview-problem"
                 tabIndex={-1}
-                className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+                className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-danger-fg"
               >
                 {t(PORTAL_TRANSFER_PROBLEM_KEYS[previewProblem] ?? 'tr.previewFailed', {
                   days: MAX_MOVE_IN_DAYS_AHEAD,

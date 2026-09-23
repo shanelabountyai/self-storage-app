@@ -194,7 +194,7 @@ export default async function TransferPage({
           </div>
 
           {preview && !preview.ok && (
-            <p role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+            <p role="alert" className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-danger-fg">
               {TRANSFER_PROBLEM_COPY[preview.problem]}
             </p>
           )}
@@ -278,7 +278,7 @@ export default async function TransferPage({
                 {preview.preview.raisesRate && (
                   <p
                     role="note"
-                    className="rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 text-pretty"
+                    className="rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg text-pretty"
                   >
                     <strong className="font-medium">This puts their rent up.</strong>{' '}
                     {formatCents(preview.preview.currentRateCents)} →{' '}
@@ -297,7 +297,7 @@ export default async function TransferPage({
                 {preview.preview.liveRateIncrease && (
                   <p
                     role="note"
-                    className="rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950 text-pretty"
+                    className="rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg text-pretty"
                   >
                     <strong className="font-medium">
                       An approved rate change to{' '}
@@ -323,8 +323,8 @@ export default async function TransferPage({
                   reset) is enforced in the auction case's own reads.
                 */}
                 {preview.preview.inLienPipeline && (
-                  <div className="flex flex-col gap-3 rounded-md border-2 border-amber-500 bg-amber-50 p-3">
-                    <p role="alert" className="max-w-prose text-sm text-amber-950 text-pretty">
+                  <div className="flex flex-col gap-3 rounded-md border-2 border-warning-border bg-warning-bg p-3">
+                    <p role="alert" className="max-w-prose text-sm text-warning-fg text-pretty">
                       <strong className="font-medium">
                         Unit {preview.preview.fromUnitNumber} is in the lien pipeline.
                       </strong>{' '}

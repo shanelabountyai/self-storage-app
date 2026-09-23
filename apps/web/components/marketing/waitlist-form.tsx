@@ -81,7 +81,7 @@ export function WaitlistForm({
             className="border-input bg-background min-h-11 rounded-md border px-3 text-sm"
           />
           {error && (
-            <span id={errorId} className="text-sm text-red-700">
+            <span id={errorId} className="text-sm text-danger-fg">
               {error}
             </span>
           )}

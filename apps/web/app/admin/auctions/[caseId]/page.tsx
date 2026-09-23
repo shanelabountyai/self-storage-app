@@ -64,7 +64,7 @@ export default async function AuctionCasePage({
         </Link>
       </div>
 
-      <p role="note" className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-950 text-pretty">
+      <p role="note" className="rounded-lg border-2 border-warning-border bg-warning-bg p-4 text-sm text-warning-fg text-pretty">
         <strong className="block">Not legal advice.</strong>
         {TIMELINE_DISCLAIMER}
       </p>
@@ -75,7 +75,7 @@ export default async function AuctionCasePage({
           documents about the same claim and staff have to be able to see that
           without opening the file. */}
       {view.goodsMoved && (
-        <p role="note" className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-950 text-pretty">
+        <p role="note" className="rounded-lg border-2 border-warning-border bg-warning-bg p-4 text-sm text-warning-fg text-pretty">
           <strong className="block">The goods have been moved since the notice was served.</strong>
           The lien notice named <strong>unit {view.noticeUnitNumber}</strong>. The contents are now
           in <strong>unit {view.unitNumber}</strong>, which is the unit to open, advertise and cut a
@@ -105,7 +105,7 @@ export default async function AuctionCasePage({
           <h2 id="blockers-heading" className="sr-only">
             Why this sale cannot be scheduled
           </h2>
-          <div role="alert" className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
+          <div role="alert" className="rounded-lg border-2 border-danger-border bg-danger-bg p-4 text-danger-fg">
             <p className="font-semibold">
               This sale cannot be scheduled — {view.readiness.blockers.length} outstanding
             </p>

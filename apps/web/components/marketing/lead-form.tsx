@@ -196,7 +196,7 @@ function Field({
         </span>
       )}
       {error && (
-        <span id={errorId} className="text-sm text-red-700">
+        <span id={errorId} className="text-sm text-danger-fg">
           {error}
         </span>
       )}

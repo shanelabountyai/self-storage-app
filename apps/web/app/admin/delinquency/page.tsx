@@ -86,7 +86,7 @@ export default async function DelinquencyQueuePage({
         // the page is drawn and does not change while it is read; `role="alert"`
         // on it made a heading-and-position job into an assertive interruption
         // on every navigation back to this screen.
-        <p className="rounded-xl border-2 border-red-500 bg-red-50 p-4 text-red-950">
+        <p className="rounded-xl border-2 border-danger-border bg-danger-bg p-4 text-danger-fg">
           <span className="font-semibold">{overdueCount} overdue</span>
           <span className="mt-1 block text-sm text-pretty">
             Still open from a day that has already passed.
@@ -109,7 +109,7 @@ export default async function DelinquencyQueuePage({
               {group.tasks.map((task) => (
                 <li
                   key={task.id}
-                  className={task.overdue ? 'bg-card rounded-xl border-2 border-red-500 p-4' : 'bg-card rounded-xl border p-4'}
+                  className={task.overdue ? 'bg-card rounded-xl border-2 border-danger-border p-4' : 'bg-card rounded-xl border p-4'}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
@@ -133,7 +133,7 @@ export default async function DelinquencyQueuePage({
                         <p className="text-sm">
                           <span className="text-destructive font-mono font-semibold tabular-nums">{formatCents(task.balanceCents)}</span>
                           {task.daysPastDue > 0 && (
-                            <span className="text-amber-800"> — {task.daysPastDue} days past due</span>
+                            <span className="text-warning-fg"> — {task.daysPastDue} days past due</span>
                           )}
                         </p>
                       )}
@@ -143,7 +143,7 @@ export default async function DelinquencyQueuePage({
                       </p>
                     </div>
                     {task.overdue && (
-                      <span className="rounded-full border border-red-300 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-900">
+                      <span className="rounded-full border border-danger-border bg-danger-bg px-2.5 py-0.5 text-xs font-semibold text-danger-fg">
                         Overdue
                       </span>
                     )}

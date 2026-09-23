@@ -208,7 +208,7 @@ export default async function MonthlyClosePage() {
                   <p
                     className={
                       drift.length > 0
-                        ? 'mt-1 rounded-md border-2 border-amber-500 bg-amber-50 p-3 text-sm text-pretty text-amber-950'
+                        ? 'mt-1 rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-pretty text-warning-fg'
                         : 'text-muted-foreground mt-1 text-sm text-pretty'
                     }
                     {...(drift.length > 0 ? { role: 'alert' as const } : {})}

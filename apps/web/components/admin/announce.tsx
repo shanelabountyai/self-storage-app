@@ -61,7 +61,7 @@ export function AnnounceRegion({
         // lays its sections out with, while staying in the tree throughout.
         className={
           message
-            ? `text-sm font-medium text-pretty text-green-700 ${className ?? ''}`
+            ? `text-sm font-medium text-pretty text-success-fg ${className ?? ''}`
             : 'sr-only'
         }
       >

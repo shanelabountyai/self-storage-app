@@ -195,7 +195,7 @@ export function AdminForm({
           className={
             state.status === 'confirm' || cancelMessage
               ? 'col-span-full text-sm font-medium text-pretty'
-              : 'col-span-full text-sm font-medium text-green-700'
+              : 'col-span-full text-sm font-medium text-success-fg'
           }
         >
           {/* B-272. `messageParts` when the action supplied them, which is the
@@ -384,7 +384,7 @@ export function Field({
         </p>
       )}
       {error && (
-        <p id={`${id}-error`} className="text-sm text-red-700">
+        <p id={`${id}-error`} className="text-sm text-danger-fg">
           {error}
         </p>
       )}
@@ -516,7 +516,7 @@ export function FieldSet({
         </p>
       )}
       {error && (
-        <p id={`${id}-error`} className="mt-1 text-sm text-red-700">
+        <p id={`${id}-error`} className="mt-1 text-sm text-danger-fg">
           {error}
         </p>
       )}

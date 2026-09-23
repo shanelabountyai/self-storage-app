@@ -76,7 +76,7 @@ export function FormResult({
         ref={ref}
         tabIndex={-1}
         role="status"
-        className={`text-sm font-medium text-pretty ${error ? 'text-red-700' : 'text-green-700'} ${message ? (className ?? '') : ''}`}
+        className={`text-sm font-medium text-pretty ${error ? 'text-danger-fg' : 'text-success-fg'} ${message ? (className ?? '') : ''}`}
       >
         {message}
       </p>

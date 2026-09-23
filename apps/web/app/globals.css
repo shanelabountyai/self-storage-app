@@ -33,6 +33,18 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-border: var(--danger-border);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-fg: var(--warning-fg);
+  --color-warning-border: var(--warning-border);
+  --color-success-bg: var(--success-bg);
+  --color-success-fg: var(--success-fg);
+  --color-success-border: var(--success-border);
+  --color-info-bg: var(--info-bg);
+  --color-info-fg: var(--info-fg);
+  --color-info-border: var(--info-border);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -116,6 +128,22 @@
   /* pine-600 is 3.14:1 on the dark band — over the floor by a rounding error —
      so a dark band swaps in a light pine (7.89:1) through the rule below. */
   --inverse-ring: oklch(0.75 0.11 175);
+  /* B-381. Status colours: a tint, the text that sits on it (and on paper or a
+     card), and a border that carries meaning (>= 3:1, 1.4.11). Every hard-coded
+     Tailwind red/amber/green/yellow moved here; tests/contrast-tokens.test.ts
+     asserts the pairs and that none come back. */
+  --danger-bg: oklch(0.97 0.014 25);
+  --danger-fg: oklch(0.40 0.14 27);
+  --danger-border: oklch(0.58 0.19 27);
+  --warning-bg: oklch(0.975 0.03 85);
+  --warning-fg: oklch(0.40 0.08 65);
+  --warning-border: oklch(0.58 0.12 70);
+  --success-bg: oklch(0.97 0.025 150);
+  --success-fg: oklch(0.38 0.09 150);
+  --success-border: oklch(0.55 0.13 150);
+  --info-bg: oklch(0.97 0.015 240);
+  --info-fg: oklch(0.38 0.10 250);
+  --info-border: oklch(0.55 0.15 250);
 }
 
 /* Any dark band re-points the focus ring, so the one `:focus-visible` rule
@@ -159,6 +187,18 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --danger-bg: oklch(0.27 0.06 25);
+  --danger-fg: oklch(0.88 0.06 25);
+  --danger-border: oklch(0.66 0.17 25);
+  --warning-bg: oklch(0.27 0.05 80);
+  --warning-fg: oklch(0.88 0.08 85);
+  --warning-border: oklch(0.66 0.13 75);
+  --success-bg: oklch(0.27 0.05 150);
+  --success-fg: oklch(0.88 0.08 150);
+  --success-border: oklch(0.64 0.14 150);
+  --info-bg: oklch(0.27 0.05 245);
+  --info-fg: oklch(0.88 0.06 245);
+  --info-border: oklch(0.66 0.13 245);
 }
 
 @layer base {
