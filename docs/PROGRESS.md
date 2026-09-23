@@ -11627,7 +11627,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-376 — A priced size leads to a search page that shows that size's price (2026-09-23)
 
-**Commit:** `PENDING`
+**Commit:** `b906b7c`
 
 **What it built.** `/storage/search?size=<band>` prices each card by the cheapest available unit in that band at that facility (`lowestAvailableWebRateByFacility` takes an optional band; `matchesSize` is now exported), so the card, its one-sentence accessible name and the map marker agree with the size chosen. A facility with none in the band says "No {size} units available right now" and offers the phone. The home eyebrow reads "Available now", not "Open now". Each size-guide card has a "See facilities" link carrying its band, with the size in its accessible name. The "few dollars a month" sentence is gone. `/storage/locations` is linked from the search results and the footer's Storage column.
 

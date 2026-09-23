@@ -1,5 +1,7 @@
 # Next
 
+**B-376 is built** (2026-09-23, `b906b7c`). Next item: **B-377** (`83azzzw`). Search prices by the carried size band; size-guide cards link to search; locations is in the footer.
+
 **B-375 is built** (2026-09-23, `2ad13c8`). Next item: **B-376** (`83azzzv`). Staff tenants list reds only past-due balances; POS row buttons are outline.
 
 **B-374 is built** (2026-09-23, `52f77db`). Next item: **B-375** (`83azzzu`). "Use my location" resets after a same-route push; the locations status region is always mounted.
