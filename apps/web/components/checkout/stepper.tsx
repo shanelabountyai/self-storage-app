@@ -63,7 +63,11 @@ export function Stepper({
     }`
 
   const list = (
-    <ol className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+    // B-378: below `sm` the six-step row wraps into a staircase, so it is
+    // visually hidden (still read, and still tabbable) and the one-line summary
+    // above stands in. A completed step's button focus reveals the row so the
+    // focus ring is never on an invisible control (2.4.7).
+    <ol className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm max-sm:sr-only max-sm:focus-within:not-sr-only">
       {STEPS.map((step, index) => {
         const done = index < currentIndex
         const isCurrent = index === currentIndex
@@ -120,6 +124,9 @@ export function Stepper({
 
   return (
     <nav aria-label={t('step.progressNav')}>
+      <p aria-hidden="true" className="text-sm font-medium sm:hidden">
+        {stepAnnouncement(current, dict)}
+      </p>
       {navigable ? (
         // One form around the whole list, with each button carrying its own
         // `to`. Six forms would be six landmarks in a row for no gain.

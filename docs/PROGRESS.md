@@ -11648,3 +11648,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** The first measurement failed by 23px on the button, so the padding and h1 size were cut as well as the badge and lead. Found on a clean `main`, not caused here: `tests/live-region-display.test.ts` fails on `/storage/locations/page.tsx`'s `role="status"` with `empty:hidden` (B-374's always-mounted region). Unowned. Accessibility statement re-read: no claim about the home hero.
 
 **Verification.** Typecheck and lint clean; i18n, smoke and a11y e2e: 532 passed, 4 skipped, including a new spec (both languages: search control inside 375×667, no "lease" on `/`). Unit: 4712 passed, 1 failed (the pre-existing one above).
+
+## B-378 — The checkout stepper is one line at 360px (2026-09-23)
+
+**Commit:** see the follow-up SHA commit.
+
+**What it built.** Below `sm` the six-step `<ol>` is `sr-only` and a visible, `aria-hidden` line (`stepAnnouncement`, e.g. "Your unit — step 2 of 6") stands in for it; from `sm` up nothing changes. The row stays in the accessibility tree with every `step.ofTotal`/current/completed word unchanged, and a completed step's go-back button stays in the tab order: `focus-within:not-sr-only` reveals the row while a control in it has focus, so the focus ring is never on an invisible element (2.4.7).
+
+**What it decided.** No new dictionary key: the visible line reuses `step.announcement`, so the line and the live announcement cannot drift. Revealing the row on focus means a keyboard user at 360px briefly sees the wrapped row; the alternative (a single "Back" button) would have dropped the ability to jump to any completed step.
+
+**What it left behind.** NVDA over the collapsed stepper is a manual pass, recorded under B-254 and ticked by no agent. B-382 owns the reflow and forced-spacing measurement.
+
+**Verification.** Typecheck and lint clean; new smoke spec at 360px (nav under 40px high, "step 2 of 6" shown, go-back button focusable and visible); stepper specs 6 passed; checkout a11y 18 passed. Accessibility statement re-read: it makes no claim about the stepper's layout, so nothing changed.

@@ -1320,6 +1320,39 @@ test('the checkout stepper advances server-side and resumes', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
 })
 
+// B-378: at PRD 01 §6.1's 360px design width the six-step row wrapped into a
+// staircase. Below `sm` it is one visible line; the row stays in the a11y tree
+// and a completed step's go-back button stays tabbable.
+test('the checkout stepper is one line at 360px and keeps its go-back button', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 })
+  await page.goto('/storage/tx/houston/demo-e2e')
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: '10x10 Test' })
+    .first()
+    .getByRole('button', { name: 'Rent now' })
+    .click()
+  await page.getByLabel('First name').fill('Ada')
+  await page.getByLabel('Last name').fill('Renter')
+  await page.getByLabel('Email', { exact: true }).fill(`e2e-b378-${Date.now()}@demo.example.com`)
+  await page.getByLabel('Mobile number').fill('512-555-0100')
+  await page.getByLabel('Street address').fill('2400 South Congress Ave')
+  await page.getByLabel('Zip code').fill('78704')
+  await page.getByRole('button', { name: 'Continue', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
+
+  const nav = page.getByRole('navigation', { name: 'Checkout progress' })
+  await expect(nav).toContainText('step 2 of 6')
+  expect((await nav.boundingBox())!.height).toBeLessThan(40)
+
+  // The row is still in the a11y tree, and the completed step's button is
+  // tabbable and visible once it has focus (2.4.7).
+  const back = nav.getByRole('button', { name: /step 1 of 6/ })
+  await back.focus()
+  await expect(back).toBeInViewport()
+  expect((await back.boundingBox())!.width).toBeGreaterThan(1)
+})
+
 test('the protection step cannot be skipped and updates the total', async ({ page }) => {
   await page.goto('/storage/tx/houston/demo-e2e')
   await page
