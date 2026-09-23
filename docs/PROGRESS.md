@@ -11567,7 +11567,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-371 — The revealed gate code fits a 320px phone (2026-09-23)
 
-**Commit:** `SHA_PENDING`
+**Commit:** `a6dbd25`
 
 **What it built.** The digits scale (`clamp(28px, 11vw, 44px)`) and wrap with the Copy button; both panel buttons are 44px high. A new `inverse` Button variant carries every rest, hover and `aria-expanded` pair on inverse-surface tokens (new `--inverse-raised` fill), fixing the dark-ink-on-dark hover. `/portal | gate code revealed` is a `SCANNED_STATES` entry and a `STATE_REACH` entry, so the revealed card now runs the 320px, 200% and text-spacing checks. `contrast-tokens` asserts the variant's pairs.
 
