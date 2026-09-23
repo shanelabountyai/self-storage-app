@@ -11699,7 +11699,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-381 — Status colours are tokens (2026-09-23)
 
-**Commit:** `SHA_PENDING`
+**Commit:** `d939379`
 
 **What it built.** `success`, `warning`, `danger` and `info` token triples (`-bg` tint, `-fg` text, `-border`) in `globals.css`, light and `.dark`, registered in `@theme inline`. All 228 hard-coded `bg|text|border-(red|amber|green|yellow)-N` uses across 53 files moved to them (yellow folded into warning), and the redundant `dark:` variants were deleted since the tokens switch by theme. `tests/contrast-tokens.test.ts` asserts every `-fg` at 4.5:1 on background, card and its own tint, every `-border` at 3:1 on background and card (both themes), and greps `app` and `components` for any palette class returning. The allow-list is empty.
 

@@ -1,5 +1,7 @@
 # Next
 
+**B-381 is built** (2026-09-23, `d939379`). Next item: pick from `06-backlog.md` (B-382 `83azzzzb`). Status colours are tokens; a contrast test greps for palette classes. **Open red, unowned:** smoke "checkout goes back" fails on mobile-chrome since B-378 (aria-hidden stepper `<p>` intercepts the click); it needs a row or a fix first.
+
 **B-380 is built** (2026-09-23, `a4448b2`). Next item: **B-381** (`83azzzza`). Records only: B-369 and B-370 entries backfilled.
 
 **B-379 is built** (2026-09-23, `3366e9b`). Next item: **B-380**. English SEO prose (size guide, guides, city/size intros, facility FAQ) carries `lang="en"` under Spanish via `EnglishBody`.
