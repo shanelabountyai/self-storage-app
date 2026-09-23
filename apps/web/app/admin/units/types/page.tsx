@@ -34,7 +34,7 @@ function UnitTypeFields({ unitType }: { unitType?: UnitTypeRow }) {
           defaultValue={unitType?.name}
           required
           placeholder="10x10 Climate"
-          className="border-input bg-background h-9 rounded-md border px-2"
+          className="border-input bg-background h-11 rounded-md border px-2"
         />
       </label>
       <label className="flex flex-col gap-1 text-sm">
@@ -45,7 +45,7 @@ function UnitTypeFields({ unitType }: { unitType?: UnitTypeRow }) {
           min="1"
           defaultValue={unitType?.widthFt}
           required
-          className="border-input bg-background h-9 w-24 rounded-md border px-2"
+          className="border-input bg-background h-11 w-24 rounded-md border px-2"
         />
       </label>
       <label className="flex flex-col gap-1 text-sm">
@@ -56,7 +56,7 @@ function UnitTypeFields({ unitType }: { unitType?: UnitTypeRow }) {
           min="1"
           defaultValue={unitType?.lengthFt}
           required
-          className="border-input bg-background h-9 w-24 rounded-md border px-2"
+          className="border-input bg-background h-11 w-24 rounded-md border px-2"
         />
       </label>
       <label className="flex flex-col gap-1 text-sm">
@@ -66,7 +66,7 @@ function UnitTypeFields({ unitType }: { unitType?: UnitTypeRow }) {
           type="number"
           min="1"
           defaultValue={unitType?.heightFt ?? ''}
-          className="border-input bg-background h-9 w-24 rounded-md border px-2"
+          className="border-input bg-background h-11 w-24 rounded-md border px-2"
         />
       </label>
       <label className="flex flex-col gap-1 text-sm">
@@ -77,7 +77,7 @@ function UnitTypeFields({ unitType }: { unitType?: UnitTypeRow }) {
           min="1"
           defaultValue={unitType?.floor ?? 1}
           required
-          className="border-input bg-background h-9 w-20 rounded-md border px-2"
+          className="border-input bg-background h-11 w-20 rounded-md border px-2"
         />
       </label>
       {/* Rates only appear when creating: they become the type's first
@@ -94,7 +94,7 @@ function UnitTypeFields({ unitType }: { unitType?: UnitTypeRow }) {
               step="0.01"
               min="0"
               required
-              className="border-input bg-background h-9 w-28 rounded-md border px-2"
+              className="border-input bg-background h-11 w-28 rounded-md border px-2"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -105,7 +105,7 @@ function UnitTypeFields({ unitType }: { unitType?: UnitTypeRow }) {
               step="0.01"
               min="0"
               required
-              className="border-input bg-background h-9 w-28 rounded-md border px-2"
+              className="border-input bg-background h-11 w-28 rounded-md border px-2"
             />
           </label>
         </>
@@ -115,7 +115,7 @@ function UnitTypeFields({ unitType }: { unitType?: UnitTypeRow }) {
         <input
           name="description"
           defaultValue={unitType?.description ?? ''}
-          className="border-input bg-background h-9 rounded-md border px-2"
+          className="border-input bg-background h-11 rounded-md border px-2"
         />
       </label>
       <div className="col-span-full flex gap-4 text-sm">
@@ -317,15 +317,15 @@ export default async function AdminUnitTypesPage({
             <input type="hidden" name="unitTypeId" value={historyFor} />
             <label className="flex flex-col gap-1 text-sm">
               Street rate ($/mo)
-              <input name="streetRateDollars" type="number" step="0.01" min="0" required className="border-input bg-background h-9 w-28 rounded-md border px-2" />
+              <input name="streetRateDollars" type="number" step="0.01" min="0" required className="border-input bg-background h-11 w-28 rounded-md border px-2" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Web rate ($/mo)
-              <input name="webRateDollars" type="number" step="0.01" min="0" required className="border-input bg-background h-9 w-28 rounded-md border px-2" />
+              <input name="webRateDollars" type="number" step="0.01" min="0" required className="border-input bg-background h-11 w-28 rounded-md border px-2" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Effective from
-              <input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required className="border-input bg-background h-9 rounded-md border px-2" />
+              <input name="effectiveFrom" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required className="border-input bg-background h-11 rounded-md border px-2" />
             </label>
             <Button type="submit">Publish rate</Button>
           </form>

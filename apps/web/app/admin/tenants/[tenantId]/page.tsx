@@ -772,7 +772,7 @@ export default async function TenantProfilePage({
             role="note"
             className={`rounded-lg border-2 p-4 ${
               plan.status === "active"
-                ? "border-blue-500 bg-blue-50 text-blue-950"
+                ? "border-info-border bg-info-bg text-info-fg"
                 : "border-input bg-muted"
             }`}
           >
@@ -1094,6 +1094,7 @@ export default async function TenantProfilePage({
             role="alert"
             className="border-input rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-danger-fg"
           >
+            <strong className="font-semibold">Returned mail. </strong>
             Mail sent to this address was returned on{" "}
             {formatDate(profile.address.returnedMailAt)}. Confirm a current
             address before relying on it.

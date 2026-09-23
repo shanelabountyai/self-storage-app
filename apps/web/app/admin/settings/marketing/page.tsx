@@ -313,6 +313,7 @@ export default async function MarketingProfilePage() {
 
         {profile.gbp.stale && (
           <p role="alert" className="rounded-md border-2 border-warning-border bg-warning-bg p-3 text-sm text-warning-fg">
+            <strong className="font-semibold">Out of date. </strong>
             {profile.gbp.verifiedAt
               ? `Last checked ${formatDate(profile.gbp.verifiedAt)} — more than 90 days ago.`
               : 'Never checked.'}

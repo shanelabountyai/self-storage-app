@@ -164,7 +164,7 @@ export default async function CounterCardPage({
               // walking the form by control was told nothing (SC 3.3.1).
               aria-invalid={amount && requested === null ? true : undefined}
               aria-describedby={amount && requested === null ? 'amount-problem' : undefined}
-              className="border-input bg-background h-9 max-w-full min-w-0 rounded-md border px-2"
+              className="border-input bg-background h-11 max-w-full min-w-0 rounded-md border px-2"
             />
           </label>
           <button

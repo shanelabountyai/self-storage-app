@@ -290,7 +290,7 @@ export function AdminForm({
                     type="submit"
                     name="confirmed"
                     value={state.confirmValue ?? 'yes'}
-                    className="bg-primary text-primary-foreground inline-flex min-h-9 items-center rounded-md px-4 text-sm font-medium"
+                    className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
                   >
                     {state.confirmLabel ?? 'Yes, add it'}
                   </button>
@@ -298,7 +298,7 @@ export function AdminForm({
                     <button
                       type="button"
                       onClick={() => setCancelled(actionState)}
-                      className="border-input hover:bg-accent inline-flex min-h-9 items-center rounded-md border px-4 text-sm font-medium"
+                      className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
                     >
                       {state.cancel.label}
                     </button>

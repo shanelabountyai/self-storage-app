@@ -93,10 +93,10 @@ const HAND_CHECKED_INCOMPLETE: readonly HandCheckedIncomplete[] = [
   },
   {
     // `UnitStatusBadge`'s `unrentable` state layers a translucent hatch pattern
-    // over `bg-gray-100` so the six unit statuses stay distinguishable without
+    // over `bg-card` so the six unit statuses stay distinguishable without
     // relying on hue alone (1.4.1) — axe cannot compute an effective background
     // through a `background-image` gradient. The badge sets no gradient on any
-    // other status, and `bg-gray-100` / `text-gray-700` is the same pairing used
+    // other status, and `bg-card` / `text-foreground` is the same pairing used
     // unadorned elsewhere.
     route: '/admin/units',
     pattern: /background gradient/i,

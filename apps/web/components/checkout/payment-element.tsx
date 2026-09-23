@@ -92,6 +92,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
         role="alert"
         className="text-sm font-medium text-danger-fg"
       >
+        {error ? <span aria-hidden="true">⚠ </span> : null}
         {error ?? ''}
       </p>
 

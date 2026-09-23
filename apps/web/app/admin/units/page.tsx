@@ -194,7 +194,7 @@ export default async function AdminUnitsPage({
         {params.view && <input type="hidden" name="view" value={params.view} />}
         <label className="flex flex-col gap-1 text-sm">
           Status
-          <select name="status" defaultValue={params.status ?? ''} className="border-input bg-background h-9 rounded-md border px-2">
+          <select name="status" defaultValue={params.status ?? ''} className="border-input bg-background h-11 rounded-md border px-2">
             <option value="">Any</option>
             {ALL_STATUSES.map((s) => (
               <option key={s} value={s}>{unitStatusLabel(s)}</option>
@@ -203,7 +203,7 @@ export default async function AdminUnitsPage({
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Type
-          <select name="unitTypeId" defaultValue={params.unitTypeId ?? ''} className="border-input bg-background h-9 rounded-md border px-2">
+          <select name="unitTypeId" defaultValue={params.unitTypeId ?? ''} className="border-input bg-background h-11 rounded-md border px-2">
             <option value="">Any</option>
             {unitTypes.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
@@ -213,7 +213,7 @@ export default async function AdminUnitsPage({
         {groupings.buildings.length > 0 && (
           <label className="flex flex-col gap-1 text-sm">
             Building
-            <select name="building" defaultValue={params.building ?? ''} className="border-input bg-background h-9 rounded-md border px-2">
+            <select name="building" defaultValue={params.building ?? ''} className="border-input bg-background h-11 rounded-md border px-2">
               <option value="">Any</option>
               {groupings.buildings.map((b) => (
                 <option key={b} value={b}>{b}</option>
@@ -223,7 +223,7 @@ export default async function AdminUnitsPage({
         )}
         <label className="flex flex-col gap-1 text-sm">
           Floor
-          <select name="floor" defaultValue={params.floor ?? ''} className="border-input bg-background h-9 rounded-md border px-2">
+          <select name="floor" defaultValue={params.floor ?? ''} className="border-input bg-background h-11 rounded-md border px-2">
             <option value="">Any</option>
             {groupings.floors.map((f) => (
               <option key={f} value={String(f)}>{f}</option>
@@ -232,7 +232,7 @@ export default async function AdminUnitsPage({
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Unit number
-          <input name="q" defaultValue={params.q ?? ''} placeholder="A-1" className="border-input bg-background h-9 rounded-md border px-2" />
+          <input name="q" defaultValue={params.q ?? ''} placeholder="A-1" className="border-input bg-background h-11 rounded-md border px-2" />
         </label>
         <Button type="submit" variant="outline">Filter</Button>
         <Link href="/admin/units" className="text-muted-foreground pb-2 text-sm underline underline-offset-2">Clear</Link>
@@ -418,7 +418,7 @@ export default async function AdminUnitsPage({
                   id={`status-m-${unit.id}`}
                   name="operationalStatus"
                   defaultValue={unit.operationalStatus}
-                  className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+                  className="border-input bg-background h-11 rounded-md border px-2 text-sm"
                 >
                   {MANUAL_UNIT_STATUSES.map((s) => (
                     <option key={s} value={s}>{s}</option>
@@ -474,7 +474,7 @@ export default async function AdminUnitsPage({
             .map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
           <label className="flex flex-col gap-1 text-sm">
             Change
-            <select name="op" defaultValue={params.op ?? 'status'} className="border-input bg-background h-9 rounded-md border px-2">
+            <select name="op" defaultValue={params.op ?? 'status'} className="border-input bg-background h-11 rounded-md border px-2">
               <option value="status">Status</option>
               <option value="unitType">Unit type</option>
               <option value="attributes">Building / floor</option>
@@ -482,7 +482,7 @@ export default async function AdminUnitsPage({
           </label>
           <label className="flex flex-col gap-1 text-sm">
             To status
-            <select name="opStatus" defaultValue={params.opStatus ?? 'available'} className="border-input bg-background h-9 rounded-md border px-2">
+            <select name="opStatus" defaultValue={params.opStatus ?? 'available'} className="border-input bg-background h-11 rounded-md border px-2">
               {MANUAL_UNIT_STATUSES.map((s) => (
                 <option key={s} value={s}>{unitStatusLabel(s)}</option>
               ))}
@@ -490,18 +490,18 @@ export default async function AdminUnitsPage({
           </label>
           <label className="flex flex-col gap-1 text-sm">
             To type
-            <select name="opUnitTypeId" defaultValue={params.opUnitTypeId ?? ''} className="border-input bg-background h-9 rounded-md border px-2">
+            <select name="opUnitTypeId" defaultValue={params.opUnitTypeId ?? ''} className="border-input bg-background h-11 rounded-md border px-2">
               <option value="">—</option>
               {unitTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
             To building
-            <input name="opBuilding" defaultValue={params.opBuilding ?? ''} className="border-input bg-background h-9 w-28 rounded-md border px-2" />
+            <input name="opBuilding" defaultValue={params.opBuilding ?? ''} className="border-input bg-background h-11 w-28 rounded-md border px-2" />
           </label>
           <label className="flex flex-col gap-1 text-sm">
             To floor
-            <input name="opFloor" type="number" min="1" defaultValue={params.opFloor ?? ''} className="border-input bg-background h-9 w-20 rounded-md border px-2" />
+            <input name="opFloor" type="number" min="1" defaultValue={params.opFloor ?? ''} className="border-input bg-background h-11 w-20 rounded-md border px-2" />
           </label>
           <Button type="submit" variant="outline">Preview</Button>
         </form>
@@ -568,7 +568,7 @@ export default async function AdminUnitsPage({
                     name="reasonCode"
                     defaultValue="management_approval"
                     required
-                    className="border-input bg-background h-9 rounded-md border px-2"
+                    className="border-input bg-background h-11 rounded-md border px-2"
                   >
                     {REASON_CODES.map((code) => (
                       <option key={code} value={code}>{REASON_CODE_LABELS[code]}</option>
@@ -579,7 +579,7 @@ export default async function AdminUnitsPage({
                   Note <span className="text-muted-foreground text-xs">(optional)</span>
                   <input
                     name="reasonNote"
-                    className="border-input bg-background h-9 rounded-md border px-2"
+                    className="border-input bg-background h-11 rounded-md border px-2"
                     placeholder="Anything the code does not capture"
                   />
                 </label>

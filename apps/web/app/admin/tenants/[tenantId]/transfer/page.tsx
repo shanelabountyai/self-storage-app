@@ -195,6 +195,7 @@ export default async function TransferPage({
 
           {preview && !preview.ok && (
             <p role="alert" className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-danger-fg">
+              <strong className="font-semibold">Cannot transfer. </strong>
               {TRANSFER_PROBLEM_COPY[preview.problem]}
             </p>
           )}

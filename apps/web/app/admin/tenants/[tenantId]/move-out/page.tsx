@@ -313,6 +313,7 @@ export default async function MoveOutPage({
           role="alert"
           className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg"
         >
+          <strong className="font-semibold">Balance too high. </strong>
           This lease owes more than the{" "}
           {formatCents(preview.writeOffThresholdCents)} write-off threshold. A
           manager has to close it.

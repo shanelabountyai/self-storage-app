@@ -31,7 +31,7 @@ export function Header({ userName, facilities, cookieValue, canSeeAll }: Props) 
           type="search"
           placeholder="Search tenants, units, invoices…"
           disabled
-          className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm disabled:opacity-60"
+          className="border-input bg-background h-11 w-full rounded-md border px-3 text-sm disabled:opacity-60"
         />
       </div>
 

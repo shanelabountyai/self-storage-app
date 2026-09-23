@@ -84,7 +84,7 @@ export default async function NewTenantPage() {
         <div className="flex items-center gap-3">
           <button
             type="submit"
-            className="bg-primary text-primary-foreground inline-flex h-9 items-center rounded-md px-4 text-sm font-medium"
+            className="bg-primary text-primary-foreground inline-flex h-11 items-center rounded-md px-4 text-sm font-medium"
           >
             Add tenant
           </button>

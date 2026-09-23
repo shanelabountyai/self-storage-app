@@ -87,6 +87,7 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
       {/* Rendered unconditionally and empty so a decline is a mutation the
           screen reader announces, not a node inserted already populated. */}
       <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm font-medium text-danger-fg">
+        {error ? <span aria-hidden="true">⚠ </span> : null}
         {error ?? ''}
       </p>
 

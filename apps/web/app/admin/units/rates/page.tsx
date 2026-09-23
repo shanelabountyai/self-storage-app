@@ -76,7 +76,7 @@ function SuggestionCell({ row, facilityId }: { row: RateSuggestionRow; facilityI
             min="0"
             required
             defaultValue={(suggestion.suggestedStreetRateCents! / 100).toFixed(2)}
-            className="border-input bg-background h-9 w-24 rounded-md border px-2"
+            className="border-input bg-background h-11 w-24 rounded-md border px-2"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs">
@@ -88,7 +88,7 @@ function SuggestionCell({ row, facilityId }: { row: RateSuggestionRow; facilityI
             min="0"
             required
             defaultValue={(suggestion.suggestedWebRateCents! / 100).toFixed(2)}
-            className="border-input bg-background h-9 w-24 rounded-md border px-2"
+            className="border-input bg-background h-11 w-24 rounded-md border px-2"
           />
         </label>
         <Button type="submit" variant="outline">

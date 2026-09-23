@@ -63,12 +63,12 @@ export default async function DailyPaymentsPage({
             name="date"
             type="date"
             defaultValue={businessDate}
-            className="border-input bg-background h-9 rounded-md border px-2"
+            className="border-input bg-background h-11 rounded-md border px-2"
           />
         </label>
         <button
           type="submit"
-          className="border-input hover:bg-accent inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium"
+          className="border-input hover:bg-accent inline-flex h-11 items-center rounded-md border px-4 text-sm font-medium"
         >
           Show
         </button>

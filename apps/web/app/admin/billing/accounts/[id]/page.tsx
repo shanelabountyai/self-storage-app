@@ -229,7 +229,7 @@ export default async function BillingAccountPage({
               />
               <button
                 type="submit"
-                className="border-input inline-flex h-9 items-center self-start rounded-md border px-4 text-sm font-medium"
+                className="border-input inline-flex h-11 items-center self-start rounded-md border px-4 text-sm font-medium"
               >
                 Give access
               </button>
@@ -253,7 +253,7 @@ export default async function BillingAccountPage({
             />
             <button
               type="submit"
-              className="bg-primary text-primary-foreground inline-flex h-9 items-center self-start rounded-md px-4 text-sm font-medium"
+              className="bg-primary text-primary-foreground inline-flex h-11 items-center self-start rounded-md px-4 text-sm font-medium"
             >
               Add unit
             </button>

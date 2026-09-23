@@ -77,7 +77,7 @@ export default async function MaintenancePage({
                     id={`status-${ticket.id}`}
                     name="status"
                     defaultValue={ticket.status}
-                    className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+                    className="border-input bg-background h-11 rounded-md border px-2 text-sm"
                   >
                     {STATUS_OPTIONS.map((status) => (
                       <option key={status} value={status}>

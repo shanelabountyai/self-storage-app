@@ -89,6 +89,7 @@ export default async function CounterCardDonePage({
           role="alert"
           className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg"
         >
+          <strong className="font-semibold">Card declined. </strong>
           {receipt.failureReason ?? 'The card was declined.'} Nothing has been charged. Try another
           card, or take cash or a check.{' '}
           {/* B-344. Back to the same subject and amount, so a retry is one

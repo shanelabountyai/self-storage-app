@@ -104,12 +104,12 @@ export default async function PosPage({
               id="q"
               name="q"
               defaultValue={q ?? ''}
-              className="border-input bg-background h-9 w-72 rounded-md border px-2"
+              className="border-input bg-background h-11 w-72 rounded-md border px-2"
             />
           </label>
           <button
             type="submit"
-            className="border-input hover:bg-accent inline-flex h-9 items-center rounded-md border px-4 text-sm font-medium"
+            className="border-input hover:bg-accent inline-flex h-11 items-center rounded-md border px-4 text-sm font-medium"
           >
             Search
           </button>

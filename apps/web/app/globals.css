@@ -45,6 +45,21 @@
   --color-info-bg: var(--info-bg);
   --color-info-fg: var(--info-fg);
   --color-info-border: var(--info-border);
+  --color-unit-vacant: var(--unit-vacant);
+  --color-unit-vacant-soft: var(--unit-vacant-soft);
+  --color-unit-vacant-fg: var(--unit-vacant-fg);
+  --color-unit-occupied: var(--unit-occupied);
+  --color-unit-occupied-soft: var(--unit-occupied-soft);
+  --color-unit-occupied-fg: var(--unit-occupied-fg);
+  --color-unit-reserved: var(--unit-reserved);
+  --color-unit-reserved-soft: var(--unit-reserved-soft);
+  --color-unit-reserved-fg: var(--unit-reserved-fg);
+  --color-unit-overdue: var(--unit-overdue);
+  --color-unit-overdue-soft: var(--unit-overdue-soft);
+  --color-unit-overdue-fg: var(--unit-overdue-fg);
+  --color-unit-maintenance: var(--unit-maintenance);
+  --color-unit-maintenance-soft: var(--unit-maintenance-soft);
+  --color-unit-maintenance-fg: var(--unit-maintenance-fg);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -144,6 +159,24 @@
   --info-bg: oklch(0.97 0.015 240);
   --info-fg: oklch(0.38 0.10 250);
   --info-border: oklch(0.55 0.15 250);
+  /* B-383, D-148. The kit's unit-state legend: vacant green, occupied grey,
+     reserved blue, overdue red, maintenance amber. `--unit-X` is the dot and
+     border (>= 3:1, 1.4.11), `-soft` the fill, `-fg` the text on it. */
+  --unit-vacant: oklch(0.55 0.13 150);
+  --unit-vacant-soft: oklch(0.97 0.025 150);
+  --unit-vacant-fg: oklch(0.38 0.09 150);
+  --unit-occupied: oklch(0.55 0.014 75);
+  --unit-occupied-soft: oklch(0.955 0.008 75);
+  --unit-occupied-fg: oklch(0.32 0.014 62);
+  --unit-reserved: oklch(0.55 0.15 250);
+  --unit-reserved-soft: oklch(0.97 0.015 240);
+  --unit-reserved-fg: oklch(0.38 0.10 250);
+  --unit-overdue: oklch(0.58 0.19 27);
+  --unit-overdue-soft: oklch(0.97 0.014 25);
+  --unit-overdue-fg: oklch(0.40 0.14 27);
+  --unit-maintenance: oklch(0.58 0.12 70);
+  --unit-maintenance-soft: oklch(0.975 0.03 85);
+  --unit-maintenance-fg: oklch(0.40 0.08 65);
 }
 
 /* Any dark band re-points the focus ring, so the one `:focus-visible` rule
@@ -199,6 +232,21 @@
   --info-bg: oklch(0.27 0.05 245);
   --info-fg: oklch(0.88 0.06 245);
   --info-border: oklch(0.66 0.13 245);
+  --unit-vacant: oklch(0.64 0.14 150);
+  --unit-vacant-soft: oklch(0.27 0.05 150);
+  --unit-vacant-fg: oklch(0.88 0.08 150);
+  --unit-occupied: oklch(0.66 0.012 75);
+  --unit-occupied-soft: oklch(0.27 0.01 75);
+  --unit-occupied-fg: oklch(0.9 0.01 75);
+  --unit-reserved: oklch(0.66 0.13 245);
+  --unit-reserved-soft: oklch(0.27 0.05 245);
+  --unit-reserved-fg: oklch(0.88 0.06 245);
+  --unit-overdue: oklch(0.66 0.17 25);
+  --unit-overdue-soft: oklch(0.27 0.06 25);
+  --unit-overdue-fg: oklch(0.88 0.06 25);
+  --unit-maintenance: oklch(0.66 0.13 75);
+  --unit-maintenance-soft: oklch(0.27 0.05 80);
+  --unit-maintenance-fg: oklch(0.88 0.08 85);
 }
 
 @layer base {

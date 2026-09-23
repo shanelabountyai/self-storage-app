@@ -232,9 +232,23 @@ describe('status colours', () => {
     }
   })
 
+  // B-383 / D-148. The unit-state legend: dot/border 3:1, text 4.5:1 on its own
+  // fill and on the page, in both themes.
+  it.each([':root', '.dark'] as const)('every unit-state pair clears its floor in %s', (block) => {
+    const t = (name: string) => token(block, name)
+    for (const u of ['vacant', 'occupied', 'reserved', 'overdue', 'maintenance']) {
+      for (const ground of ['background', 'card', `unit-${u}-soft`]) {
+        expect(contrast(t(`unit-${u}-fg`), t(ground)), `unit-${u}-fg on ${ground}`).toBeGreaterThanOrEqual(4.5)
+      }
+      for (const ground of ['background', 'card']) {
+        expect(contrast(t(`unit-${u}`), t(ground)), `unit-${u} on ${ground}`).toBeGreaterThanOrEqual(3)
+      }
+    }
+  })
+
   it('no hard-coded status palette class remains in app or components', () => {
     const hits = execSync(
-      `grep -rEo "(bg|text|border|ring)-(red|amber|green|emerald|yellow)-[0-9]+" apps/web/app apps/web/components || true`,
+      `grep -rEo "(bg|text|border|ring)-(red|amber|green|emerald|yellow|blue|gray)-[0-9]+" apps/web/app apps/web/components || true`,
       { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' },
     )
     expect(hits.trim()).toBe('')

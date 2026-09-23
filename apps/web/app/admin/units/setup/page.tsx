@@ -78,21 +78,21 @@ export default async function AdminUnitsSetupPage({
             <input type="hidden" name="facilityId" value={facilityId} />
             <label className="flex flex-col gap-1 text-sm">
               Number
-              <input name="number" required className="border-input bg-background h-9 w-28 rounded-md border px-2" />
+              <input name="number" required className="border-input bg-background h-11 w-28 rounded-md border px-2" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Type
-              <select name="unitTypeId" required className="border-input bg-background h-9 rounded-md border px-2">
+              <select name="unitTypeId" required className="border-input bg-background h-11 rounded-md border px-2">
                 {unitTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Building
-              <input name="building" className="border-input bg-background h-9 w-28 rounded-md border px-2" />
+              <input name="building" className="border-input bg-background h-11 w-28 rounded-md border px-2" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               Floor
-              <input name="floor" type="number" min="1" defaultValue={1} className="border-input bg-background h-9 w-20 rounded-md border px-2" />
+              <input name="floor" type="number" min="1" defaultValue={1} className="border-input bg-background h-11 w-20 rounded-md border px-2" />
             </label>
             <Button type="submit">Add unit</Button>
           </form>
@@ -154,7 +154,7 @@ export default async function AdminUnitsSetupPage({
                         name="reasonCode"
                         defaultValue="management_approval"
                         required
-                        className="border-input bg-background h-9 rounded-md border px-2"
+                        className="border-input bg-background h-11 rounded-md border px-2"
                       >
                         {REASON_CODES.map((code) => (
                           <option key={code} value={code}>{REASON_CODE_LABELS[code]}</option>

@@ -130,7 +130,7 @@ export default async function BillingAccountsPage() {
             />
             <button
               type="submit"
-              className="bg-primary text-primary-foreground inline-flex h-9 items-center self-start rounded-md px-4 text-sm font-medium"
+              className="bg-primary text-primary-foreground inline-flex h-11 items-center self-start rounded-md px-4 text-sm font-medium"
             >
               Create account
             </button>

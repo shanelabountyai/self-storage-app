@@ -59,7 +59,7 @@ export function FacilitySwitcher({ facilities, cookieValue, canSeeAll }: Props) 
         id="facility-switcher"
         name="facilityId"
         defaultValue={currentValue}
-        className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+        className="border-input bg-background h-11 rounded-md border px-2 text-sm"
       >
         {allowAllOption && <option value={ALL_FACILITIES}>All facilities</option>}
         {facilities.map((facility) => (
@@ -70,7 +70,7 @@ export function FacilitySwitcher({ facilities, cookieValue, canSeeAll }: Props) 
       </select>
       <button
         type="submit"
-        className="border-input hover:bg-accent h-9 rounded-md border px-3 text-sm font-medium"
+        className="border-input hover:bg-accent h-11 rounded-md border px-3 text-sm font-medium"
       >
         Switch
       </button>

@@ -11720,3 +11720,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** The manual passes (VoiceOver iOS over the tab bar, gate-code reveal and Copy, payment-plan navigation; NVDA over the collapsed stepper and the locations geolocation flow) are for a person to record under B-254; no agent ticked them. **Unowned red, still open:** `smoke.spec.ts` "checkout goes back" on mobile-chrome (B-378's aria-hidden stepper `<p>` intercepts the click).
 
 **Verification.** 12 passed (a11y statement test, manage menu, `/portal/pay`, payment-plan, both projects); typecheck clean.
+
+## B-383 — Two AA defects and the unit-status legend (2026-09-23)
+
+**Commit:** `PENDING`
+
+**What it built.** `--unit-{vacant,occupied,reserved,overdue,maintenance}` with `-soft` and `-fg` in both themes; `UnitStatusBadge` re-pointed at them (green, grey, blue, red, amber; `unrentable` stays hatched) with a dot and the word on every badge. The last blue class (tenant plan note) moved to `info-*`; B-381's grep test now also covers `blue` and `gray`, and a new contrast test asserts every unit pair (4.5:1 text, 3:1 dot). Every 36px `h-9`/`min-h-9` control (inputs, selects, link buttons, about 45 places, not five) is `h-11`. Five colour-tinted `role="alert"` boxes gained a lead word (Out of date, Cannot transfer, Returned mail, Balance too high, Card declined); the two pre-mounted card-error regions gain an `aria-hidden` ⚠ only while an error is present, so the announced text is unchanged. PRD 02 US-5's AC is amended.
+
+**What it decided.** `-fg` is a third token beyond the row's `--unit-*`/`-soft`, because text on the fill needs its own measured pair. Alerts that already lead with a bold sentence, or are neutral-bordered, were left alone: the word is the cue. `Button` size `lg` is still `h-9`; nothing uses it for a form control.
+
+**What it left behind.** The `Alert` primitive that would own the icon is B-384. **Bug found (B-381's):** the impersonation banner became `bg-warning-bg text-white` (light tint, white text), failing axe colour-contrast on `impersonation.spec.ts`; it is now `bg-warning-fg`, and its `ring-offset-amber-900` (not caught by the grep, which does not cover `ring-offset-`) is a token too.
+
+**Verification.** contrast-tokens 21 passed; typecheck clean; a11y, admin, pos, tenants, transfer, move-out, reports, impersonation, portal and smoke against a production build: 1374 passed, 6 skipped. Accessibility statement re-read: no claim changed.

@@ -123,7 +123,7 @@ Grouped by feature area. AC = acceptance criteria. Stories tagged **[MVP]** or *
 ### 4.2 Unit Inventory
 
 **US-5 [MVP]** As a facility manager, I see an interactive facility map (or auto-generated grid fallback) of all units, color-coded by status, so I can answer "what's available" and find a unit visually.
-- AC: Statuses and colors: `available` (green), `occupied` (blue), `reserved` (yellow), `overlocked` (red), `maintenance` (gray), `unrentable` (hatched). Clicking a unit opens a detail panel (size, type, attributes, rate, tenant if occupied, balance, quick actions). Map supports zoom/pan; a list view with the same filters is always available. Facilities without an uploaded map layout get the grid view grouped by building/floor.
+- AC: Statuses and colors: `available` (green), `occupied` (grey), `reserved` (blue), `overlocked` (red), `maintenance` (amber), `unrentable` (hatched), as the `--unit-*` tokens (D-148; amended B-383). Every badge carries a dot and its word, never colour alone. Clicking a unit opens a detail panel (size, type, attributes, rate, tenant if occupied, balance, quick actions). Map supports zoom/pan; a list view with the same filters is always available. Facilities without an uploaded map layout get the grid view grouped by building/floor.
 - AC: Map layout is editable by admin: place/resize unit rectangles on a floor plan image (P2: layout editor; MVP: grid view + optional pre-built JSON layout import).
 
 **US-6 [MVP]** As a facility manager, I manage unit types (e.g., 10x10 Climate, 5x5 Drive-Up, Parking) with attributes (dimensions, floor, climate control, drive-up, power, door type) and assign units to types.
