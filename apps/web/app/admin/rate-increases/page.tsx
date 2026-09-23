@@ -176,7 +176,7 @@ export default async function RateIncreasesPage({
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-lg font-semibold">Rate changes — {selected.facility.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Rate changes — {selected.facility.name}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           This facility gives {facility.rateIncreaseNoticeDays} days&apos; notice, so the soonest an
           increase scheduled today can take effect is {formatDate(soonestDate)}. Nothing is sent to a
@@ -208,34 +208,34 @@ export default async function RateIncreasesPage({
           <p className="text-muted-foreground text-sm">Nothing scheduled.</p>
         ) : (
           <ScrollRegion aria-label="Scheduled rate increases">
-            <table className="w-full min-w-2xl border-collapse text-sm">
+            <table className="bg-card w-full min-w-2xl border-collapse overflow-hidden rounded-xl border text-sm">
               <caption className="sr-only">
                 Scheduled tenant rate increases with their current and new rates, dates and status
               </caption>
               <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">Tenant</th>
-                  <th scope="col" className="py-2 pr-4">Unit</th>
+                <tr className="bg-muted/50 border-input border-b text-left text-xs tracking-wide uppercase">
+                  <th scope="col" className="px-3 py-2 font-semibold">Tenant</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Unit</th>
                   {/* B-177. A money column headed "Now" is a figure with no
                       unit — these are monthly rents, not balances. */}
-                  <th scope="col" className="py-2 pr-4 text-right">Now ($/mo)</th>
-                  <th scope="col" className="py-2 pr-4 text-right">New ($/mo)</th>
-                  <th scope="col" className="py-2 pr-4">Notice on</th>
-                  <th scope="col" className="py-2 pr-4">Effective</th>
-                  <th scope="col" className="py-2 pr-4">Status</th>
-                  <th scope="col" className="py-2 pr-4">Action</th>
+                  <th scope="col" className="px-3 py-2 font-semibold text-right">Now ($/mo)</th>
+                  <th scope="col" className="px-3 py-2 font-semibold text-right">New ($/mo)</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Notice on</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Effective</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Status</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {review.rows.map((row) => (
                   <tr key={row.id} className="border-input border-b align-top">
-                    <th scope="row" className="py-2 pr-4 text-left font-normal">{row.tenantName}</th>
-                    <td className="py-2 pr-4">{row.unitNumber}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.currentRateCents)}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.newRateCents)}</td>
-                    <td className="py-2 pr-4">{formatDate(row.noticeDate)}</td>
-                    <td className="py-2 pr-4">{formatDate(row.effectiveDate)}</td>
-                    <td className="py-2 pr-4">
+                    <th scope="row" className="px-3 py-2 text-left font-normal">{row.tenantName}</th>
+                    <td className="px-3 py-2">{row.unitNumber}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCents(row.currentRateCents)}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCents(row.newRateCents)}</td>
+                    <td className="px-3 py-2">{formatDate(row.noticeDate)}</td>
+                    <td className="px-3 py-2">{formatDate(row.effectiveDate)}</td>
+                    <td className="px-3 py-2">
                       {row.isDecrease && row.status === 'approved'
                         ? 'Retention save — applies on its date'
                         : (STATUS_LABEL[row.status] ?? row.status)}
@@ -255,7 +255,7 @@ export default async function RateIncreasesPage({
                         </span>
                       )}
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="px-3 py-2">
                       <div className="flex flex-col gap-2">
                         {row.status === 'pending_approval' && canRaise && (
                           <AdminForm action={approveAction} label={`Approve increase for ${row.tenantName}`} className="flex flex-wrap items-end gap-2">
@@ -388,46 +388,46 @@ export default async function RateIncreasesPage({
           <p className="text-muted-foreground text-sm">No lease meets the rule right now.</p>
         ) : (
           <ScrollRegion aria-label="Eligible leases">
-            <table className="w-full min-w-2xl border-collapse text-sm">
+            <table className="bg-card w-full min-w-2xl border-collapse overflow-hidden rounded-xl border text-sm">
               <caption className="sr-only">Leases eligible for a rule-based rate increase</caption>
               <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">Tenant</th>
-                  <th scope="col" className="py-2 pr-4">Unit</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Now ($/mo)</th>
-                  <th scope="col" className="py-2 pr-4 text-right">New ($/mo)</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Change ($/mo)</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Street ($/mo)</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Gap ($/mo)</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Months since change</th>
-                  <th scope="col" className="py-2 pr-4">Action</th>
+                <tr className="bg-muted/50 border-input border-b text-left text-xs tracking-wide uppercase">
+                  <th scope="col" className="px-3 py-2 font-semibold">Tenant</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Unit</th>
+                  <th scope="col" className="px-3 py-2 font-semibold text-right">Now ($/mo)</th>
+                  <th scope="col" className="px-3 py-2 font-semibold text-right">New ($/mo)</th>
+                  <th scope="col" className="px-3 py-2 font-semibold text-right">Change ($/mo)</th>
+                  <th scope="col" className="px-3 py-2 font-semibold text-right">Street ($/mo)</th>
+                  <th scope="col" className="px-3 py-2 font-semibold text-right">Gap ($/mo)</th>
+                  <th scope="col" className="px-3 py-2 font-semibold text-right">Months since change</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {eligible.map((row) => (
                   <tr key={row.leaseId} className="border-input border-b">
-                    <th scope="row" className="py-2 pr-4 text-left font-normal">{row.tenantName}</th>
-                    <td className="py-2 pr-4">{row.unitNumber}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.inPlaceRateCents)}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.newRateCents)}</td>
+                    <th scope="row" className="px-3 py-2 text-left font-normal">{row.tenantName}</th>
+                    <td className="px-3 py-2">{row.unitNumber}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCents(row.inPlaceRateCents)}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCents(row.newRateCents)}</td>
                     {/* The percentage beside the dollars, per row: the delta
                         alone hides which tenants are taking the whole step. */}
-                    <td className="py-2 pr-4 text-right tabular-nums">
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">
                       +{formatCents(row.newRateCents - row.inPlaceRateCents)} (
                       {formatPercent(
                         Math.round(((row.newRateCents - row.inPlaceRateCents) / row.inPlaceRateCents) * 10_000),
                       )}
                       )
                     </td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.streetRateCents)}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.gapCents)}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{row.monthsSinceLastChange ?? '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCents(row.streetRateCents)}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{formatCents(row.gapCents)}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{row.monthsSinceLastChange ?? '—'}</td>
                     {/* B-177. This table listed every tenant, unit and rate and
                         offered no action, so the workflow was to copy a cuid out
                         of it and paste it into a form below. Plain links, which
                         prefill the picker and jump to it — no client JS, and the
                         form still refuses anything the service refuses. */}
-                    <td className="py-2 pr-4">
+                    <td className="px-3 py-2">
                       <span className="flex flex-col gap-1 text-xs">
                         <Link
                           className="underline"

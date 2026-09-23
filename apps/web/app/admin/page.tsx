@@ -32,9 +32,9 @@ function Tile({
   href: string
 }) {
   return (
-    <Link href={href} className="hover:bg-accent block rounded-lg border p-4">
-      <p className="text-muted-foreground text-sm">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+    <Link href={href} className="bg-card hover:bg-accent block rounded-xl border p-4">
+      <p className="text-muted-foreground text-sm font-medium">{label}</p>
+      <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">{value}</p>
       {hint && <p className="text-muted-foreground mt-1 text-xs">{hint}</p>}
     </Link>
   )
@@ -73,7 +73,7 @@ export default async function AdminDashboardPage({
     // links each row into that facility's own dashboard.
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-lg font-semibold">All facilities</h1>
+        <h1 className="text-2xl font-bold tracking-tight">All facilities</h1>
         <FacilityRollup heading="Across your facilities" rows={await dashboardRollup(actor)} />
         <p className="text-muted-foreground text-sm">
           For revenue, occupancy and move figures across the portfolio, see{' '}
@@ -194,7 +194,7 @@ export default async function AdminDashboardPage({
 
   return (
     <div>
-      <h1 className="text-lg font-semibold">{facility.name}</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{facility.name}</h1>
       {/* B-237. A site that bills rent and collects nothing else looks healthy
           on exactly this screen for a month — the tiles all read normally. */}
       <div className="mt-4">

@@ -37,13 +37,13 @@ export function FacilityRollup({
   if (rows.length === 0) return null
 
   return (
-    <section aria-labelledby={id} className="border-input rounded-lg border p-4">
-      <h2 id={id} className="text-sm font-medium">
+    <section aria-labelledby={id} className="bg-card rounded-xl border p-4">
+      <h2 id={id} className="text-base font-semibold">
         {heading}
       </h2>
-      <ul className="mt-2 flex flex-col gap-1 text-sm">
+      <ul className="mt-2 flex flex-col text-sm">
         {rows.map((row) => (
-          <li key={row.facilityId} className="flex flex-wrap justify-between gap-x-4">
+          <li key={row.facilityId} className="flex flex-wrap justify-between gap-x-4 border-b py-2 last:border-b-0">
             {/* B-235. The link's accessible name carries the figure beside it,
                 not just the site's name (2.4.4/2.4.6): read out of context — a
                 screen reader's link list, or one row at a time — "Cedar Park"
@@ -57,7 +57,7 @@ export function FacilityRollup({
             >
               {row.facilityName}
             </Link>
-            <span className="text-muted-foreground tabular-nums">{row.summary}</span>
+            <span className="text-muted-foreground font-mono tabular-nums">{row.summary}</span>
           </li>
         ))}
       </ul>
