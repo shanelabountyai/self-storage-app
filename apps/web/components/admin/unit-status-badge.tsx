@@ -22,7 +22,7 @@ export function UnitStatusBadge({ status, className }: { status: string; classNa
       className={cn(
         // No `capitalize`: the label arrives already written for a reader, and
         // a CSS transform cannot turn `pending_auction` into "Pending auction".
-        'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset',
         STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-900 ring-gray-500/30',
         className,
       )}

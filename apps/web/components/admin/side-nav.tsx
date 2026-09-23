@@ -32,12 +32,18 @@ export function SideNav({ groups }: { groups: readonly VisibleNavGroup[] }) {
   const activeInRest = rest.some((g) => g.items.some((item) => isActive(pathname, item.href)))
 
   return (
-    <nav aria-label="Admin" className="print:hidden w-full shrink-0 border-b p-2 sm:w-48 sm:border-r sm:border-b-0">
+    <nav
+      aria-label="Admin"
+      data-surface="inverse"
+      // B-368. The kit's SidebarNav: a dark surface-inverse column. `data-surface`
+      // re-points the focus ring to the light pine the dark band needs (B-364).
+      className="bg-inverse text-inverse-foreground print:hidden w-full shrink-0 p-2 sm:w-48 lg:w-60 lg:p-4"
+    >
       {/* Desktop: every group, stacked, each with its own heading. */}
       <div className="hidden flex-col gap-4 sm:flex">
         {groups.map((group) => (
           <div key={group.key}>
-            <h2 className="text-muted-foreground px-3 pb-1 text-xs font-medium tracking-wide uppercase">
+            <h2 className="text-inverse-muted px-3 pb-1 text-xs font-semibold tracking-wide uppercase">
               {group.label}
             </h2>
             <ul className="flex flex-col gap-1">
@@ -60,13 +66,13 @@ export function SideNav({ groups }: { groups: readonly VisibleNavGroup[] }) {
         )}
         {rest.length > 0 && (
           <details open={activeInRest} className="mt-1">
-            <summary className="text-muted-foreground inline-flex min-h-11 cursor-pointer items-center px-3 text-sm underline underline-offset-4">
+            <summary className="text-inverse-muted inline-flex min-h-11 cursor-pointer items-center px-3 text-sm underline underline-offset-4">
               More
             </summary>
             <div className="flex flex-col gap-3 pt-1">
               {rest.map((group) => (
                 <div key={group.key}>
-                  <h2 className="text-muted-foreground px-3 pb-1 text-xs font-medium tracking-wide uppercase">
+                  <h2 className="text-inverse-muted px-3 pb-1 text-xs font-semibold tracking-wide uppercase">
                     {group.label}
                   </h2>
                   <ul className="flex flex-col gap-1">
@@ -95,17 +101,18 @@ function NavLink({ href, label, active }: { href: string; label: string; active:
       <Link
         href={href}
         aria-current={active ? 'page' : undefined}
-        // B-251. The active item was `bg-accent` (1.09:1 light, 1.31:1 dark)
-        // plus `font-medium` and nothing else. `border-transparent` on the
-        // inactive state rather than no border at all, so the whole nav keeps
-        // one geometry and the active item does not shift its neighbours by
-        // 4px when you navigate.
-        className={`block rounded-md border-2 px-3 py-2 text-sm whitespace-nowrap ${
+        // B-251. The old active item was a fill of 1.09:1 and nothing else.
+        className={`relative block rounded-sm px-3 py-2 text-sm font-semibold whitespace-nowrap ${
           active
-            ? 'bg-accent border-foreground text-accent-foreground font-medium'
-            : 'border-transparent text-foreground/80 hover:bg-accent/50'
+            ? 'bg-white/12 text-inverse-foreground'
+            : 'text-inverse-muted hover:bg-white/8 hover:text-inverse-foreground'
         }`}
       >
+        {/* The kit's 3px accent bar. B-251's rule still holds: the active item
+            is told apart by more than a fill, and this bar is that mark. */}
+        {active && (
+          <span aria-hidden="true" className="absolute top-2 bottom-2 left-0 w-[3px] rounded-full bg-(--inverse-ring)" />
+        )}
         {label}
       </Link>
     </li>

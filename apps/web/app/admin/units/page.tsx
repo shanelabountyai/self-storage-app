@@ -338,8 +338,8 @@ export default async function AdminUnitsPage({
                   <li key={unit.id}>
                     {/* Each tile carries number, type and status as text —
                         colour alone never conveys the state (WCAG 1.4.1). */}
-                    <div className="w-28 rounded-md border p-2">
-                      <p className="truncate text-sm font-medium">{unit.number}</p>
+                    <div className="bg-card w-28 rounded-lg border p-2">
+                      <p className="truncate font-mono text-sm font-semibold">{unit.number}</p>
                       <p className="text-muted-foreground truncate text-xs">{unit.unitType.name}</p>
                       <UnitStatusBadge status={unit.status} className="mt-1" />
                       {stuckLock(unit) && (

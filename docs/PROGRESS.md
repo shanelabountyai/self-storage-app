@@ -11486,3 +11486,21 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **Verification.** Typecheck and lint clean. 173 targeted unit tests (portal dashboard, payment, methods, authorized-access, checkout, contrast-tokens, the two portal lint suites) passing. Schema-drift check: no difference. Logged in as the demo tenant (`dana@demo.example.com`) and by hand through `/storage/tx/dallas/demo-dallas-north` → `/checkout` step 1, in a real browser: no console errors, nav pills and active states render correctly, money renders in mono. Against a production build (`npm run build:test`, clean): **206 e2e passed, 0 failed** — `e2e/portal.spec.ts`, `e2e/checkout-unit-lost.spec.ts` and `e2e/a11y-own-spec-routes.spec.ts`, covering WCAG 2.1 AA, 320px reflow, 200% zoom, forced text spacing and the nav's own `aria-current` assertions. The accessibility statement was re-read and gained two entries — B-367's, and B-366's, which a prior session had missed. No schema change.
 
+
+## B-368 — the staff counter screens per the staff-app kit (2026-09-23)
+
+**Commit:** `pending`
+
+**What it built.** The staff shell and four screens restyled to the kit's `AppShell` visual language, on the existing routes and permissions.
+
+- **Shell.** `SideNav` is now the kit's dark `surface-inverse` column (`data-surface="inverse"` for the light focus ring), inverse-muted group labels, and a 3px accent bar on the active item beside the fill. Both the desktop stack and the phone strip/More disclosure move together. The header gets the card surface.
+- **Tenants.** Mono facility/unit, a tinted header row on a bordered card table, mono red balance when money is owed. The "days past due" column stays words, not colour alone.
+- **Delinquency.** Cards are `rounded-xl` on the card surface, the balance is mono red, the Overdue mark is a pill.
+- **Unit map.** Grid tiles carry mono unit numbers; `UnitStatusBadge` is a pill.
+- **Walk-in move-in (`/admin/pos`).** Unit-type rows on the card surface, mono rate, and a filled primary "Start move-in".
+
+**What it decided.** Kept over the kit: the real admin nav catalog (`groupedNavItems`, permission-gated), not the kit's seven items; links not buttons for filters and pagination (shareable views, FR-22); server-rendered pages, not the kit's client-state tabs and modal. Dropped per D-147: "Placeholder Storage" site picker figures, "Dana W. · site manager", "Target: under 5 minutes", "First month $1", and the kit's invented lien-step copy — the app renders real steps from the ladder. The sidebar is 192px until `lg`, 240px from there: at 244px throughout it squeezed the ledger page under 200% zoom at 640px.
+
+**What it left behind.** The kit's `Modal` tenant drawer, sort headers, header "Open main gate" and site-picker badges are not built (no data or route behind them). The unit map is still the list/grid pair with filters, not the kit's `OccupancyMeter` plus detail panel; B-369 is admin, not this. Unowned.
+
+**Verification.** Typecheck and lint clean. Against a production build: **995 passed, 5 skipped** (1000) across `a11y`, `a11y-own-spec-routes`, `admin`, `admin-tenants`, `admin-pos`, `admin-pos-together` and `admin-tasks`. The first run failed 2 (`/admin/tenants/[tenantId]/ledger/[leaseId]` at 320px, forced text spacing: a `$161.00` painted 2px past the edge) from the wider sidebar; fixed as above. Accessibility statement re-read and given an entry. No schema change.

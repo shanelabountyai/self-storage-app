@@ -62,7 +62,7 @@ export default async function TenantsPage({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">
+        <h1 className="text-2xl font-bold tracking-tight">
           Tenants{selected.mode === 'single' ? ` — ${selected.facility.name}` : ''}
         </h1>
         {hasPermissionAnywhere(actor, ['tenants:edit']) && (
@@ -112,7 +112,7 @@ export default async function TenantsPage({
                 aria-current={current ? 'page' : undefined}
                 className={
                   current
-                    ? 'bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium'
+                    ? 'bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold'
                     : 'border-input hover:bg-accent inline-flex min-h-11 items-center rounded-full border px-4 text-sm'
                 }
               >
@@ -203,25 +203,25 @@ export default async function TenantsPage({
           </p>
 
           <ScrollRegion aria-label="Tenants">
-            <table className="w-full min-w-2xl text-sm">
+            <table className="bg-card w-full min-w-2xl overflow-hidden rounded-xl border text-sm">
               <caption className="sr-only">
                 Tenants, newest lease first, filtered to {TENANT_FILTER_LABELS[filter]}
               </caption>
               <thead>
-                <tr className="border-b text-left">
-                  <th scope="col" className="py-2 font-medium">
+                <tr className="bg-muted/50 border-b text-left text-xs tracking-wide uppercase">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Name
                   </th>
-                  <th scope="col" className="py-2 font-medium">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Facility &amp; unit
                   </th>
-                  <th scope="col" className="py-2 font-medium">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Lease
                   </th>
-                  <th scope="col" className="py-2 text-right font-medium">
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">
                     Balance
                   </th>
-                  <th scope="col" className="py-2 text-right font-medium">
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">
                     Days past due
                   </th>
                 </tr>
@@ -231,7 +231,7 @@ export default async function TenantsPage({
                   const late = row.daysPastDue > 0 && row.balanceCents > 0
                   return (
                     <tr key={row.tenantId} className="border-b">
-                      <th scope="row" className="py-2 text-left font-normal">
+                      <th scope="row" className="px-3 py-2 text-left font-normal">
                         <Link
                           href={`/admin/tenants/${row.tenantId}`}
                           className="font-medium underline underline-offset-2"
@@ -239,21 +239,21 @@ export default async function TenantsPage({
                           {row.name}
                         </Link>
                       </th>
-                      <td className="py-2">
+                      <td className="px-3 py-2 font-mono text-xs">
                         {row.units.length === 0
                           ? '—'
                           : row.units
                               .map((unit) => `${unit.facilityName} — ${unit.unitNumber}`)
                               .join(', ')}
                       </td>
-                      <td className="py-2">{row.statusLabel}</td>
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="px-3 py-2">{row.statusLabel}</td>
+                      <td className={`px-3 py-2 text-right font-mono tabular-nums ${row.balanceCents > 0 ? 'text-destructive font-semibold' : ''}`}>
                         {formatCents(row.balanceCents)}
                       </td>
                       {/* 1.4.1: the state is in words. A row tinted amber and
                           nothing else is invisible to anyone who cannot see the
                           tint, and this is the column somebody acts on. */}
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="px-3 py-2 text-right tabular-nums">
                         {late ? (
                           <span className="font-medium text-amber-800">
                             {row.daysPastDue} days past due

@@ -72,7 +72,7 @@ export default async function DelinquencyQueuePage({
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Delinquency queue — {selected.facility.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Delinquency queue — {selected.facility.name}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Today&apos;s steps from every active timeline, grouped by what they need done.
         </p>
@@ -86,7 +86,7 @@ export default async function DelinquencyQueuePage({
         // the page is drawn and does not change while it is read; `role="alert"`
         // on it made a heading-and-position job into an assertive interruption
         // on every navigation back to this screen.
-        <p className="rounded-lg border-2 border-red-500 bg-red-50 p-4 text-red-950">
+        <p className="rounded-xl border-2 border-red-500 bg-red-50 p-4 text-red-950">
           <span className="font-semibold">{overdueCount} overdue</span>
           <span className="mt-1 block text-sm text-pretty">
             Still open from a day that has already passed.
@@ -109,7 +109,7 @@ export default async function DelinquencyQueuePage({
               {group.tasks.map((task) => (
                 <li
                   key={task.id}
-                  className={task.overdue ? 'rounded-lg border-2 border-red-500 p-4' : 'border-input rounded-lg border p-4'}
+                  className={task.overdue ? 'bg-card rounded-xl border-2 border-red-500 p-4' : 'bg-card rounded-xl border p-4'}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
@@ -131,7 +131,7 @@ export default async function DelinquencyQueuePage({
                           amber only underlines it. */}
                       {task.balanceCents > 0 && (
                         <p className="text-sm">
-                          <span className="font-medium tabular-nums">{formatCents(task.balanceCents)}</span>
+                          <span className="text-destructive font-mono font-semibold tabular-nums">{formatCents(task.balanceCents)}</span>
                           {task.daysPastDue > 0 && (
                             <span className="text-amber-800"> — {task.daysPastDue} days past due</span>
                           )}
@@ -143,7 +143,7 @@ export default async function DelinquencyQueuePage({
                       </p>
                     </div>
                     {task.overdue && (
-                      <span className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-900">
+                      <span className="rounded-full border border-red-300 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-900">
                         Overdue
                       </span>
                     )}
@@ -191,7 +191,7 @@ export default async function DelinquencyQueuePage({
               the plans & holds report, behind that key. */}
           <ul className="flex flex-col gap-2">
             {halted.map((lease) => (
-              <li key={lease.leaseId} className="border-input rounded-lg border p-3 text-sm">
+              <li key={lease.leaseId} className="bg-card rounded-xl border p-3 text-sm">
                 <Link
                   href={`/admin/tenants/${lease.tenantId}`}
                   className="font-medium underline underline-offset-2"

@@ -190,13 +190,13 @@ export default async function PosPage({
             return (
               <li
                 key={unitType.id}
-                className="border-input flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"
+                className="bg-card flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-sm"
               >
                 <span>
                   <span className="font-medium">{unitType.name}</span>{' '}
                   <span className="text-muted-foreground">
                     · {available} available
-                    {rate && ` · ${formatCents(rate.streetRateCents)}/mo in store`}
+                    {rate && <> · <span className="font-mono">{formatCents(rate.streetRateCents)}</span>/mo in store</>}
                   </span>
                 </span>
                 {available > 0 && rate && (
@@ -205,7 +205,7 @@ export default async function PosPage({
                     <input type="hidden" name="unitTypeId" value={unitType.id} />
                     <button
                       type="submit"
-                      className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+                      className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-semibold"
                     >
                       Start move-in
                     </button>

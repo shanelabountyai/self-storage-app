@@ -2892,6 +2892,17 @@ function reviewedOn(locale: Locale): string {
 // routes.spec.ts` all re-ran against the restyled build (206 passed): WCAG,
 // 320px reflow, 200% zoom, forced text spacing, and the nav's own `aria-
 // current` test. No claim here changes.
+//
+// Re-read 2026-09-23, at B-368. The staff shell (`/admin`'s side nav and
+// header) and the tenants, delinquency, units and POS walk-in screens were
+// restyled to the kit's `AppShell`: a dark inverse sidebar with a 3px accent
+// bar on the active item, mono unit numbers and money. `aria-current` and the
+// skip link are unchanged, and the sidebar carries `data-surface="inverse"` so
+// it uses the light focus ring. Staff screens are not what this page describes
+// to the public, but the same spec files ran against the build (995 passed):
+// WCAG, 320px reflow, 200% zoom and forced text spacing. That run caught the
+// wider sidebar squeezing content at 640px, so it widens only from `lg`. No
+// claim here changes.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
