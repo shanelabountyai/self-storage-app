@@ -11463,7 +11463,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-367 — the tenant portal and online move-in per the portal kit (2026-09-23)
 
-**Commit:** `PENDING`
+**Commit:** `15271fc`
 
 **What it built.** The signed-in tenant portal (`/portal` and its eleven routes) and the online move-in flow (`/checkout`) restyled to the kit's `PortalShell` and `MoveInFlowScreen` visual language, on the existing routes and functionality — no page merged, split, added or removed.
 
