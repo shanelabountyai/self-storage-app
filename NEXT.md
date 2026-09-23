@@ -1,5 +1,7 @@
 # Next
 
+**Audit rows are now in the backlog** (2026-09-23): B-385–B-389 (`83azzzze`–`83azzzzi`). **Next item: B-386** (smallest, no new data), then B-385. Open owner calls, no row: link underline and header CTA (§4 #8/#9), ACH/card fee copy (§2 #17), kit screens for facility page and checkout.
+
 **B-384 is built** (2026-09-23, `49783ca`). Alert/Card/Badge/EmptyState/DataTable exist in `components/ui`; Field is the admin one. Nothing queued: pick from `06-backlog.md`. The audit's other rows (staff restyle, customer-facing gaps, kit screens for facility page and checkout) still have no backlog row.
 
 
