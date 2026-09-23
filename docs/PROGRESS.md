@@ -11540,3 +11540,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Accessibility statement re-read: no claim about email, unchanged.
 
 **Verification.** Typecheck and lint clean. `auth-email-account-access` (now asserts the sign-in line and the `/login` anchor), `auth-email-conditionals` and `billing-account-members-db` pass.
+
+## B-361 — The receipt email's details table drops its "Detail / Value" header row (2026-09-23)
+
+**Commit:** `SHA`
+
+**What it built.** `EmailTable` takes `keyValue`: `tableHtml` then omits the `<thead>` and left-aligns the value cells. The receipt's details table sets it, so the email opens with the caption and the `th scope="row"` labels, no "Detail"/"Dato". The now-unused `receiptDetailsColumns` prose is removed.
+
+**What it decided.** An option on the shared `tableHtml`, not a second renderer; report and payment-plan tables are unchanged.
+
+**What it left behind.** Nothing. Accessibility statement re-read: no claim about email, unchanged.
+
+**Verification.** Typecheck clean; full unit suite 4708 passed. `receipt-balance-scope-db` now asserts no "Detail", no `scope="col"`, caption and left-aligned row cells.

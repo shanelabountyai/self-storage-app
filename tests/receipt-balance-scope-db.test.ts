@@ -340,9 +340,13 @@ describeDb('receipt balance scope (B-331)', () => {
     expect(body).toContain(`Receipt number: #${receipt.receiptNumber}`)
     expect(body).toContain(`Account: ${name}`)
     expect(body).toContain('Paid by: Check #4321')
-    expect(html).toContain(`<th scope="row" align="left">Receipt number</th><td align="right">#${receipt.receiptNumber}</td>`)
-    expect(html).toContain(`<th scope="row" align="left">Account</th><td align="right">${name}</td>`)
-    expect(html).toContain('<th scope="row" align="left">Paid by</th><td align="right">Check #4321</td>')
+    expect(html).toContain(`<th scope="row" align="left">Receipt number</th><td align="left">#${receipt.receiptNumber}</td>`)
+    // B-361: no "Detail / Value" column-header row; caption and row headers remain.
+    expect(html).not.toContain('Detail')
+    expect(html).not.toContain('scope="col"')
+    expect(html).toContain('Receipt details')
+    expect(html).toContain(`<th scope="row" align="left">Account</th><td align="left">${name}</td>`)
+    expect(html).toContain('<th scope="row" align="left">Paid by</th><td align="left">Check #4321</td>')
   })
 
   it('renders a card receipt with no receipt number', async () => {

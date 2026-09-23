@@ -789,7 +789,7 @@ function receiptDetailsValue(
   ]
   return {
     text: rows.map(([name, value]) => `${name}: ${value}`).join('\n'),
-    html: tableHtml({ caption: say.receiptDetailsCaption, columns: [...say.receiptDetailsColumns], rows }),
+    html: tableHtml({ caption: say.receiptDetailsCaption, columns: [], keyValue: true, rows }),
   }
 }
 

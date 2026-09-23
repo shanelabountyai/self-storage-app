@@ -25,6 +25,9 @@ export type EmailTable = {
   caption: string
   /// Column headings, in order. The FIRST one labels the row-header column.
   columns: string[]
+  /// B-361. A two-cell label/value table: no column-header row (it would only say
+  /// "Detail / Value") and the values sit beside their labels, left-aligned.
+  keyValue?: boolean
   /// Each row's cells, in the same order as `columns`. The first cell is
   /// rendered as a `<th scope="row">`, because in every report here the first
   /// column names the thing the row is about.
@@ -100,9 +103,11 @@ function tableText(table: EmailTable): string[] {
 /// `<caption>`, `<th scope="col">` and `<th scope="row">` are one implementation
 /// that was reviewed once rather than a second one written by hand.
 export function tableHtml(table: EmailTable): string {
-  const head = table.columns
+  const head = table.keyValue
+    ? ''
+    : `<thead><tr>${table.columns
     .map((column) => `<th scope="col" align="left">${escapeHtml(column)}</th>`)
-    .join('')
+    .join('')}</tr></thead>`
   const body = table.rows
     .map((row) => {
       const [first, ...rest] = row
@@ -110,7 +115,7 @@ export function tableHtml(table: EmailTable): string {
       // so it is a row header. Without this a screen reader reads "12,900"
       // with nothing saying which site it belongs to.
       const header = `<th scope="row" align="left">${escapeHtml(first ?? '')}</th>`
-      const cells = rest.map((cell) => `<td align="right">${escapeHtml(cell)}</td>`).join('')
+      const cells = rest.map((cell) => `<td align="${table.keyValue ? 'left' : 'right'}">${escapeHtml(cell)}</td>`).join('')
       return `<tr>${header}${cells}</tr>`
     })
     .join('')
@@ -118,7 +123,7 @@ export function tableHtml(table: EmailTable): string {
   return (
     `<table role="table" border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">` +
     `<caption align="left" style="text-align:left;padding-bottom:4px">${escapeHtml(table.caption)}</caption>` +
-    `<thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`
+    `${head}<tbody>${body}</tbody></table>`
   )
 }
 
