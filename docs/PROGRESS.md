@@ -11711,7 +11711,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-382 — Test gaps this block leaves (2026-09-23)
 
-**Commit:** `PENDING`
+**Commit:** `79d1614`
 
 **What it built.** One e2e test in `a11y.spec.ts`: `/accessibility` is rendered and every `customerFacingStateExceptions()` reason must appear on it verbatim. Parts (1) and (2) needed no new code: `/portal | manage menu open` (B-247) already measures the open Manage `<details>` at 320px, 200% zoom and forced text spacing, and the public and portal forced-spacing loops already cover `/`, `/storage/search`, the facility page and `/portal/pay`, where B-363's mono prices render. Those were re-run and pass on both projects. B-371, B-372, B-374 and B-378 added no scanned state beyond B-371's "gate code revealed", which already has a `STATE_REACH` entry.
 
