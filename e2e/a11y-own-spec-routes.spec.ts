@@ -8,8 +8,9 @@ import {
   signInAsDemoOwner,
   signInAsDemoTenant,
   signInAsPlanTenant,
+  signInAsPosTenant,
 } from './sign-in'
-import { expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
+import { expectNoHorizontalOverflow, revealGateCode, TEXT_SPACING } from './a11y-helpers'
 import { createPayReceiptFixture } from './pay-receipt-fixture'
 
 // B-201 / PRD 02 §5.5 FR-24 (WCAG 2.1 AA, 1.4.10 Reflow, 1.4.4 Resize text,
@@ -41,6 +42,7 @@ type Audience =
   | 'admin'
   | 'tenant'
   | 'plan-tenant'
+  | 'pos-tenant'
   | 'business-payer'
   | 'business-member'
   /// B-090 part 6. Every other audience is a person signed in; a Spanish
@@ -52,6 +54,7 @@ async function signIn(page: Page, audience: Audience): Promise<void> {
   if (audience === 'public') return
   if (audience === 'admin') await signInAsDemoOwner(page)
   else if (audience === 'plan-tenant') await signInAsPlanTenant(page)
+  else if (audience === 'pos-tenant') await signInAsPosTenant(page)
   // B-256. Casey Contractor holds no lease, so this is the only session in
   // which the account card and the consolidated pay screen render at all.
   else if (audience === 'business-payer') await signInAsBusinessPayer(page)
@@ -450,6 +453,15 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
       // Refused, which is the state named — and repeatable, because nothing is
       // written by a refusal.
       await page.getByRole('button', { name: /^Agree the plan for unit/ }).click()
+    },
+  },
+  // B-371. The revealed gate code: six 44px digits and a Copy button that spilled
+  // out of the card at 320px. The reveal needs a click, so nothing measured it.
+  '/portal | gate code revealed': {
+    audience: 'pos-tenant',
+    async go(page) {
+      await page.goto('/portal')
+      await revealGateCode(page)
     },
   },
   '/portal | payment plan card': {

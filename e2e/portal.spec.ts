@@ -1,11 +1,12 @@
 import { PORTAL_SCAN_ROUTES as PORTAL_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
-import { signInAsDemoTenant, signInAsPlanTenant } from './sign-in'
+import { signInAsDemoTenant, signInAsPlanTenant, signInAsPosTenant } from './sign-in'
 import {
   assertNoAxeViolations,
   expectAnnounced,
   expectNoHorizontalOverflow,
   expectPreexisting,
+  revealGateCode,
   TEXT_SPACING,
 } from './a11y-helpers'
 
@@ -766,5 +767,30 @@ test.describe('signed in as the tenant on a payment plan', () => {
     const heading = planRegion.getByRole('heading', { level: 2 })
     await expect(heading).toHaveCount(1)
     await expect(heading).toContainText('Unit')
+  })
+})
+
+test.describe('signed in as the POS tenant, who has an active gate code (B-371)', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsPosTenant(page)
+  })
+
+  // a11y-state: /portal | gate code revealed
+  test('the revealed gate code has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/portal')
+    await revealGateCode(page)
+    await assertNoAxeViolations(page, { state: 'gate code revealed' })
+
+    // B-371: at 320px the Copy button lies inside the card, and both buttons
+    // are at least 44x44.
+    await page.setViewportSize({ width: 320, height: 800 })
+    const card = page.locator('[data-surface="inverse"]').filter({ hasText: 'Copy' }).last()
+    const cardBox = (await card.boundingBox())!
+    for (const name of [/copy/i, /hide gate code/i]) {
+      const box = (await card.getByRole('button', { name }).boundingBox())!
+      expect(box.width).toBeGreaterThanOrEqual(44)
+      expect(box.height).toBeGreaterThanOrEqual(44)
+      expect(box.x + box.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+    }
   })
 })

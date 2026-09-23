@@ -11564,3 +11564,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Accessibility statement re-read: it renders both lists, and no count is written on the page.
 
 **Verification.** Typecheck clean; `a11y-scan-coverage` 14 passed; `pay-link`, `portal` and `a11y-own-spec-routes` e2e 220 passed against a production build.
+
+## B-371 — The revealed gate code fits a 320px phone (2026-09-23)
+
+**Commit:** `SHA_PENDING`
+
+**What it built.** The digits scale (`clamp(28px, 11vw, 44px)`) and wrap with the Copy button; both panel buttons are 44px high. A new `inverse` Button variant carries every rest, hover and `aria-expanded` pair on inverse-surface tokens (new `--inverse-raised` fill), fixing the dark-ink-on-dark hover. `/portal | gate code revealed` is a `SCANNED_STATES` entry and a `STATE_REACH` entry, so the revealed card now runs the 320px, 200% and text-spacing checks. `contrast-tokens` asserts the variant's pairs.
+
+**What it decided.** The reach uses the POS tenant (Alex): the seed gives him a login and a real encrypted PIN (`482916`), because every other seeded credential is an unreadable placeholder and no e2e had ever rendered a gate code. Box and 44px assertions live in `portal.spec.ts`.
+
+**What it left behind.** Nothing. Accessibility statement: comment log records that `a11y.true.resize` was false on `/portal` from B-367 until this commit. **Local setup:** `.env.test` held a 5-byte `ACCESS_CODE_ENCRYPTION_KEY` (CI has the valid 64-hex one); fixed locally, then `db:migrate:e2e`.
+
+**Verification.** Typecheck clean; contrast and scan-coverage unit tests pass; `portal` and `a11y-own-spec-routes` e2e 206 passed against a production build. The box/44px check fails on the old panel.

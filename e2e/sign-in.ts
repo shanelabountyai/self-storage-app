@@ -7,6 +7,7 @@ import {
   DEMO_BUSINESS_PAYER_EMAIL,
   DEMO_BUSINESS_MEMBER_EMAIL,
   DEMO_PLAN_TENANT_EMAIL,
+  DEMO_POS_TENANT_EMAIL,
   DEMO_STAFF_EMAIL,
   DEMO_STAFF_PASSWORD,
   DEMO_STAFF_TOTP_SECRET,
@@ -150,6 +151,16 @@ export async function signInAsPlanTenant(page: Page): Promise<void> {
   await signInWithPassword(
     page,
     { email: DEMO_PLAN_TENANT_EMAIL, password: DEMO_TENANT_PASSWORD, audience: 'tenant' },
+    '/portal',
+  )
+}
+
+/// B-371. Alex, the POS tenant: active lease, so the portal shows a real
+/// (maskable) gate code. Reads only; the POS specs own his balance.
+export async function signInAsPosTenant(page: Page): Promise<void> {
+  await signInWithPassword(
+    page,
+    { email: DEMO_POS_TENANT_EMAIL, password: DEMO_TENANT_PASSWORD, audience: 'tenant' },
     '/portal',
   )
 }

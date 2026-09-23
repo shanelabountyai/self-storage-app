@@ -804,6 +804,12 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layout: 'reached',
   },
   {
+    route: '/portal',
+    state: 'gate code revealed',
+    spec: 'e2e/portal.spec.ts',
+    layout: 'reached',
+  },
+  {
     route: '/admin/delinquency',
     state: 'the halted-leases section',
     spec: 'e2e/admin.spec.ts',

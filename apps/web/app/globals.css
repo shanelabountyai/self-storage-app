@@ -9,6 +9,7 @@
   --color-inverse: var(--inverse);
   --color-inverse-foreground: var(--inverse-foreground);
   --color-inverse-muted: var(--inverse-muted);
+  --color-inverse-raised: var(--inverse-raised);
   --color-foreground: var(--foreground);
   /* B-363 (D-146): the design system's three families. Archivo is display
      only; body copy stays in Source Sans 3 and figures in JetBrains Mono. */
@@ -109,6 +110,9 @@
   --inverse: oklch(0.235 0.018 62);
   --inverse-foreground: oklch(0.965 0.008 80);
   --inverse-muted: oklch(0.72 0.012 75);
+  /* B-371. Hover / expanded fill for a control on the inverse surface — a solid
+     token so its text pair is measurable (a translucent overlay is not). */
+  --inverse-raised: oklch(0.32 0.018 62);
   /* pine-600 is 3.14:1 on the dark band — over the floor by a rounding error —
      so a dark band swaps in a light pine (7.89:1) through the rule below. */
   --inverse-ring: oklch(0.75 0.11 175);

@@ -7,6 +7,7 @@ import { recomputeUnitStatus } from '@/lib/admin/units'
 import { exampleNoticeTemplate } from '@/lib/admin/notice-templates'
 import { openAuctionCase } from '@/lib/auctions/service'
 import { setPassword } from '@/lib/auth/accounts'
+import { accessCodeEncryptionKey, encryptCode } from '@/lib/access/secret'
 import { encryptTotpSecret } from '@/lib/auth/totp-secret'
 import {
   DEMO_EMAIL_DOMAIN,
@@ -801,10 +802,24 @@ async function seedLifecycleStates(
           })
         : await makeTenant('Alex', 'Active', index)
     if (isPrimaryFacility && i === 0) await recordSeedAddress(tenant.id, index)
+    // B-371. The one tenant with an ACTIVE gate credential and a login, so the
+    // revealed gate-code card can be reached. Sign-in only reads; the POS specs
+    // are what mutate this tenant's balance.
+    if (isPrimaryFacility && i === 0 && !NO_LOGINS) await setPassword(tenant.id, 'tenant', DEMO_TENANT_PASSWORD)
     index++
     const slot = next()
     const lease = await makeLease(facility.id, slot.unit.id, tenant.id, 'active', slot.rate, 90 + i * 30)
     note('active')
+    // B-371. Every other seeded credential is an unreadable placeholder, so no
+    // e2e ever saw a revealed gate code. The POS tenant's gets a real encrypted
+    // PIN (skipped when the key is unset). Demo data, never production.
+    const codeKey = accessCodeEncryptionKey()
+    if (isPrimaryFacility && i === 0 && codeKey) {
+      await prisma.accessCredential.updateMany({
+        where: { leaseId: lease.id, type: 'pin' },
+        data: { valueRef: encryptCode('482916', codeKey) },
+      })
+    }
 
     // B-090 part 5. One business account, so the screen has something on it
     // and so a reader can see what "one payer, somebody else's unit" looks

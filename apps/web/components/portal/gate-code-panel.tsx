@@ -38,18 +38,18 @@ export function GateCodePanel({ code }: { code: string }) {
     <div data-surface="inverse" className="bg-inverse text-inverse-foreground flex flex-col gap-3 rounded-lg p-4">
       <Button
         type="button"
-        variant="outline"
+        variant="inverse"
         size="sm"
         aria-expanded={revealed}
         onClick={() => setRevealed((value) => !value)}
-        className="border-inverse-muted bg-transparent text-inverse-foreground hover:bg-inverse-muted/20 self-start"
+        className="h-11 min-w-11 self-start"
       >
         {revealed ? t('gate.hide') : t('gate.show')}
       </Button>
 
       {revealed && (
-        <div className="flex items-center gap-3">
-          <span aria-hidden="true" className="font-mono text-[44px] leading-none tracking-[0.15em]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span aria-hidden="true" className="font-mono text-[clamp(28px,11vw,44px)] leading-none tracking-[0.15em]">
             {code}
           </span>
           {/* Space-separated so a screen reader speaks each digit rather than
@@ -57,10 +57,10 @@ export function GateCodePanel({ code }: { code: string }) {
           <span className="sr-only">{code.split('').join(' ')}</span>
           <Button
             type="button"
-            variant="ghost"
+            variant="inverse"
             size="sm"
             onClick={handleCopy}
-            className="text-inverse-foreground hover:bg-inverse-muted/20"
+            className="h-11 min-w-11"
           >
             {t('gate.copy')}
           </Button>

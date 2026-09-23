@@ -197,4 +197,19 @@ describe('the inverse surface', () => {
     expect(contrast(t('inverse-ring'), t('inverse'))).toBeGreaterThanOrEqual(3)
     expect(css).toMatch(/\[data-surface='inverse'\]\s*\{\s*--ring:\s*var\(--inverse-ring\)/)
   })
+
+  // B-371. The `inverse` Button variant: rest sits on --inverse, hover and
+  // aria-expanded on --inverse-raised, all with --inverse-foreground text; the
+  // border is a control boundary (3:1) and the focus ring stays --inverse-ring.
+  it('the inverse button variant holds 4.5:1 text and 3:1 non-text in every state', () => {
+    for (const bg of ['inverse', 'inverse-raised']) {
+      expect(contrast(t('inverse-foreground'), t(bg))).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(t('inverse-ring'), t(bg))).toBeGreaterThanOrEqual(3)
+    }
+    expect(contrast(t('inverse-muted'), t('inverse'))).toBeGreaterThanOrEqual(3)
+    const variant = /inverse:\s*"([^"]+)"/.exec(
+      readFileSync(fileURLToPath(new URL('../apps/web/components/ui/button.tsx', import.meta.url)), 'utf8'),
+    )![1]
+    expect(variant).not.toMatch(/(^|\s)(hover:|aria-expanded:)?text-(foreground|muted-foreground)\b/)
+  })
 })

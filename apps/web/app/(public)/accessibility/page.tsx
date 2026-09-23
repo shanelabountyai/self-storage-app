@@ -2907,6 +2907,14 @@ function reviewedOn(locale: Locale): string {
 // WCAG, 320px reflow, 200% zoom and forced text spacing. That run caught the
 // wider sidebar squeezing content at 640px, so it widens only from `lg`. No
 // claim here changes.
+//
+// Re-read 2026-09-23, at B-371. `a11y.true.resize` ("the page reflows to 320px
+// wide without sideways scrolling") was FALSE on `/portal` from B-367 until
+// this commit: the revealed gate code (six 44px digits plus the Copy button on
+// one non-wrapping row) spilled out of its card at 320px, and nothing measured
+// it because the reveal needs a click. The digits now scale and wrap, both
+// panel buttons are 44px, and a `STATE_REACH` entry runs the revealed card
+// through the 320px, 200% and text-spacing checks. The claim is true again.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

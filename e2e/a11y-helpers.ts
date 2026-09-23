@@ -489,3 +489,11 @@ export const TEXT_SPACING = `* {
   word-spacing: 0.16em !important;
 }
 p { margin-bottom: 2em !important; }`
+
+/// B-371. The gate code is masked until a tap, so no route-level scan or layout
+/// loop ever measured the revealed card (which overflowed at 320px). Reveals it
+/// on `/portal` and waits for the digits' sr-only twin.
+export async function revealGateCode(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /show gate code/i }).first().click()
+  await expect(page.getByRole('button', { name: /copy/i }).first()).toBeVisible()
+}
