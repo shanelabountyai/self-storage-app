@@ -11600,3 +11600,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Accessibility statement re-read: it makes no claim about the header's buttons.
 
 **Verification.** Typecheck and lint clean; smoke (new B-373 spec), a11y `/checkout` axe and forced-spacing, and checkout-unit-lost e2e passed against a production build.
+
+## B-374 — "Use my location" no longer sticks on "Finding you…" (2026-09-23)
+
+**Commit:** `SHA_PENDING`
+
+**What it built.** `UseMyLocation` returns to idle before it `router.push`es, so a same-route navigation (`/storage/locations`, `/storage/search`) leaves the button reading "Use my location". The locations page's `role="status"` is now always mounted and empty until there is a point, so the nearest-first sentence is written into a region that already exists.
+
+**What it decided.** The reset happens before the push, not on an effect after it: the component does not remount on a same-route push, so nothing else would run.
+
+**What it left behind.** Nothing. Accessibility statement re-read: it makes no claim about the location button. The NVDA pass over this flow stays with B-382/B-254 and is ticked by no agent.
+
+**Verification.** Typecheck clean; smoke "use my location" (new, EN and ES, both routes plus the denied message) passed against a production build.

@@ -11,6 +11,49 @@ test('home page renders its search hero', async ({ page }) => {
   await expect(page.getByLabel('Where do you need storage?')).toBeVisible()
 })
 
+// B-374. Same-route navigation does not remount the button, so it used to stay
+// on "Finding you…" for ever, and the locations status was inserted with its
+// text rather than written into a region that already existed.
+const GEO_COPY = {
+  en: { use: 'Use my location', denied: /couldn't get your location/, nearest: 'Nearest first, based on where you are.' },
+  es: { use: 'Usar mi ubicación', denied: /No pudimos/, nearest: 'Las más cercanas primero, según su ubicación.' },
+} as const
+
+for (const lang of ['en', 'es'] as const) {
+  test.describe(`use my location (${lang}, B-374)`, () => {
+    const copy = GEO_COPY[lang]
+    test.beforeEach(async ({ context }) => {
+      if (lang === 'es') {
+        await context.addCookies([{ name: 'st_locale', value: 'es', url: 'http://localhost:3000' }])
+      }
+    })
+
+    for (const route of ['/storage/locations', '/storage/search']) {
+      test(`${route}: label resets and the URL gains lat/lng`, async ({ page, context }) => {
+        await context.grantPermissions(['geolocation'])
+        await context.setGeolocation({ latitude: 30.2672, longitude: -97.7431 })
+        await page.goto(route)
+        const status = page.locator('main [role="status"]').first()
+        await expect(status).toBeAttached()
+
+        await page.getByRole('button', { name: copy.use }).click()
+        await expect(page).toHaveURL(/lat=30\.267\d*&lng=-97\.743\d*/)
+        await expect(page.getByRole('button', { name: copy.use })).toBeVisible()
+        if (route === '/storage/locations') {
+          await expect(page.getByRole('status').filter({ hasText: copy.nearest })).toHaveCount(1)
+        }
+      })
+    }
+
+    test('denied permission shows the denied message', async ({ page, context }) => {
+      await context.clearPermissions()
+      await page.goto('/storage/locations')
+      await page.getByRole('button', { name: copy.use }).click()
+      await expect(page.getByRole('status').filter({ hasText: copy.denied })).toBeVisible()
+    })
+  })
+}
+
 test('the first tab stop is the skip link', async ({ page }) => {
   await page.goto('/')
 

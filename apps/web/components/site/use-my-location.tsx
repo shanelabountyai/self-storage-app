@@ -46,6 +46,10 @@ export function UseMyLocation({
         const params = new URLSearchParams(carry)
         params.set('lat', latitude.toFixed(5))
         params.set('lng', longitude.toFixed(5))
+        // Back to idle before navigating: when the target is the page we are
+        // already on, this component does not remount, so `locating` would
+        // otherwise stay on screen forever (B-374).
+        setState('idle')
         router.push(`${target}?${params.toString()}`)
       },
       // Covers an outright denial and a timeout alike: either way the answer to
