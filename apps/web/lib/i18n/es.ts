@@ -157,6 +157,7 @@ export const es: Dictionary = {
   'dead.call': 'Llame al {phone}',
   'dead.callSuffix': 'y le buscamos una unidad.',
   'card.noUnits': 'No hay unidades disponibles en este momento —',
+  'card.noneInSize': 'No hay unidades {size} disponibles en este momento —',
   'card.call': 'llame al {phone}',
   'card.from': 'desde',
   'card.perMonth': '/mes',

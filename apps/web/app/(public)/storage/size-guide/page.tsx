@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { SITE } from '@/lib/site-config'
 import { formatRate } from '@/lib/format'
+import { sizeBandFor } from '@/lib/inventory/unit-filters'
 import { cachedSizePricing } from '@/lib/inventory/public-inventory'
 import {
   dimensionKey,
@@ -102,6 +103,18 @@ export default async function SizeGuidePage() {
               </ul>
 
               <p className="text-muted-foreground mt-3 text-sm text-pretty">{size.typical}</p>
+
+              {/* B-376: the next step from a size. The band travels, and the
+                  size is in the link's name (SC 2.4.4). */}
+              <p className="mt-3 text-sm">
+                <Link
+                  href={`/storage/search?size=${sizeBandFor(size.sqFt)}`}
+                  className="font-medium underline underline-offset-4"
+                >
+                  See facilities
+                  <span className="sr-only"> with {size.spoken} units</span>
+                </Link>
+              </p>
             </section>
           )
         })}
@@ -112,9 +125,9 @@ export default async function SizeGuidePage() {
           If you are between two sizes
         </h2>
         <p className="mt-2 text-pretty">
-          Take the larger one. The difference in rent is usually a few dollars a month, and it is a
-          great deal cheaper than discovering on moving day that the last of it does not fit. You can
-          move to a different size later if you get it wrong.
+          Take the larger one. Compare the starting prices above; it is a great deal cheaper than
+          discovering on moving day that the last of it does not fit. You can move to a different
+          size later if you get it wrong.
         </p>
         <p className="mt-4">
           Still not sure?{' '}

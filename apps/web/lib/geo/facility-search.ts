@@ -3,6 +3,7 @@ import {
   lowestAvailableWebRateByFacility,
   type FacilityFromRate,
 } from '@/lib/inventory/public-inventory'
+import type { SizeBand } from '@/lib/inventory/unit-filters'
 import { distanceMiles, geocodeQuery, type GeoPoint } from './geocode'
 
 // PRD 01 US-101 / FR-1.1. Radius search over facility coordinates, ranked by
@@ -63,9 +64,10 @@ export type SearchOutcome =
   | { status: 'not_found'; query: string }
   | { status: 'empty' }
 
-type SearchInput = { q?: string; point?: GeoPoint }
+/// `size` (B-376): price each facility by its cheapest available unit in this band.
+type SearchInput = { q?: string; point?: GeoPoint; size?: SizeBand }
 
-async function rankFacilities(point: GeoPoint): Promise<FacilityResult[]> {
+async function rankFacilities(point: GeoPoint, size?: SizeBand): Promise<FacilityResult[]> {
   const facilities = await prisma.facility.findMany({
     // Only active sites are advertised, matching the public inventory feed.
     // Facilities without coordinates cannot be ranked and are excluded rather
@@ -89,7 +91,7 @@ async function rankFacilities(point: GeoPoint): Promise<FacilityResult[]> {
 
   const ids = facilities.map((f) => f.id)
   const [fromRates, photos] = await Promise.all([
-    lowestAvailableWebRateByFacility(ids),
+    lowestAvailableWebRateByFacility(ids, new Date(), size),
     // One row per facility rather than the whole gallery: `distinct` on a
     // sorted read is Postgres's DISTINCT ON, so this stays a single query
     // however many facilities rank. Only the url is selected — the thumbnail is
@@ -124,7 +126,7 @@ export async function searchFacilities(input: SearchInput): Promise<SearchOutcom
   // "Use my location" hands over a point directly, so it skips geocoding
   // entirely (US-101: geolocation is offered, never required).
   if (input.point) {
-    const ranked = await rankFacilities(input.point)
+    const ranked = await rankFacilities(input.point, input.size)
     return partition(ranked, 'Your location', '', input.point)
   }
 
@@ -134,7 +136,7 @@ export async function searchFacilities(input: SearchInput): Promise<SearchOutcom
   const geocoded = geocodeQuery(query)
   if (!geocoded) return { status: 'not_found', query }
 
-  const ranked = await rankFacilities(geocoded)
+  const ranked = await rankFacilities(geocoded, input.size)
   return partition(ranked, geocoded.label, query, geocoded)
 }
 

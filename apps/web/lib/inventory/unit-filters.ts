@@ -67,7 +67,7 @@ export function parseFilters(params: {
   }
 }
 
-function matchesSize(unitType: { sqFt: number }, band: SizeBand): boolean {
+export function matchesSize(unitType: { sqFt: number }, band: SizeBand): boolean {
   const bounds = SIZE_BANDS[band] as { min?: number; max?: number }
   if (bounds.min !== undefined && unitType.sqFt < bounds.min) return false
   if (bounds.max !== undefined && unitType.sqFt > bounds.max) return false

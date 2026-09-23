@@ -11624,3 +11624,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Staff-only, so the accessibility statement makes no claim about it. Coverage is e2e, not a unit test: the list is a server component over the DB, so two new specs assert no red balance beside a "Current" row and at least one beside "days past due", and no `bg-primary` "Start move-in".
 
 **Verification.** Typecheck clean; admin-tenants, admin-pos and admin-reports e2e: 186 passed.
+
+## B-376 — A priced size leads to a search page that shows that size's price (2026-09-23)
+
+**Commit:** `PENDING`
+
+**What it built.** `/storage/search?size=<band>` prices each card by the cheapest available unit in that band at that facility (`lowestAvailableWebRateByFacility` takes an optional band; `matchesSize` is now exported), so the card, its one-sentence accessible name and the map marker agree with the size chosen. A facility with none in the band says "No {size} units available right now" and offers the phone. The home eyebrow reads "Available now", not "Open now". Each size-guide card has a "See facilities" link carrying its band, with the size in its accessible name. The "few dollars a month" sentence is gone. `/storage/locations` is linked from the search results and the footer's Storage column.
+
+**What it decided.** The band scopes the price only; ranking stays by distance, as B-082 part 3 decided. The card's "no units" wording does not distinguish "nothing in this band" from "nothing at all". `/storage/search?size=medium&q=78704` joins `PUBLIC_SCAN_ROUTES`.
+
+**What it left behind.** The size guide is still English-only (B-017), so its new link is too. The home size card's figure is still the cheapest across every city; the search page now shows the per-facility price. Reviewer's claim that search "drops the size" was false (recorded in the backlog row); the price mismatch was the true part.
+
+**Verification.** Typecheck clean; lint clean; a11y, i18n and smoke e2e: 528 passed, 4 skipped, including two new specs (band price equals the facility page's first unit; size-guide links carry `size=`, footer lists locations). Accessibility statement re-read: no claim about search pricing or the size guide.

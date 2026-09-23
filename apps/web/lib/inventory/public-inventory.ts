@@ -4,6 +4,7 @@ import { effectiveByGroup } from '@storage/core/facility-settings'
 import type { TaxRate } from '@storage/core/pricing'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { mintQuoteToken } from '@/lib/pricing/quote-token'
+import { matchesSize, type SizeBand } from './unit-filters'
 
 // PRD 01 FR-2.1 / US-201. The public, unauthenticated read behind facility and
 // search pages. Two rules shape it:
@@ -258,20 +259,26 @@ async function availableRatedTypes(facilityIds: string[], asOf: Date) {
         webRateCents: rate.webRateCents,
         widthFt: size.widthFt,
         lengthFt: size.lengthFt,
+        sqFt: size.widthFt * size.lengthFt,
         available: row._count._all,
       },
     ]
   })
 }
 
+/// `size` (B-376) narrows the read to one band, so a search that carries a size
+/// prices each facility by the cheapest unit IN that band rather than by its
+/// cheapest unit of any size.
 export async function lowestAvailableWebRateByFacility(
   facilityIds: string[],
   asOf: Date = new Date(),
+  size?: SizeBand,
 ): Promise<Map<string, FacilityFromRate>> {
   if (facilityIds.length === 0) return new Map()
 
   const lowest = new Map<string, FacilityFromRate>()
   for (const row of await availableRatedTypes(facilityIds, asOf)) {
+    if (size && !matchesSize(row, size)) continue
     const current = lowest.get(row.facilityId)
     if (current === undefined) {
       lowest.set(row.facilityId, {

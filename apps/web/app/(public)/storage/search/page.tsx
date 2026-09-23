@@ -116,10 +116,13 @@ function ResultCard({
   facility,
   href,
   dict,
+  sizeLabel,
 }: {
   facility: FacilityResult
   href: string
   dict: Dictionary
+  /// B-376: the carried size band in words, when the price is band-scoped.
+  sizeLabel?: string
 }) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
@@ -190,7 +193,7 @@ function ResultCard({
             // render $0. Saying so plainly beats an empty space the reader has to
             // interpret (§6.7).
             <>
-              {t('card.noUnits')}{' '}
+              {sizeLabel ? t('card.noneInSize', { size: sizeLabel }) : t('card.noUnits')}{' '}
               <a href={`tel:${SITE.phone.href}`} className="underline underline-offset-4">
                 {t('card.call', { phone: SITE.phone.display })}
               </a>
@@ -271,10 +274,12 @@ function Results({
   outcome,
   filters,
   dict,
+  sizeLabel,
 }: {
   outcome: SearchOutcome
   filters: string
   dict: Dictionary
+  sizeLabel?: string
 }) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
@@ -322,6 +327,7 @@ function Results({
               facility={facility}
               href={facilityHref(facility, query, filters)}
               dict={dict}
+              sizeLabel={sizeLabel}
             />
           ))}
         </ul>
@@ -350,6 +356,7 @@ function Results({
               facility={facility}
               href={facilityHref(facility, query, filters)}
               dict={dict}
+              sizeLabel={sizeLabel}
             />
         ))}
       </ul>
@@ -381,7 +388,10 @@ export default async function SearchPage({
   // facility against NaN. Shared with B-366's locations page.
   const point = parseGeoPoint({ lat, lng })
 
-  const outcome = await searchFacilities({ q, point })
+  // B-376: a size carried in the URL prices each card by that band. An
+  // unrecognised value parses to undefined and prices as before.
+  const { size: sizeBand } = parseFilters({ size })
+  const outcome = await searchFacilities({ q, point, size: sizeBand })
 
   // The map plots whatever the list showed, including the out-of-radius
   // suggestions — a renter told "nothing within 25 miles, here are three
@@ -432,7 +442,19 @@ export default async function SearchPage({
         </p>
       )}
 
-      <Results outcome={outcome} filters={filters} dict={dict} />
+      <Results
+        outcome={outcome}
+        filters={filters}
+        dict={dict}
+        sizeLabel={sizeBand ? translate(dict, SIZE_BANDS[sizeBand].labelKey) : undefined}
+      />
+
+      {/* B-376: the directory is otherwise reachable only from the home page. */}
+      <p className="mt-8 text-sm">
+        <Link href="/storage/locations" className="underline underline-offset-4">
+          {translate(dict, 'home.allLocations')}
+        </Link>
+      </p>
 
       {/* After the list, never instead of it, and never before it — the text
           equivalent has to precede the map the same way the facility page puts

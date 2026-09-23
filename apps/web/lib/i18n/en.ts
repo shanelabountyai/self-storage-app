@@ -62,7 +62,7 @@ export const en = {
     "Reserve a unit online. If anything goes sideways — a gate code, a moving truck that won't fit — call",
   'home.noCard': 'No card needed to hold a unit.',
   'home.checkOnline': 'Reserve, sign and pay online',
-  'home.sizesEyebrow': 'Open now',
+  'home.sizesEyebrow': 'Available now',
   'home.sizesHeading': "Pick the size, we'll show you what's open",
   'home.sizeGuideLink': 'Full size guide',
   'home.sizeSr': '{width} by {length} foot',
@@ -150,7 +150,7 @@ export const en = {
   'search.sizeGuideLink': 'size guide',
 
   // B-366. The all-locations directory, linked from the home page's
-  // facilities section and from the search results.
+  // facilities section, the search results and the footer's Storage column.
   'locations.title': 'All locations',
   'locations.metaDescription':
     'Every facility we operate, with its address, phone number, and starting price.',
@@ -160,6 +160,7 @@ export const en = {
   'dead.call': 'Call {phone}',
   'dead.callSuffix': 'and we will find you a unit.',
   'card.noUnits': 'No units available right now —',
+  'card.noneInSize': 'No {size} units available right now —',
   'card.call': 'call {phone}',
   'card.from': 'from',
   'card.perMonth': '/mo',

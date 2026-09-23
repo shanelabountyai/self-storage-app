@@ -41,6 +41,7 @@ export async function SiteFooter({ locale }: { locale: Locale }) {
       links: [
         { href: '/storage/search', label: t('chrome.findStorage') },
         ...cities.map((c) => ({ href: c.href, label: c.city })),
+        { href: '/storage/locations', label: t('home.allLocations') },
         { href: '/guides', label: t('chrome.guides') },
       ],
     },

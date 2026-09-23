@@ -808,6 +808,35 @@ test('a search result carries its query into the facility page', async ({ page }
   await expect(page).toHaveURL(/\/storage\/search\?q=78704/)
 })
 
+// B-376. A size carried onto search prices each card by that band, and the
+// price is the one the facility page then shows first for the same band.
+test('a size-filtered search prices each card by that size, not the facility’s cheapest', async ({
+  page,
+}) => {
+  await page.goto('/storage/search?size=medium&q=78704')
+  const card = page.getByRole('listitem').filter({ hasText: 'Demo — Austin South' }).first()
+  const price = (await card.textContent())!.match(/\$\d[\d,]*/)![0]
+  // The unfiltered card leads with the 5×5 at $59; a renter who chose medium
+  // must not be shown it.
+  expect(price).not.toBe('$59')
+
+  await card.getByRole('link', { name: /Demo — Austin South/ }).click()
+  const first = page.getByRole('listitem').filter({ hasText: 'Reserve for free' }).first()
+  await expect(first).toContainText(price)
+})
+
+test('every size-guide card links to a search carrying its band, and the footer lists locations', async ({
+  page,
+}) => {
+  await page.goto('/storage/size-guide')
+  const links = page.getByRole('main').getByRole('link', { name: /^See facilities/ })
+  expect(await links.count()).toBeGreaterThan(0)
+  for (const link of await links.all()) {
+    await expect(link).toHaveAttribute('href', /size=(small|medium|large)/)
+  }
+  await expect(page.getByRole('contentinfo').locator('a[href="/storage/locations"]')).toHaveCount(1)
+})
+
 test('the size guide answers the question the links promise', async ({ page }) => {
   await page.goto('/storage/size-guide')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('What size')

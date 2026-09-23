@@ -24,6 +24,7 @@
 export const PUBLIC_SCAN_ROUTES = [
   '/',
   '/storage/search?q=78704',
+  '/storage/search?size=medium&q=78704',
   // The three search outcomes render different templates, so each is its own
   // page as far as axe is concerned. 99501 is Anchorage — a real place with no
   // facility near it, which is the "nothing nearby" state.
