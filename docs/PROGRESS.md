@@ -11576,3 +11576,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Accessibility statement: comment log records that `a11y.true.resize` was false on `/portal` from B-367 until this commit. **Local setup:** `.env.test` held a 5-byte `ACCESS_CODE_ENCRYPTION_KEY` (CI has the valid 64-hex one); fixed locally, then `db:migrate:e2e`.
 
 **Verification.** Typecheck clean; contrast and scan-coverage unit tests pass; `portal` and `a11y-own-spec-routes` e2e 206 passed against a production build. The box/44px check fails on the old panel.
+
+## B-372 — The portal tab bar names and reaches what the header does (2026-09-23)
+
+**Commit:** `a9e20bc`
+
+**What it built.** Help is a `tel:` link ("Help: call {phone}") when every occupying unit shares one facility phone, else `/portal#facility-phone`; every lease card now always shows a "Questions? Call" line. Access became **Gate code** (`/portal#gate-code`, the first card's heading); Home became **Overview** (both reuse the header's/card's own keys, `portal.tabHome`/`portal.tabAccess` deleted). `lib/portal/nav-match.ts` is the one segment-safe "current" rule for both navs, so `/portal/payment-plan` no longer marks Pay current. Current tab = top bar + weight; an owed Pay tab is filled. `html:has(#portal-tab-bar)` gets `scroll-padding-bottom` under `sm`.
+
+**What it decided.** Only Overview and Pay can be `aria-current` (fragment and `tel:` tabs never are), so on `/portal/access` and `/portal/contact` no tab is current; the header still marks them. This reverses B-370's "Help opens Contact details" and "Access is /portal/access".
+
+**What it left behind.** Nothing. Accessibility statement re-read: no claim names the tab labels; the stale "sticky pay bar" code comment is B-380's.
+
+**Verification.** Typecheck clean; `nav-match` unit test; `portal-tab-bar`, `portal`, `a11y-own-spec-routes` e2e 220 passed against a production build (last-focusable-clears-bar at 375px, axe EN/ES).
