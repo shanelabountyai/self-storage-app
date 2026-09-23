@@ -1,5 +1,7 @@
 # Next
 
+**B-375 is built** (2026-09-23, `2ad13c8`). Next item: **B-376** (`83azzzv`). Staff tenants list reds only past-due balances; POS row buttons are outline.
+
 **B-374 is built** (2026-09-23, `52f77db`). Next item: **B-375** (`83azzzu`). "Use my location" resets after a same-route push; the locations status region is always mounted.
 
 **B-373 is built** (2026-09-23). Next item: **B-374** (`83azzzt`). The header is minimal on `/checkout`; "Find storage" is outline everywhere else.

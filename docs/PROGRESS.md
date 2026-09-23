@@ -11612,3 +11612,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Accessibility statement re-read: it makes no claim about the location button. The NVDA pass over this flow stays with B-382/B-254 and is ticked by no agent.
 
 **Verification.** Typecheck clean; smoke "use my location" (new, EN and ES, both routes plus the denied message) passed against a production build.
+
+## B-375 — Staff lists stop painting every balance red (2026-09-23)
+
+**Commit:** `2ad13c8`
+
+**What it built.** `/admin/tenants` colours a balance red only when the row is `late` (past due and owing), so rent issued but not yet due reads as neutral. The facility-and-unit column is body-face `text-sm`, not 12px mono. `/admin/pos`'s per-row "Start move-in" is an outline button, and the all-facilities rollup summary is body face with `tabular-nums`.
+
+**What it decided.** The unit column is plain body text throughout; the unit number is not split out in mono, because a per-unit span would change how a screen reader reads the joined list.
+
+**What it left behind.** Nothing. Staff-only, so the accessibility statement makes no claim about it. Coverage is e2e, not a unit test: the list is a server component over the DB, so two new specs assert no red balance beside a "Current" row and at least one beside "days past due", and no `bg-primary` "Start move-in".
+
+**Verification.** Typecheck clean; admin-tenants, admin-pos and admin-reports e2e: 186 passed.
