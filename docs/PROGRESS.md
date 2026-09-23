@@ -11747,7 +11747,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-386 — Header search, Call/Text and sidebar counts (2026-09-23)
 
-**Commit:** `SHA` (recorded in a follow-up).
+**Commit:** `84d999e`.
 
 **What it built.** The header search is live: a `role="search"` GET form to `/admin/tenants?q=` (name, phone, email, unit). `ContactLinks` renders `tel:`/`sms:` links (44px, `aria-label` "Call/Text {name}") on the tenants list (new Reach column) and on each delinquency card. `lib/admin/nav-counts.ts` gives Delinquency, Walkthrough and Rate Increases an open-work badge; the count is in the link's accessible name ("Delinquency, 3 open") and the painted badge is `aria-hidden`.
 
