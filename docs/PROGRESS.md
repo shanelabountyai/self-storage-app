@@ -11708,3 +11708,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing owned. Visual review was by contrast arithmetic and axe, not screenshots. **Found, not caused (confirmed on a stashed baseline):** `smoke.spec.ts` "checkout goes back, from the control and from the progress indicator" fails on mobile-chrome: B-378's collapsed stepper leaves a `<p aria-hidden>` ("Protection - step 3 of 6") intercepting the click on the "Your details" progress button.
 
 **Verification.** contrast-tokens 19 passed; typecheck and lint clean; a11y and smoke against a production build 428 passed, 4 skipped, that one test excluded. Accessibility statement re-read: it makes no colour-specific claim that changed.
+
+## B-382 — Test gaps this block leaves (2026-09-23)
+
+**Commit:** `PENDING`
+
+**What it built.** One e2e test in `a11y.spec.ts`: `/accessibility` is rendered and every `customerFacingStateExceptions()` reason must appear on it verbatim. Parts (1) and (2) needed no new code: `/portal | manage menu open` (B-247) already measures the open Manage `<details>` at 320px, 200% zoom and forced text spacing, and the public and portal forced-spacing loops already cover `/`, `/storage/search`, the facility page and `/portal/pay`, where B-363's mono prices render. Those were re-run and pass on both projects. B-371, B-372, B-374 and B-378 added no scanned state beyond B-371's "gate code revealed", which already has a `STATE_REACH` entry.
+
+**What it decided.** **Known limit, not built:** the Manage menu is a native `<details>`, so Escape does not close it and focus does not move; closing is by the summary only. Adding a key handler would change B-372's nav for a keyboard convenience, so it is recorded here, not fixed.
+
+**What it left behind.** The manual passes (VoiceOver iOS over the tab bar, gate-code reveal and Copy, payment-plan navigation; NVDA over the collapsed stepper and the locations geolocation flow) are for a person to record under B-254; no agent ticked them. **Unowned red, still open:** `smoke.spec.ts` "checkout goes back" on mobile-chrome (B-378's aria-hidden stepper `<p>` intercepts the click).
+
+**Verification.** 12 passed (a11y statement test, manage menu, `/portal/pay`, payment-plan, both projects); typecheck clean.

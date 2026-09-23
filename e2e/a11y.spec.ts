@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test'
-import { PUBLIC_SCAN_ROUTES as PUBLIC_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
+import {
+  customerFacingStateExceptions,
+  PUBLIC_SCAN_ROUTES as PUBLIC_ROUTES,
+} from '../apps/web/lib/a11y/scan-coverage'
 import { assertNoAxeViolations, expectNoHorizontalOverflow, TEXT_SPACING } from './a11y-helpers'
 
 // B-139. The list itself lives in `apps/web/lib/a11y/scan-coverage.ts`, beside
@@ -157,4 +160,18 @@ test('body text renders in Source Sans 3, not the default serif', async ({ page 
   const family = await page.evaluate(() => getComputedStyle(document.body).fontFamily)
   // B-363 (D-146): the design system's body family replaced Geist.
   expect(family).toContain('Source Sans 3')
+})
+
+// B-382. The statement's unscanned-states list is rendered from
+// `STATE_EXCEPTIONS`, so it cannot drift from the constant, but a row that
+// stops rendering (a filter, a locale fallback) would silently understate the
+// gaps. Every customer-facing row must appear on the page, verbatim.
+test('the accessibility statement lists every customer-facing unscanned state', async ({ page }) => {
+  await page.goto('/accessibility')
+  const text = (await page.getByRole('main').innerText()).replace(/\s+/g, ' ')
+  for (const row of customerFacingStateExceptions()) {
+    expect(text, `${row.route} | ${row.state} is missing from the statement`).toContain(
+      row.reason.replace(/\s+/g, ' '),
+    )
+  }
 })
