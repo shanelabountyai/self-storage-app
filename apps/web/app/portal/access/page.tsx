@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { User } from 'lucide-react'
 import { AdminForm, Field } from '@/components/admin/form'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { authorizedAccessForTenant } from '@/lib/portal/authorized-access'
@@ -107,7 +108,17 @@ export default async function AccessPage() {
                   key={person.id}
                   className="border-input flex flex-wrap items-start justify-between gap-3 rounded-md border p-3 text-sm"
                 >
-                  <div>
+                  {/* B-367 (D-146): the kit's AccessScreen puts a circular
+                      glyph beside each name — decorative, the name text below
+                      is still what carries the identity. */}
+                  <div className="flex gap-3">
+                    <span
+                      aria-hidden="true"
+                      className="bg-secondary text-secondary-foreground mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full"
+                    >
+                      <User className="size-4" />
+                    </span>
+                    <div>
                     <p className="font-medium">{person.name}</p>
                     <p className="text-muted-foreground">
                       {person.relationship} · {person.phone}
@@ -137,6 +148,7 @@ export default async function AccessPage() {
                     {!person.addedByTenant && (
                       <p className="text-muted-foreground mt-1 text-xs">{t('acc.addedAtOffice')}</p>
                     )}
+                    </div>
                   </div>
 
                   <AdminForm action={revokePersonAction} label={t('acc.withdrawFor', { name: person.name })}>

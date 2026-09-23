@@ -11461,3 +11461,28 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **Verification.** Typecheck and lint are clean. Four unit files, 54 tests, including a new `lowestAvailableWebRateBySize` case (min across facilities, counts summed, sold-out and unpriced types excluded), dictionary parity and `us-english`. The smoke, i18n and a11y e2e specs against a production build: **494 passed, 4 skipped, 0 failed** (498, the same as B-364). The accessibility statement was re-read: no claim changes. No schema change.
 
+## B-367 — the tenant portal and online move-in per the portal kit (2026-09-23)
+
+**Commit:** `PENDING`
+
+**What it built.** The signed-in tenant portal (`/portal` and its eleven routes) and the online move-in flow (`/checkout`) restyled to the kit's `PortalShell` and `MoveInFlowScreen` visual language, on the existing routes and functionality — no page merged, split, added or removed.
+
+- **The shell (`layout.tsx`, `portal-nav.tsx`).** Each nav link gets a `lucide-react` icon and the kit's filled-pill active state (`aria-[current=page]:bg-accent`), matching the pill treatment `site-header.tsx` already established for the public nav. The tenant's name is a pill with a decorative user glyph. All eleven links, `aria-current`, the Manage disclosure and the mobile sticky Pay bar are unchanged.
+- **My units (`portal/page.tsx`).** Balance and next-payment figures are `font-mono tabular-nums`, the kit's "money is mono" convention; the account table's balance column gets the same treatment.
+- **The gate code (`gate-code-panel.tsx`).** Wrapped in the kit's dark `GateCodeCard` surface (`bg-inverse`/`text-inverse-foreground`, `data-surface="inverse"` for the focus ring, same tokens B-364's dark bands use), digits at 44px. The reveal/copy/announce logic is untouched.
+- **Billing (`methods`, `statements`, `documents`, `pay`).** Money figures across all four get `font-mono tabular-nums`; structure, copy and every refusal/announcement path are untouched.
+- **Access (`access/page.tsx`).** Each authorized person gets a decorative circular avatar glyph, matching the kit's `AccessScreen`.
+- **Move-in (`checkout/*`).** `Stepper` is now numbered circles joined by a line (done/current filled), the visible layer over the same `sr-only` step announcements. `PriceSummary`, `payment-step.tsx`, `unit-step.tsx` and `protection-step.tsx` get the same money-mono treatment.
+
+**What it decided.**
+
+- **Two of the kit's own claims were dropped rather than carried over, per D-147.** `MyUnitsScreen`'s "named site manager" card (no manager field exists — B-364 already made this call for the public shell) and `MoveInFlowScreen`'s "First month $1" line (no such promo exists) are not in this build.
+- **`protection-step.tsx` keeps its native radio/fieldset list rather than the kit's card grid.** The file's own comment says why: "Radios in a fieldset, not styled divs" is a deliberate 3.3.1/keyboard choice, and the kit's `PlanOption` data carries no `recommended` flag to hang a badge on — inventing one would be an undata'd claim, the exact thing D-147 says to drop.
+- **`checkout/page.tsx`'s single-column, bottom-sticky summary was kept over the kit's top-sticky sidebar.** `price-summary.tsx` already carries a comment explaining the bottom-sticky choice (a sidebar puts the summary out of the 320px reading order); restyling is not the place to reopen that call.
+- **The real portal IA (eleven routes, a Manage submenu) was kept over the kit's four-link `PortalShell`.** The kit's `PortalShell` models a simpler product; collapsing eleven routes and their accessibility work to fit four links would be a functional change, not a restyle.
+- **`Billing`'s tabs (history/methods/documents) were not built.** The four real routes (`pay`, `methods`, `statements`, `documents`) already carry this content on their own URLs, several of them deep-linked from email and SMS; merging them into one tabbed page is an IA change outside this item's scope.
+
+**What it left behind.** A **pre-existing** layout defect was found and left alone (not this item's to fix): the portal nav's `Manage` `<details>`, when open, sits inline in the `flex flex-wrap` nav row rather than absolutely positioned, so a tall open submenu pushes the rest of the nav onto a second line. Confirmed via `git stash` against the pre-restyle code that this is unrelated to B-367. Unowned.
+
+**Verification.** Typecheck and lint clean. 173 targeted unit tests (portal dashboard, payment, methods, authorized-access, checkout, contrast-tokens, the two portal lint suites) passing. Schema-drift check: no difference. Logged in as the demo tenant (`dana@demo.example.com`) and by hand through `/storage/tx/dallas/demo-dallas-north` → `/checkout` step 1, in a real browser: no console errors, nav pills and active states render correctly, money renders in mono. Against a production build (`npm run build:test`, clean): **206 e2e passed, 0 failed** — `e2e/portal.spec.ts`, `e2e/checkout-unit-lost.spec.ts` and `e2e/a11y-own-spec-routes.spec.ts`, covering WCAG 2.1 AA, 320px reflow, 200% zoom, forced text spacing and the nav's own `aria-current` assertions. The accessibility statement was re-read and gained two entries — B-367's, and B-366's, which a prior session had missed. No schema change.
+

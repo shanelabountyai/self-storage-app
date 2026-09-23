@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { User } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { auth, signOut } from '@/auth'
 import { requireTenantActor } from '@/lib/rbac/session'
@@ -83,9 +84,15 @@ export default async function PortalLayout({ children }: { children: React.React
         {t('chrome.skipToMain')}
       </a>
 
-      <header className="border-b">
+      <header className="bg-background border-b">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <span className="mr-auto text-sm font-medium">{userName}</span>
+          {/* B-367 (D-146): the kit's `TopNav` names the tenant as a pill with a
+              user glyph rather than bare text — decorative only, the name is
+              still the accessible content. */}
+          <span className="bg-secondary text-secondary-foreground mr-auto inline-flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium">
+            <User className="size-4" aria-hidden="true" />
+            {userName}
+          </span>
           {/* B-239. The nav moved into a client component so it can read
               `usePathname()` — see the note there for what changed and why.
               What stays here is the DATA: which links to show, and what the

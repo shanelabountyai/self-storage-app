@@ -199,13 +199,13 @@ export default async function DocumentsPage() {
                     )}
                   </td>
                   <td className="py-2">{payment.unitNumber ?? "—"}</td>
-                  <td className="py-2 text-right tabular-nums">
+                  <td className="py-2 text-right font-mono tabular-nums">
                     {formatRate(payment.amountCents)}
                     {/* B-179 (1.4.1). The figure said the money landed and the
                         sentence in the other column said it did not. The state
                         is on the number itself now, in words. */}
                     {payment.returned && (
-                      <span className="text-muted-foreground block text-xs font-normal">
+                      <span className="text-muted-foreground block font-sans text-xs font-normal">
                         {t('docs.returnedShort')}
                       </span>
                     )}

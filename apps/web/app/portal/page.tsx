@@ -366,6 +366,9 @@ function LeaseCard({
         </div>
       )}
 
+      {/* B-367 (D-146): "Money is mono and always two decimals in ledgers" —
+          the kit's convention, applied to the two figures this card states as
+          plain facts rather than inline sentence prose. */}
       <dl className="grid grid-cols-2 gap-4 text-sm">
         <div>
           <dt className="text-muted-foreground">{t('dash.currentBalance')}</dt>
@@ -373,7 +376,7 @@ function LeaseCard({
               formatRate would render it "$-39", which reads as an amount owed
               with a typo. Nothing writes a credit today (payments are capped
               at the balance), but a refund can, so it renders honestly. */}
-          <dd className="font-medium">
+          <dd className="font-mono font-medium tabular-nums">
             {lease.balanceCents < 0
               ? t('dash.inCredit', { amount: formatRate(-lease.balanceCents) })
               : formatRate(lease.balanceCents)}
@@ -381,13 +384,13 @@ function LeaseCard({
         </div>
         <div>
           <dt className="text-muted-foreground">{t('dash.nextPayment')}</dt>
-          <dd className="font-medium">
+          <dd className="font-mono font-medium tabular-nums">
             {t('dash.nextPaymentOn', { amount: formatRate(nextPaymentCents), date: dueDate })}
             {/* B-227 / US-301: a total nobody can decompose is one that stayed
                 wrong for months without anybody noticing. The parts are listed
                 from what is actually non-zero, so a lease with no protection
                 plan does not claim one. */}
-            <span className="text-muted-foreground block text-xs font-normal">
+            <span className="text-muted-foreground block font-sans text-xs font-normal">
               {chargePartsSentence(dict, recurringParts(lease.recurring))}
             </span>
           </dd>
@@ -608,7 +611,7 @@ function AccountCard({
                 {account.payable && (
                   <td className="text-muted-foreground py-2">{unit.tenantName}</td>
                 )}
-                <td className="py-2 text-right tabular-nums">
+                <td className="py-2 text-right font-mono tabular-nums">
                   {unit.balanceCents < 0
                     ? t('dash.inCredit', { amount: formatCents(-unit.balanceCents) })
                     : formatCents(unit.balanceCents)}

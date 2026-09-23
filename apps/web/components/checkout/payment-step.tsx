@@ -57,16 +57,16 @@ export function PaymentStep({
               <dt>
                 <MessageSegments segments={costLineLabel(dict, line)} />
               </dt>
-              <dd className="tabular-nums">{formatRate(line.amountCents)}</dd>
+              <dd className="font-mono tabular-nums">{formatRate(line.amountCents)}</dd>
             </div>
           ))}
           <div className="flex justify-between gap-4 border-t pt-2 text-base font-medium">
             <dt>{t('facility.totalDueToday')}</dt>
-            <dd className="tabular-nums">{formatRate(due.totalDueTodayCents)}</dd>
+            <dd className="font-mono tabular-nums">{formatRate(due.totalDueTodayCents)}</dd>
           </div>
           <div className="text-muted-foreground flex justify-between gap-4">
             <dt>{t('facility.thenEachMonth')}</dt>
-            <dd className="tabular-nums">
+            <dd className="font-mono tabular-nums">
               {formatRate(due.ongoingMonthlyCents)}
               {t('card.perMonth')}
             </dd>
@@ -107,13 +107,13 @@ export function PaymentStep({
             {autopayOn ? (
               <>
                 {t('pay.autopayOnBefore')}{' '}
-                <strong>{formatRate(due.ongoingMonthlyCents)}</strong>{' '}
+                <strong className="font-mono tabular-nums">{formatRate(due.ongoingMonthlyCents)}</strong>{' '}
                 {t('pay.autopayOnAfter', { day: billingDay })}
               </>
             ) : (
               <>
                 {t('pay.autopayOffBefore')}{' '}
-                <strong>{formatRate(due.ongoingMonthlyCents)}</strong>{' '}
+                <strong className="font-mono tabular-nums">{formatRate(due.ongoingMonthlyCents)}</strong>{' '}
                 {t('pay.autopayOffAfter', { day: billingDay })}
               </>
             )}

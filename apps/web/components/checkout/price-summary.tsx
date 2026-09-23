@@ -115,10 +115,10 @@ export function PriceSummary({
       <details className="group">
         <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <span className="font-medium">
-            {t('summary.dueToday')} <span className="tabular-nums">{formatRate(dueToday)}</span>
+            {t('summary.dueToday')} <span className="font-mono tabular-nums">{formatRate(dueToday)}</span>
           </span>
           <span className="text-muted-foreground text-sm">
-            {t('summary.then')} <span className="tabular-nums">{formatRate(monthly)}</span>
+            {t('summary.then')} <span className="font-mono tabular-nums">{formatRate(monthly)}</span>
             {t('card.perMonth')}
           </span>
         </summary>
@@ -145,7 +145,7 @@ export function PriceSummary({
                 <dt>
                   <MessageSegments segments={costLineLabel(dict, line, promoTerms)} />
                 </dt>
-                <dd className="tabular-nums">
+                <dd className={line.key === 'protection' ? undefined : 'font-mono tabular-nums'}>
                   {line.key === 'protection' ? (
                     protectionPremiumCents === undefined ? (
                       t('summary.chosenAtCheckout')
@@ -153,7 +153,7 @@ export function PriceSummary({
                       t('summary.ownCover')
                     ) : (
                       <>
-                        {formatRate(premium)}
+                        <span className="font-mono tabular-nums">{formatRate(premium)}</span>
                         {/* D-52 makes the premium multiply, and §6.4 makes
                             that a disclosure rather than a nicety: a renter
                             who chose one $12 plan must not meet $36 with
@@ -186,14 +186,14 @@ export function PriceSummary({
                 units.map((unit) => (
                   <div key={unit.id} className="text-muted-foreground flex justify-between gap-4">
                     <dt className="pl-4">{unit.name}</dt>
-                    <dd className="tabular-nums">{formatRate(unit.rateCents)}</dd>
+                    <dd className="font-mono tabular-nums">{formatRate(unit.rateCents)}</dd>
                   </div>
                 ))}
             </Fragment>
           ))}
           <div className="flex justify-between gap-4 border-t pt-2 font-medium">
             <dt>{t('summary.totalDueToday')}</dt>
-            <dd className="tabular-nums">{formatRate(dueToday)}</dd>
+            <dd className="font-mono tabular-nums">{formatRate(dueToday)}</dd>
           </div>
         </dl>
       </details>

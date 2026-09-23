@@ -2,6 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import {
+  Boxes,
+  Calendar,
+  CreditCard,
+  FileText,
+  MoreHorizontal,
+  Receipt,
+  type LucideIcon,
+} from 'lucide-react'
 import { useT } from '@/components/i18n/locale-provider'
 import type { MessageKey } from '@/lib/i18n'
 
@@ -38,7 +47,7 @@ import type { MessageKey } from '@/lib/i18n'
 // B-260 (D-122): the KEY rather than the word, so the nav a tenant reads and
 // the `aria-current` a screen reader announces come from the same dictionary
 // entry and cannot drift by language.
-type NavLink = { href: string; labelKey: MessageKey }
+type NavLink = { href: string; labelKey: MessageKey; icon?: LucideIcon }
 
 const MANAGE: NavLink[] = [
   { href: '/portal/transfer', labelKey: 'portal.transfer' },
@@ -50,7 +59,12 @@ const MANAGE: NavLink[] = [
   { href: '/portal/move-out', labelKey: 'portal.moveOut' },
 ]
 
-const LINK_CLASS = 'inline-flex min-h-11 items-center underline underline-offset-2'
+// B-367 (D-146): the kit's `TopNav` marks its active link with a filled pill
+// rather than an underline — `aria-current="page"` still carries the state
+// programmatically (SC 4.1.2), this is only the visible cue (SC 1.4.1 is
+// about colour ALONE, and the pill's shape/position is a second channel).
+const LINK_CLASS =
+  'inline-flex min-h-11 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium hover:bg-accent aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground'
 
 /// `/portal` is exact — every route below it starts with it, so a prefix test
 /// would mark Overview current on all eleven. Everything else is a prefix, and
@@ -63,11 +77,13 @@ function isActive(pathname: string, href: string): boolean {
 function NavItem({
   href,
   labelKey,
+  icon: Icon,
   pathname,
   t,
 }: NavLink & { pathname: string; t: (key: MessageKey) => string }) {
   return (
     <Link href={href} aria-current={isActive(pathname, href) ? 'page' : undefined} className={LINK_CLASS}>
+      {Icon && <Icon className="size-4" aria-hidden="true" />}
       {t(labelKey)}
     </Link>
   )
@@ -102,15 +118,18 @@ export function PortalNav({
           {pay.label}
         </Link>
       )}
-      <NavItem href="/portal" labelKey="portal.overview" pathname={pathname} t={t} />
-      <NavItem href="/portal/methods" labelKey="portal.paymentMethods" pathname={pathname} t={t} />
-      <NavItem href="/portal/statements" labelKey="portal.statements" pathname={pathname} t={t} />
-      <NavItem href="/portal/documents" labelKey="portal.documents" pathname={pathname} t={t} />
+      <NavItem href="/portal" labelKey="portal.overview" icon={Boxes} pathname={pathname} t={t} />
+      <NavItem href="/portal/methods" labelKey="portal.paymentMethods" icon={CreditCard} pathname={pathname} t={t} />
+      <NavItem href="/portal/statements" labelKey="portal.statements" icon={Receipt} pathname={pathname} t={t} />
+      <NavItem href="/portal/documents" labelKey="portal.documents" icon={FileText} pathname={pathname} t={t} />
       {showPaymentPlan && (
-        <NavItem href="/portal/payment-plan" labelKey="portal.paymentPlan" pathname={pathname} t={t} />
+        <NavItem href="/portal/payment-plan" labelKey="portal.paymentPlan" icon={Calendar} pathname={pathname} t={t} />
       )}
       <details open={manageIsActive} className="text-sm">
-        <summary className={`${LINK_CLASS} cursor-pointer`}>{t('portal.manage')}</summary>
+        <summary className={`${LINK_CLASS} cursor-pointer`}>
+          <MoreHorizontal className="size-4" aria-hidden="true" />
+          {t('portal.manage')}
+        </summary>
         <div className="flex flex-col gap-2 pt-2">
           {MANAGE.map((link) => (
             <NavItem key={link.href} {...link} pathname={pathname} t={t} />

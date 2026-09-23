@@ -150,7 +150,7 @@ export default async function PaymentMethodsPage() {
                   {lease.autopayEnabled ? (
                     <>
                       {t('meth.autopayOnBefore')}{' '}
-                      <strong>{formatRate(lease.monthlyChargeCents)}</strong>{' '}
+                      <strong className="font-mono tabular-nums">{formatRate(lease.monthlyChargeCents)}</strong>{' '}
                       {/* B-227 / US-301. The figure states what it contains.
                           It was rent plus protection with the tax on rent
                           missing, so it was LOWER than what autopay actually

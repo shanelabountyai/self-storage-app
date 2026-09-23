@@ -2870,6 +2870,28 @@ function reviewedOn(locale: Locale): string {
 // `HomeScreen`: the same search form and label, new sections of real prices
 // and counts, a dark CTA band that uses the inverse focus ring. Axe re-ran over
 // it in both languages at 320px. No claim here changes.
+//
+// Re-read 2026-09-23, at B-366 (no entry was written for it at the time — a
+// gap in the prior session, closed here rather than left). `/storage/search`,
+// the city page's facility grid and `/storage/size-guide` were restyled to the
+// kit, and `/storage/locations` is a new route — added to `PUBLIC_SCAN_ROUTES`
+// so the generated coverage list and the a11y spec both already carry it. No
+// claim here changes.
+//
+// Re-read 2026-09-23, at B-367. The tenant portal (`/portal` and its eleven
+// routes) and the online move-in flow (`/checkout`) were restyled to the
+// kit's `PortalShell`/`MoveInFlowScreen` — nav pills, a numbered-circle step
+// indicator, a dark gate-code card, mono figures on money. No route was added
+// or removed, `aria-current` and every `role="status"`/`role="alert"` region
+// are unchanged, and the pill/circle states are decorative alongside the
+// programmatic ones already there (never colour alone). Two claims this page
+// makes were dropped from the KIT's own copy rather than carried over, per
+// D-147: a named "site manager" per unit (no such field exists) and "First
+// month $1" (no such promo exists) — neither reached this build. `e2e/
+// portal.spec.ts`, `e2e/checkout-unit-lost.spec.ts` and `e2e/a11y-own-spec-
+// routes.spec.ts` all re-ran against the restyled build (206 passed): WCAG,
+// 320px reflow, 200% zoom, forced text spacing, and the nav's own `aria-
+// current` test. No claim here changes.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

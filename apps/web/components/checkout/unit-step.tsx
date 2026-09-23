@@ -106,7 +106,7 @@ export function UnitStep({
                   {/* The rate locked when this line was added. US-301: price
                       seen is price charged, so it cannot move under the renter
                       mid-checkout even if the published rate changes. */}
-                  <p className="mt-1 tabular-nums">
+                  <p className="mt-1 font-mono tabular-nums">
                     {formatRate(line.quotedRateCents)}
                     {t('card.perMonth')}
                   </p>

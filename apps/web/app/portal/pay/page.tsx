@@ -238,7 +238,7 @@ export default async function PortalPayPage({
                     {unit.unitNumber}
                   </th>
                   <td className="text-muted-foreground px-4 py-2">{unit.tenantName}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">
+                  <td className="px-4 py-2 text-right font-mono tabular-nums">
                     {formatCents(unit.balanceCents)}
                   </td>
                 </tr>
@@ -272,7 +272,7 @@ export default async function PortalPayPage({
                     )}
                   </td>
                   <td className="text-muted-foreground px-4 py-2 whitespace-nowrap">{line.on}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">
+                  <td className="px-4 py-2 text-right font-mono tabular-nums">
                     {formatCents(line.amountCents)}
                   </td>
                 </tr>
@@ -284,7 +284,7 @@ export default async function PortalPayPage({
               <th scope="row" colSpan={2} className="px-4 py-2 text-left font-medium">
                 {t('paypg.balance')}
               </th>
-              <td className="px-4 py-2 text-right font-medium tabular-nums">
+              <td className="px-4 py-2 text-right font-mono font-medium tabular-nums">
                 {formatCents(lease.balanceCents)}
               </td>
             </tr>
@@ -292,7 +292,7 @@ export default async function PortalPayPage({
               <th scope="row" colSpan={2} className="px-4 py-2 pb-4 text-left text-base font-medium">
                 {t('paypg.payingToday')}
               </th>
-              <td className="px-4 py-2 pb-4 text-right text-base font-medium tabular-nums">
+              <td className="px-4 py-2 pb-4 text-right font-mono text-base font-medium tabular-nums">
                 {formatCents(amountCents)}
               </td>
             </tr>

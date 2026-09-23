@@ -30,33 +30,44 @@ export function GateCodePanel({ code }: { code: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    // B-367 (D-146): the kit's `GateCodeCard` is the most-wanted object on the
+    // page — a dark card, mono digits, masked by default — so the reveal
+    // control gets that surface rather than sitting bare on the page
+    // background. `data-surface="inverse"` repoints the focus ring the same
+    // way the public dark bands do (globals.css, B-364).
+    <div data-surface="inverse" className="bg-inverse text-inverse-foreground flex flex-col gap-3 rounded-lg p-4">
       <Button
         type="button"
         variant="outline"
         size="sm"
         aria-expanded={revealed}
         onClick={() => setRevealed((value) => !value)}
-        className="self-start"
+        className="border-inverse-muted bg-transparent text-inverse-foreground hover:bg-inverse-muted/20 self-start"
       >
         {revealed ? t('gate.hide') : t('gate.show')}
       </Button>
 
       {revealed && (
         <div className="flex items-center gap-3">
-          <span aria-hidden="true" className="font-mono text-lg tracking-[0.3em]">
+          <span aria-hidden="true" className="font-mono text-[44px] leading-none tracking-[0.15em]">
             {code}
           </span>
           {/* Space-separated so a screen reader speaks each digit rather than
               the whole string as one large number. */}
           <span className="sr-only">{code.split('').join(' ')}</span>
-          <Button type="button" variant="ghost" size="sm" onClick={handleCopy}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleCopy}
+            className="text-inverse-foreground hover:bg-inverse-muted/20"
+          >
             {t('gate.copy')}
           </Button>
         </div>
       )}
 
-      <p role="status" className="text-muted-foreground text-sm">
+      <p role="status" className="text-inverse-muted text-sm">
         {copyStatus}
       </p>
     </div>

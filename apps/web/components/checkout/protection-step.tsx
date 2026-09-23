@@ -64,7 +64,7 @@ export function ProtectionStep({
               />
               <span>
                 <span className="font-medium">{plan.name}</span>
-                <span className="text-muted-foreground">
+                <span className="text-muted-foreground font-mono tabular-nums">
                   {' '}
                   — {formatRate(plan.premiumCents)}
                   {t('card.perMonth')}

@@ -104,7 +104,7 @@ export default async function StatementsPage() {
                 >
                   <span className="font-medium">{month.label}</span>
                   <span
-                    className={`tabular-nums ${month.closingBalanceCents > 0 ? 'font-medium text-red-800' : 'text-muted-foreground'}`}
+                    className={`font-mono tabular-nums ${month.closingBalanceCents > 0 ? 'font-medium text-red-800' : 'text-muted-foreground'}`}
                   >
                     {month.closingBalanceCents > 0
                       ? t('stmt.owedAtEnd', { amount: formatCents(month.closingBalanceCents) })
@@ -154,7 +154,7 @@ export default async function StatementsPage() {
                 >
                   <span className="font-medium">{statement.label}</span>
                   <span
-                    className={`tabular-nums ${statement.closingBalanceCents > 0 ? 'font-medium text-red-800' : 'text-muted-foreground'}`}
+                    className={`font-mono tabular-nums ${statement.closingBalanceCents > 0 ? 'font-medium text-red-800' : 'text-muted-foreground'}`}
                   >
                     {statement.closingBalanceCents > 0
                       ? t('stmt.owedAtEnd', { amount: formatCents(statement.closingBalanceCents) })
