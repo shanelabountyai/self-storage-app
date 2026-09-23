@@ -73,7 +73,7 @@ export default async function LocationsPage({
       </p>
       {/* Always mounted and empty until there is a point: a live region inserted
           with its text already inside is unreliably announced (B-374). */}
-      <p role="status" className="text-muted-foreground text-sm empty:hidden mt-2">
+      <p role="status" className="text-muted-foreground text-sm empty:mt-0 mt-2">
         {point && t('locations.nearestFirst')}
       </p>
 
