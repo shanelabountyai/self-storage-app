@@ -21,6 +21,7 @@ import {
 } from '@storage/core/marketing'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { citySizePath, citySlugPath } from '@/lib/marketing/paths'
+import { EnglishBody } from '@/components/i18n/english-body'
 
 // PRD 00 §6 Phase 3 (B-089). The per-city/size landing page.
 //
@@ -231,13 +232,13 @@ export default async function CitySizePage({
         units in {place}
       </h1>
 
-      <div className="mt-4 flex flex-col gap-3">
+      <EnglishBody className="mt-4 flex flex-col gap-3">
         {intro.map((paragraph, index) => (
           <p key={index} className="text-pretty">
             {paragraph}
           </p>
         ))}
-      </div>
+      </EnglishBody>
 
       <section aria-labelledby="locations" className="mt-10">
         <h2 id="locations" className="text-xl font-medium">

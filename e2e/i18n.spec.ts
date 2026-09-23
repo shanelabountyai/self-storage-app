@@ -914,3 +914,34 @@ for (const [lang, cookie] of [['en', null], ['es', SPANISH]] as const) {
     expect(await page.locator('main').innerText()).not.toMatch(/\blease\b/i)
   })
 }
+
+// B-379 (SC 3.1.2). D-123 keeps this prose English, so under Spanish it has to
+// say so: a `[lang="en"]` ancestor on each body, and nothing under English.
+const ENGLISH_BODIES = [
+  { name: 'size guide', path: '/storage/size-guide', text: 'main h3' },
+  { name: 'guide body', path: '/guides/packing-tips', text: 'article p' },
+  { name: 'city intro', path: '/storage/tx/austin', text: 'main p.text-pretty' },
+  {
+    name: 'facility FAQ answer',
+    path: '/storage/tx/austin/demo-austin-south',
+    text: '#faq ~ div details p',
+  },
+]
+
+for (const body of ENGLISH_BODIES) {
+  test(`the ${body.name} is marked lang="en" under Spanish and unmarked under English (B-379)`, async ({
+    page,
+    context,
+  }) => {
+    const target = () => page.locator(body.text).first()
+
+    await page.goto(body.path)
+    await expect(target()).toBeAttached()
+    expect(await target().evaluate((el) => el.closest('[lang="en"]:not(html)'))).toBeNull()
+
+    await context.addCookies([SPANISH])
+    await page.goto(body.path)
+    await expect(target()).toBeAttached()
+    expect(await target().evaluate((el) => !!el.closest('[lang="en"]:not(html)'))).toBe(true)
+  })
+}

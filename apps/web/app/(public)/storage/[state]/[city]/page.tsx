@@ -24,6 +24,7 @@ import {
   cityLabel,
   cityTitle,
 } from '@/lib/marketing/city-copy'
+import { EnglishBody } from '@/components/i18n/english-body'
 
 // PRD 04 §3.2 US-4 AC1 (B-082 part 2). The city landing page.
 //
@@ -222,13 +223,13 @@ export default async function CityPage({
         Storage units in {label}
       </h1>
 
-      <div className="mt-4 flex max-w-3xl flex-col gap-3">
+      <EnglishBody className="mt-4 flex max-w-3xl flex-col gap-3">
         {intro.map((paragraph, index) => (
           <p key={index} className="text-pretty">
             {paragraph}
           </p>
         ))}
-      </div>
+      </EnglishBody>
 
       <section aria-labelledby="locations" className="mt-10">
         <h2 id="locations" className="text-xl font-medium">

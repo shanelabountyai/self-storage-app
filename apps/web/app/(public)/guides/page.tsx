@@ -3,6 +3,7 @@ import { SITE } from '@/lib/site-config'
 import { absoluteUrl, breadcrumbJsonLd, itemListJsonLd, renderJsonLd } from '@storage/core/marketing'
 import { siteOrigin } from '@/lib/marketing/origin'
 import { hubEntries } from '@/lib/guides/catalog'
+import { EnglishBody } from '@/components/i18n/english-body'
 
 // PRD 04 §3.2 US-4 AC2 (B-082 part 3). The content hub's front page.
 //
@@ -52,7 +53,7 @@ export default function GuidesHubPage() {
   ].filter((node): node is NonNullable<typeof node> => node !== null)
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12">
+    <EnglishBody className="mx-auto w-full max-w-3xl px-4 py-12">
       {schema.map((node, index) => (
         <script
           key={index}
@@ -87,6 +88,6 @@ export default function GuidesHubPage() {
         </Link>
         .
       </p>
-    </div>
+    </EnglishBody>
   )
 }

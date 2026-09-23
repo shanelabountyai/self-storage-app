@@ -16,6 +16,7 @@ import {
   guideFilterLabel,
   guidePath,
 } from '@/lib/guides/catalog'
+import { EnglishBody } from '@/components/i18n/english-body'
 
 // PRD 04 §3.2 US-4 AC2/AC3 (B-082 part 3). One guide from the content hub.
 //
@@ -121,7 +122,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   ].filter((node): node is NonNullable<typeof node> => node !== null)
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12">
+    <EnglishBody className="mx-auto w-full max-w-3xl px-4 py-12">
       {schema.map((node, index) => (
         <script
           key={index}
@@ -208,6 +209,6 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
         </Link>
         .
       </p>
-    </div>
+    </EnglishBody>
   )
 }

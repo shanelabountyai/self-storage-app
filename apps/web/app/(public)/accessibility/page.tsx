@@ -2915,6 +2915,13 @@ function reviewedOn(locale: Locale): string {
 // it because the reveal needs a click. The digits now scale and wrap, both
 // panel buttons are 44px, and a `STATE_REACH` entry runs the revealed card
 // through the 320px, 200% and text-spacing checks. The claim is true again.
+//
+// Re-read 2026-09-23, at B-379. The statement makes no claim about the
+// language of the SEO prose, so no line changes. What changed underneath: the
+// size guide, guide bodies, city and size intros and facility FAQ answers are
+// English by D-123, and under `<html lang="es">` they now sit in an element
+// with `lang="en"` (SC 3.1.2), via `EnglishBody`. English pages carry no
+// attribute. `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

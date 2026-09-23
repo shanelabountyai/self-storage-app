@@ -61,6 +61,7 @@ import {
   SORTS,
   type UnitFilters,
 } from '@/lib/inventory/unit-filters'
+import { EnglishBody } from '@/components/i18n/english-body'
 
 // PRD 01 §4.1 US-103 — the facility detail page.
 //
@@ -1371,14 +1372,14 @@ export default async function FacilityPage({
         <h2 id="faq" className="text-xl font-medium">
           {t('facility.questionsPeopleAsk')}
         </h2>
-        <div className="mt-4 flex flex-col gap-2">
+        <EnglishBody className="mt-4 flex flex-col gap-2">
           {faqs.map((entry) => (
             <details key={entry.question} className="border-input rounded-lg border p-4">
               <summary className="cursor-pointer font-medium">{entry.question}</summary>
               <p className="text-muted-foreground mt-2 text-sm text-pretty">{entry.answer}</p>
             </details>
           ))}
-        </div>
+        </EnglishBody>
       </section>
 
       <p className="text-muted-foreground mt-10 text-sm text-pretty">

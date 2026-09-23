@@ -11660,3 +11660,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** NVDA over the collapsed stepper is a manual pass, recorded under B-254 and ticked by no agent. B-382 owns the reflow and forced-spacing measurement.
 
 **Verification.** Typecheck and lint clean; new smoke spec at 360px (nav under 40px high, "step 2 of 6" shown, go-back button focusable and visible); stepper specs 6 passed; checkout a11y 18 passed. Accessibility statement re-read: it makes no claim about the stepper's layout, so nothing changed.
+
+## B-379 — English SEO prose is marked `lang="en"` under Spanish (2026-09-23)
+
+**Commit:** `SHA_PENDING`
+
+**What it built.** `components/i18n/english-body.tsx`, a server component that renders a `<div>` with `lang="en"` when the locale is `es` and no attribute otherwise. It wraps the size guide, the guides index and every guide page (all English end to end), the generated city and size intros, and the facility FAQ list. New `e2e/i18n.spec.ts` cases assert a `[lang="en"]` ancestor under Spanish and none under English for the size guide, one guide body, the city intro and a facility FAQ answer.
+
+**What it decided.** The two fully English page families (guides, size guide) are wrapped at the page root rather than per paragraph, since nothing on them is translated; the facility and city pages, which are translated, are wrapped only around the D-123 bodies. Nothing was translated (D-123).
+
+**What it left behind.** Other D-123 surfaces I did not find are not covered; the four named in the row are. The guide pages' JSON-LD scripts sit inside the wrapper, which is harmless.
+
+**Verification.** Typecheck and lint clean; `i18n.spec.ts` 12 new/B-268 cases passed. The first full-file run had one mobile-chrome failure in B-268 (reservation redirect) that passed on rerun; it does not touch these pages. Accessibility statement re-read: no language claim, so no visible change (comment log entry added).

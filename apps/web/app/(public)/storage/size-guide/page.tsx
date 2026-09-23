@@ -10,6 +10,7 @@ import {
   UNIT_SIZES,
   UNIT_SIZE_ORDER,
 } from '@storage/core/marketing'
+import { EnglishBody } from '@/components/i18n/english-body'
 
 export const metadata = {
   title: 'What size storage unit do I need?',
@@ -55,7 +56,7 @@ export default async function SizeGuidePage() {
   )
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-12">
+    <EnglishBody className="mx-auto w-full max-w-4xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight text-balance">
         What size storage unit do I need?
       </h1>
@@ -155,6 +156,6 @@ export default async function SizeGuidePage() {
           </Link>
         </p>
       </section>
-    </div>
+    </EnglishBody>
   )
 }
