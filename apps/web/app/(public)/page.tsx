@@ -38,16 +38,16 @@ export default async function HomePage() {
 
   return (
     <>
-      <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:py-16">
+      <section className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-16">
         <div className="flex max-w-2xl flex-col gap-5">
           {siteCount > 0 && (
-            <p className="bg-accent text-accent-foreground self-start rounded-full px-3 py-1 text-sm font-medium">
+            <p className="bg-accent text-accent-foreground hidden self-start rounded-full sm:block px-3 py-1 text-sm font-medium">
               {plural(dict, siteCount, 'chrome.footprintOne', 'chrome.footprintOther', {
                 cities: cityList,
               })}
             </p>
           )}
-          <h1 className="font-heading text-4xl font-bold tracking-tight text-balance sm:text-5xl">
+          <h1 className="font-heading text-3xl font-bold tracking-tight text-balance sm:text-5xl">
             {t('home.h1')}
           </h1>
           <p className="text-lg text-pretty">

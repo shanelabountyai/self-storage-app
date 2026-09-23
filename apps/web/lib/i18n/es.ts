@@ -59,8 +59,8 @@ export const es: Dictionary = {
   // --- Homepage ----------------------------------------------------------
   'home.h1': 'Bodegas cerca de casa, atendidas por personas a las que puede llamar.',
   'home.leadBefore':
-    'Reserve una unidad en línea. Si algo sale mal — un código de la puerta, un camión de mudanza que no cabe — llame al',
-  'home.noCard': 'No necesita tarjeta para apartar una unidad.',
+    'Reserve en línea. Si algo sale mal, llame al',
+  'home.noCard': 'No necesita tarjeta para reservar una unidad.',
   'home.checkOnline': 'Reserve, firme y pague en línea',
   'home.sizesEyebrow': 'Disponibles ahora',
   'home.sizesHeading': 'Elija el tamaño y le mostramos qué hay disponible',
@@ -77,14 +77,14 @@ export const es: Dictionary = {
   'home.whyCallTitle': 'Números que llegan a una sucursal',
   'home.whyCallBody': 'La página de cada sucursal indica su propio teléfono y horario de oficina.',
   'home.whyProtectTitle': 'Planes de protección desde {price}/mes',
-  'home.whyProtectBody': 'Forman parte de su contrato, no de una aseguradora aparte.',
+  'home.whyProtectBody': 'Se suma a su renta mensual. Cubre lo que guarda, hasta el límite del plan.',
   'home.whyPayTitle': 'Con pago automático o sin él',
   'home.whyPayBody': 'Pague en línea con tarjeta, en la oficina, o active el pago automático.',
   'home.whyGateTitle': 'Su código de la puerta, en línea',
   'home.whyGateBody': 'Está en su cuenta desde el día de su mudanza.',
   'home.facilitiesHeading': 'Nuestras sucursales',
   'home.allLocations': 'Todas las sucursales',
-  'home.ctaHeading': 'Aparte una unidad gratis',
+  'home.ctaHeading': 'Reserve una unidad gratis',
   'home.ctaBody':
     'Reserve sin tarjeta y sin cuenta. No se cobra nada hasta el día de su mudanza.',
   'home.ctaFind': 'Buscar una unidad',

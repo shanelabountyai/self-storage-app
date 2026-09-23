@@ -893,3 +893,24 @@ test.describe('the language a tenant is written to in', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   })
 })
+
+// B-377. The ZIP search and its submit button must be inside the first viewport
+// of a phone (375×667) with no scroll, and no customer string on `/` may say
+// "lease" (an admin word, D-15). Both languages.
+for (const [lang, cookie] of [['en', null], ['es', SPANISH]] as const) {
+  test(`home: search is above the fold at 375×667 and never says "lease" (${lang})`, async ({
+    page,
+    context,
+  }) => {
+    if (cookie) await context.addCookies([cookie])
+    await page.setViewportSize({ width: 375, height: 667 })
+    await page.goto('/')
+    const form = page.locator('main form').first()
+    for (const el of [form.locator('input').first(), form.locator('button[type="submit"]')]) {
+      const box = await el.boundingBox()
+      expect(box, 'search control is rendered').not.toBeNull()
+      expect(box!.y + box!.height).toBeLessThanOrEqual(667)
+    }
+    expect(await page.locator('main').innerText()).not.toMatch(/\blease\b/i)
+  })
+}

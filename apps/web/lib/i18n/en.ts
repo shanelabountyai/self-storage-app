@@ -59,8 +59,8 @@ export const en = {
   // have no data behind them and are not here.
   'home.h1': 'Storage down the road, run by people you can call.',
   'home.leadBefore':
-    "Reserve a unit online. If anything goes sideways — a gate code, a moving truck that won't fit — call",
-  'home.noCard': 'No card needed to hold a unit.',
+    'Reserve online. If anything goes sideways, call',
+  'home.noCard': 'No card needed to reserve a unit.',
   'home.checkOnline': 'Reserve, sign and pay online',
   'home.sizesEyebrow': 'Available now',
   'home.sizesHeading': "Pick the size, we'll show you what's open",
@@ -77,14 +77,14 @@ export const en = {
   'home.whyCallTitle': 'Numbers that reach a facility',
   'home.whyCallBody': 'Each facility page lists its own phone number and office hours.',
   'home.whyProtectTitle': 'Protection plans from {price}/mo',
-  'home.whyProtectBody': 'Part of your lease, not a separate insurer.',
+  'home.whyProtectBody': 'Added to your monthly rent. Covers what you store, up to the plan limit.',
   'home.whyPayTitle': 'Autopay or not',
   'home.whyPayBody': 'Pay online by card, at the office, or turn on autopay.',
   'home.whyGateTitle': 'Your gate code, online',
   'home.whyGateBody': 'It is in your account from the day you move in.',
   'home.facilitiesHeading': 'Our facilities',
   'home.allLocations': 'All locations',
-  'home.ctaHeading': 'Hold a unit free',
+  'home.ctaHeading': 'Reserve a unit free',
   'home.ctaBody': 'Reserve with no card and no account. Nothing is charged until you move in.',
   'home.ctaFind': 'Find a unit',
   // --- Brand + legal-page labels ----------------------------------------
