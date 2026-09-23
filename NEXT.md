@@ -1,5 +1,8 @@
 # Next
 
+**B-377 is built** (2026-09-23, `c89adf0`). Next item: **B-378** (`83azzzx`). Also unowned and red on main: `tests/live-region-display.test.ts` fails on `/storage/locations/page.tsx` (`role="status"` + `empty:hidden`).
+
+
 **B-376 is built** (2026-09-23, `b906b7c`). Next item: **B-377** (`83azzzw`). Search prices by the carried size band; size-guide cards link to search; locations is in the footer.
 
 **B-375 is built** (2026-09-23, `2ad13c8`). Next item: **B-376** (`83azzzv`). Staff tenants list reds only past-due balances; POS row buttons are outline.
