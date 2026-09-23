@@ -11723,7 +11723,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-383 — Two AA defects and the unit-status legend (2026-09-23)
 
-**Commit:** `PENDING`
+**Commit:** `e6bca71`
 
 **What it built.** `--unit-{vacant,occupied,reserved,overdue,maintenance}` with `-soft` and `-fg` in both themes; `UnitStatusBadge` re-pointed at them (green, grey, blue, red, amber; `unrentable` stays hatched) with a dot and the word on every badge. The last blue class (tenant plan note) moved to `info-*`; B-381's grep test now also covers `blue` and `gray`, and a new contrast test asserts every unit pair (4.5:1 text, 3:1 dot). Every 36px `h-9`/`min-h-9` control (inputs, selects, link buttons, about 45 places, not five) is `h-11`. Five colour-tinted `role="alert"` boxes gained a lead word (Out of date, Cannot transfer, Returned mail, Balance too high, Card declined); the two pre-mounted card-error regions gain an `aria-hidden` ⚠ only while an error is present, so the announced text is unchanged. PRD 02 US-5's AC is amended.
 

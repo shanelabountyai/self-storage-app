@@ -1,5 +1,8 @@
 # Next
 
+**B-383 is built** (2026-09-23, `e6bca71`). **Next item: B-384** (`83azzzzd`), shared primitives. The Alert primitive should absorb B-383's lead words and ⚠ glyph. Fixed along the way: impersonation banner contrast (B-381 regression).
+
+
 **Design-kit gap audit written** (2026-09-23, `bd87d3f`, `docs/DESIGN_KIT_GAP_AUDIT.md`). D-148: the kit's unit legend wins; AA fixes and primitives first. **Next item: B-383** (`83azzzzc`), then B-384. The audit's other rows (staff restyle, customer-facing gaps, kit screens for the facility page and checkout) have no backlog row yet.
 
 **Smoke "checkout goes back" is green on mobile-chrome** (2026-09-23): the test now focuses the sr-only step button and presses Enter, since B-378 leaves it keyboard-only below `sm`. Nothing queued and no open red: pick from `06-backlog.md`.
