@@ -1,6 +1,6 @@
 # Next
 
-**Closure refresh done** (2026-09-23): DEMO, WRITEUP and the brief re-walked and republished (PROGRESS, last entry). Owed: edit LinkedIn draft 27 in the Ledger ("nine" → "eleven", "in the last round alone" → "in one round alone"). Unowned defect: checkout can sit on *Payment* after a card payment until reloaded (`payment-element.tsx` reloads before the webhook lands); needs a backlog row.
+**Closure refresh done** (2026-09-23): DEMO, WRITEUP and the brief re-walked and republished (PROGRESS, last entry). Owed: edit LinkedIn draft 27 in the Ledger ("nine" → "eleven", "in the last round alone" → "in one round alone"). Unowned defect: checkout can sit on *Payment* after a card payment until reloaded (`payment-element.tsx` reloads before the webhook lands); is now B-390 (`83azzzzj`).
 
 **Design-audit owner calls closed** (2026-09-23, D-151, `3118f0d`): links, header CTA, fee copy and the kit screens all stay as the code has them; no rows. Nothing queued, and the only open backlog rows are the blocked list. Next: new review block, or stop.
 
