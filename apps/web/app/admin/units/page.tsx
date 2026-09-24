@@ -18,6 +18,8 @@ import type { UnitFilters } from '@/lib/admin/unit-query'
 import { formatCents } from '@/lib/format'
 import { applyBulkAction, setUnitStatusAction } from './actions'
 import { ScrollRegion } from '@/components/ui/scroll-region'
+import { DataTable } from '@/components/ui/data-table'
+import { EmptyState } from '@/components/ui/empty-state'
 
 // B-169. A unit reading `overlocked` with nobody in it is not a tenant behind
 // on rent — it is a lock left on after the lease ended, and it is out of
@@ -162,7 +164,7 @@ export default async function AdminUnitsPage({
       <UnitsSubnav />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">{selected.facility.name} units</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{selected.facility.name} units</h1>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex gap-2">
             <Link
@@ -245,30 +247,30 @@ export default async function AdminUnitsPage({
 
       {view === 'list' ? (
         <ScrollRegion aria-label="Units">
-        <table className="hidden w-full min-w-max text-left text-sm sm:table">
-          <thead>
-            <tr className="text-muted-foreground">
-              <th scope="col" className="pb-2 font-normal">Unit</th>
-              <th scope="col" className="pb-2 font-normal">Type</th>
-              <th scope="col" className="pb-2 font-normal">Location</th>
-              <th scope="col" className="pb-2 font-normal">Rate</th>
-              <th scope="col" className="pb-2 font-normal">Status</th>
+        <DataTable className="hidden min-w-max sm:table">
+          <DataTable.Head>
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">Unit</th>
+              <th scope="col" className="px-3 py-2 font-semibold">Type</th>
+              <th scope="col" className="px-3 py-2 font-semibold">Location</th>
+              <th scope="col" className="px-3 py-2 font-semibold">Rate</th>
+              <th scope="col" className="px-3 py-2 font-semibold">Status</th>
               {/* B-116, UX review finding 12: "who is in B-14?" used to mean
                   leaving this screen for Tenants and searching. */}
-              <th scope="col" className="pb-2 font-normal">Tenant</th>
-              <th scope="col" className="pb-2 font-normal"><span className="sr-only">Actions</span></th>
+              <th scope="col" className="px-3 py-2 font-semibold">Tenant</th>
+              <th scope="col" className="px-3 py-2 font-semibold"><span className="sr-only">Actions</span></th>
             </tr>
-          </thead>
+          </DataTable.Head>
           <tbody>
             {list.rows.map((unit) => (
-              <tr key={unit.id} className="border-t align-middle">
-                <th scope="row" className="py-2 text-left font-medium">{unit.number}</th>
-                <td className="py-2">
+              <DataTable.Row key={unit.id} className="align-middle">
+                <th scope="row" className="px-3 py-2 text-left font-medium">{unit.number}</th>
+                <td className="px-3 py-2">
                   {unit.unitType.name}
                   <span className="text-muted-foreground"> · {unit.unitType.widthFt}×{unit.unitType.lengthFt}</span>
                 </td>
-                <td className="py-2">{[unit.building, `Floor ${unit.floor}`].filter(Boolean).join(' · ')}</td>
-                <td className="py-2">
+                <td className="px-3 py-2">{[unit.building, `Floor ${unit.floor}`].filter(Boolean).join(' · ')}</td>
+                <td className="px-3 py-2">
                   {(() => {
                     const rate = rates.get(unit.unitTypeId)
                     // A type whose only rate starts in the future has no
@@ -276,7 +278,7 @@ export default async function AdminUnitsPage({
                     return rate ? formatCents(rate.streetRateCents) : <span className="text-muted-foreground">not priced</span>
                   })()}
                 </td>
-                <td className="py-2">
+                <td className="px-3 py-2">
                   <UnitStatusBadge status={unit.status} />
                   {/* 1.4.1: words, never a colour. */}
                   {stuckLock(unit) && (
@@ -285,7 +287,7 @@ export default async function AdminUnitsPage({
                     </Link>
                   )}
                 </td>
-                <td className="py-2">
+                <td className="px-3 py-2">
                   {unit.occupant ? (
                     <Link href={`/admin/tenants/${unit.occupant.tenantId}`} className="underline underline-offset-2">
                       {unit.occupant.tenantName}
@@ -294,7 +296,7 @@ export default async function AdminUnitsPage({
                     <span className="text-muted-foreground">—</span>
                   )}
                 </td>
-                <td className="py-2">
+                <td className="px-3 py-2">
                   {/* Only the three manual statuses are offered — the derived
                       ones are not a human's to set (US-8), so they never
                       appear as an option rather than failing on submit. */}
@@ -323,10 +325,10 @@ export default async function AdminUnitsPage({
                     Report issue<span className="sr-only"> on {unit.number}</span>
                   </Link>
                 </td>
-              </tr>
+              </DataTable.Row>
             ))}
           </tbody>
-        </table>
+        </DataTable>
         </ScrollRegion>
       ) : (
         <div className="flex flex-col gap-6">
@@ -362,7 +364,7 @@ export default async function AdminUnitsPage({
               </ul>
             </section>
           ))}
-          {groups.size === 0 && <p className="text-muted-foreground text-sm">No units match.</p>}
+          {groups.size === 0 && <EmptyState>No units match.</EmptyState>}
         </div>
       )}
 
@@ -517,27 +519,27 @@ export default async function AdminUnitsPage({
             </p>
 
             <ScrollRegion aria-label="Bulk edit preview">
-            <table className="w-full min-w-max text-left text-xs">
-              <thead>
-                <tr className="text-muted-foreground">
-                  <th scope="col" className="pb-1 font-normal">Unit</th>
-                  <th scope="col" className="pb-1 font-normal">Outcome</th>
-                  <th scope="col" className="pb-1 font-normal">Detail</th>
+            <DataTable className="min-w-max text-xs">
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-1 font-semibold">Unit</th>
+                  <th scope="col" className="px-3 py-1 font-semibold">Outcome</th>
+                  <th scope="col" className="px-3 py-1 font-semibold">Detail</th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {preview.rows.map((row) => (
-                  <tr key={row.unitId} className="border-t">
-                    <th scope="row" className="py-1 text-left font-medium">{row.number}</th>
-                    <td className="py-1">{row.outcome === 'apply' ? 'Will change' : 'Skipped'}</td>
-                    <td className="py-1">
+                  <DataTable.Row key={row.unitId} className="h-auto">
+                    <th scope="row" className="px-3 py-1 text-left font-medium">{row.number}</th>
+                    <td className="px-3 py-1">{row.outcome === 'apply' ? 'Will change' : 'Skipped'}</td>
+                    <td className="px-3 py-1">
                       {row.outcome === 'apply' ? `${row.from} → ${row.to}` : row.skipReason}
                       {row.warning && <span className="block text-warning-fg">{row.warning}</span>}
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
             </ScrollRegion>
 
             {preview.applyCount > 0 && (

@@ -11756,3 +11756,17 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** The header search stays hidden below `sm` (Tenants nav is the phone route). Sidebar counts are not live; they refresh on navigation. No unit test on `navCounts`; the e2e asserts the accessible-name shape only when demo data has open work.
 
 **Verification.** typecheck, lint clean; admin-nav and delinquency-queue unit 17 passed; e2e admin-tenants, admin, admin-tasks, impersonation 666 passed + 4 skipped = 670. Stale `B-221 refusal fixture` task rows left by my killed runs failed admin-tasks on a unique constraint until deleted. Accessibility statement: staff-only change, no claim touched.
+
+## B-385 — Staff restyle on the skipped screens (2026-09-23)
+
+**Commit:** `SHA_PENDING`.
+
+**What it built.** Units, `/admin/pos`, the tenant profile, the delinquency no-facility branch, the tenants list and all 19 reports pages (index, close, deliverability, funnel, plans-holds and the rest) move to the B-384 primitives: kit `h1` (`text-2xl font-bold tracking-tight`), `DataTable`/`DataTable.Head`/`DataTable.Row` for every hand-ruled table, `EmptyState` for the "No … here" lines, `Alert` for the POS sold-out and search-cap notices, `Card` for the POS tenant panel. Tenants list: a status `Badge` column, a count on every filter tab (`listTenants` now returns `counts`, computed from the same in-memory aggregate and the same predicate as the filter), and "Add a tenant" as the primary button. Delinquency: a three-figure strip (past due $, tenants, lock-out eligible) from the queue's own rows, one figure per lease.
+
+**What it decided.** Every `role`, `aria-live`, `aria-current`, caption and `ScrollRegion` is unchanged; no route added. The conversion of the report tables was a script over `<table>…</table>` blocks, so cell padding is now `px-3` everywhere and `pr-4` is gone. Lock-out eligible counts leases with an `overlock_apply` task due, not leases past a threshold; the queue has no other definition of eligible.
+
+**What it left behind.** One commit for the whole area, not one per area: the conversion was mechanical and one e2e pass covered it. The unit-map tiles, dashboard TrendBars and rate-change modal stay out (no data behind them). `/admin/settings/*`, leads, tasks, auctions and the other `text-lg` `h1` pages are not in this row's list and are unchanged.
+
+**Real bug found.** Two bare report tables (`MoveSplit`, the attach-rate split) had no scroll wrapper: the kit's `px-3` cells pushed them past the viewport at 200% zoom, and a wrapper with a `min-w` floor then widened their flex parent at 320px until it got `min-w-0`.
+
+**Verification.** typecheck and lint clean. e2e on desktop-chrome: admin-tenants, admin-pos, admin-pos-together, admin-reports, a11y 230 passed; admin, admin-tasks, admin-move-out 309 passed + 1 skipped; final admin + admin-reports 341 passed. mobile-chrome not run. Accessibility statement: staff-only, no claim touched.

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -44,7 +45,7 @@ export default async function WaitlistPage({
   if (selected.mode !== 'single') {
     return (
       <div className="flex flex-col gap-3">
-        <h1 className="text-lg font-semibold">Waitlist</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Waitlist</h1>
         <p className="text-muted-foreground text-sm">
           Choose a single facility in the switcher above — a waitlist is about one site&apos;s
           inventory.
@@ -59,7 +60,7 @@ export default async function WaitlistPage({
   return (
     <div className="flex max-w-4xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">Waitlist — {selected.facility.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Waitlist — {selected.facility.name}</h1>
         <Link href="/admin/reports" className="text-sm underline underline-offset-2">
           All reports
         </Link>
@@ -92,20 +93,20 @@ export default async function WaitlistPage({
           </dl>
 
           <ScrollRegion aria-label="Waitlist by unit type">
-            <table className="w-full min-w-2xl border-collapse text-sm">
+            <DataTable className="min-w-2xl">
               <caption className="sr-only">
                 Waitlist by unit type, longest queue first
               </caption>
-              <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">Size</th>
-                  <th scope="col" className="py-2 pr-4">Waiting</th>
-                  <th scope="col" className="py-2 pr-4">Notified</th>
-                  <th scope="col" className="py-2 pr-4">Units free now</th>
-                  <th scope="col" className="py-2 pr-4">Longest wait since</th>
-                  <th scope="col" className="py-2 pr-4">Contact</th>
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">Size</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Waiting</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Notified</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Units free now</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Longest wait since</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Contact</th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {rows.map((row) => {
                   // B-183: waiting AND free-right-now is the one actionable
@@ -115,8 +116,8 @@ export default async function WaitlistPage({
                   // to be spotted by comparing two columns.
                   const actionable = row.waiting > 0 && row.availableNow > 0
                   return (
-                  <tr key={row.unitTypeId} className={`border-input border-b ${actionable ? 'bg-warning-bg' : ''}`}>
-                    <th scope="row" className="py-2 pr-4 text-left font-normal">
+                  <DataTable.Row key={row.unitTypeId} className={`border-input border-b ${actionable ? 'bg-warning-bg' : ''}`}>
+                    <th scope="row" className="px-3 py-2 text-left font-normal">
                       <span aria-hidden="true">
                         {row.widthFt}×{row.lengthFt}
                       </span>
@@ -125,9 +126,9 @@ export default async function WaitlistPage({
                       </span>
                       <span className="text-muted-foreground"> · {row.unitTypeName}</span>
                     </th>
-                    <td className="py-2 pr-4 font-medium tabular-nums">{row.waiting}</td>
-                    <td className="py-2 pr-4 tabular-nums">{row.claiming}</td>
-                    <td className="py-2 pr-4 tabular-nums">
+                    <td className="px-3 py-2 font-medium tabular-nums">{row.waiting}</td>
+                    <td className="px-3 py-2 tabular-nums">{row.claiming}</td>
+                    <td className="px-3 py-2 tabular-nums">
                       {row.availableNow}
                       {actionable && (
                         <span className="ml-2 text-xs font-medium text-warning-fg">
@@ -135,10 +136,10 @@ export default async function WaitlistPage({
                         </span>
                       )}
                     </td>
-                    <td className="text-muted-foreground py-2 pr-4">
+                    <td className="px-3 text-muted-foreground py-2">
                       {row.waitingSince ? formatSince(row.waitingSince) : '—'}
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="px-3 py-2">
                       {/* Native <details>/<summary> — no client JS needed to
                           keep the report's PII off-screen until asked for. */}
                       <details>
@@ -169,11 +170,11 @@ export default async function WaitlistPage({
                         </ul>
                       </details>
                     </td>
-                  </tr>
+                  </DataTable.Row>
                   )
                 })}
               </tbody>
-            </table>
+            </DataTable>
           </ScrollRegion>
         </>
       )}

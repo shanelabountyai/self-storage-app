@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -80,7 +81,7 @@ export default async function ManagementPackPage({
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">{pack.document.title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{pack.document.title}</h1>
         <p
           className={
             pack.driftCount > 0
@@ -166,10 +167,10 @@ export default async function ManagementPackPage({
           ))}
           {section.table && (
             <ScrollRegion aria-label={section.table.caption}>
-              <table className="w-full text-left text-sm">
+              <DataTable>
                 <caption className="sr-only">{section.table.caption}</caption>
-                <thead>
-                  <tr className="text-muted-foreground">
+                <DataTable.Head>
+                  <tr>
                     {section.table.columns.map((column, index) => (
                       <th
                         key={column}
@@ -180,22 +181,22 @@ export default async function ManagementPackPage({
                       </th>
                     ))}
                   </tr>
-                </thead>
+                </DataTable.Head>
                 <tbody>
                   {section.table.rows.map((row) => (
-                    <tr key={row[0]}>
-                      <th scope="row" className="py-1 text-left font-normal">
+                    <DataTable.Row key={row[0]}>
+                      <th scope="row" className="px-3 py-1 text-left font-normal">
                         {row[0]}
                       </th>
                       {row.slice(1).map((cell, index) => (
-                        <td key={index} className="py-1 text-right tabular-nums">
+                        <td key={index} className="px-3 py-1 text-right tabular-nums">
                           {cell}
                         </td>
                       ))}
-                    </tr>
+                    </DataTable.Row>
                   ))}
                 </tbody>
-              </table>
+              </DataTable>
             </ScrollRegion>
           )}
         </section>

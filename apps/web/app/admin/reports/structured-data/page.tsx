@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import type { PageCheck } from '@storage/core/marketing'
@@ -29,15 +30,15 @@ function CheckRows({ check }: { check: PageCheck }) {
   const problems = check.fetchProblem ? [check.fetchProblem] : check.findings.map((f) => f.problem)
 
   return (
-    <tr className="border-input border-b align-top">
-      <th scope="row" className="py-2 pr-4 text-left font-normal">
+    <DataTable.Row className="border-input border-b align-top">
+      <th scope="row" className="px-3 py-2 text-left font-normal">
         <a href={check.url} className="underline underline-offset-2" rel="noreferrer" target="_blank">
           {path}
           <span className="sr-only"> (opens in a new tab)</span>
         </a>
         <span className="text-muted-foreground block text-xs">{check.kind}</span>
       </th>
-      <td className="py-2 pr-4">
+      <td className="px-3 py-2">
         {/* Every problem listed, not a count. A page missing three address
             fields and a page missing its whole node both read as "3 problems"
             otherwise, and only one of them is urgent. */}
@@ -49,7 +50,7 @@ function CheckRows({ check }: { check: PageCheck }) {
           ))}
         </ul>
       </td>
-    </tr>
+    </DataTable.Row>
   )
 }
 
@@ -67,7 +68,7 @@ export default async function StructuredDataPage() {
   return (
     <div className="flex max-w-4xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Structured data</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Structured data</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Structured data is invisible on the page, so a page that stops emitting it looks
           completely normal in a browser. This fetches the pages as a crawler gets them and checks
@@ -110,22 +111,22 @@ export default async function StructuredDataPage() {
         </p>
       ) : (
         <ScrollRegion aria-label="Pages needing attention">
-          <table className="w-full min-w-2xl border-collapse text-sm">
+          <DataTable className="min-w-2xl">
             <caption className="sr-only">
               Pages whose structured data needs attention, unreachable pages first
             </caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">Page</th>
-                <th scope="col" className="py-2 pr-4">What&apos;s wrong</th>
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">Page</th>
+                <th scope="col" className="px-3 py-2 font-semibold">What&apos;s wrong</th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {needsAttention.map((check) => (
                 <CheckRows key={check.url} check={check} />
               ))}
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       )}
 

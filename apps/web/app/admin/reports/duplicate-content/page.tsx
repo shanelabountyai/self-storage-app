@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { DUPLICATE_THRESHOLD, duplicateReport } from '@storage/core/marketing'
@@ -34,7 +35,7 @@ export default async function DuplicateContentPage() {
   return (
     <div className="flex max-w-4xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Duplicate content</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Duplicate content</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Pages that say nearly the same thing as each other.{' '}
           <Link href="/admin/reports" className="underline underline-offset-2">
@@ -60,25 +61,25 @@ export default async function DuplicateContentPage() {
           </p>
 
           <ScrollRegion aria-label="Similar page pairs">
-            <table className="w-full min-w-2xl border-collapse text-sm">
+            <DataTable className="min-w-2xl">
               <caption className="sr-only">
                 Pairs of pages with similar text, authored collisions first
               </caption>
-              <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">What</th>
-                  <th scope="col" className="py-2 pr-4">These two pages</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Alike</th>
-                  <th scope="col" className="py-2 pr-4">What to do</th>
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">What</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">These two pages</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">Alike</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">What to do</th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {report.pairs.map((pair) => (
-                  <tr key={`${pair.left.key}|${pair.right.key}`} className="border-input border-b">
-                    <th scope="row" className="py-2 pr-4 text-left font-normal">
+                  <DataTable.Row key={`${pair.left.key}|${pair.right.key}`} className="border-input border-b">
+                    <th scope="row" className="px-3 py-2 text-left font-normal">
                       {pair.kind}
                     </th>
-                    <td className="py-2 pr-4">
+                    <td className="px-3 py-2">
                       <Link href={pair.left.url} className="underline underline-offset-2">
                         {pair.left.label}
                       </Link>
@@ -87,10 +88,10 @@ export default async function DuplicateContentPage() {
                         {pair.right.label}
                       </Link>
                     </td>
-                    <td className="py-2 pr-4 text-right tabular-nums">
+                    <td className="px-3 py-2 text-right tabular-nums">
                       {percent(pair.similarity)}
                     </td>
-                    <td className="py-2 pr-4 text-pretty">
+                    <td className="px-3 py-2 text-pretty">
                       {/* The fix depends entirely on who wrote it, which is why
                           `origin` is carried through rather than inferred from
                           the kind. Two pasted descriptions and two templated
@@ -134,10 +135,10 @@ export default async function DuplicateContentPage() {
                         'Somebody wrote both. Check whether one was pasted from the other and rewrite the weaker one.'
                       )}
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </ScrollRegion>
         </>
       )}

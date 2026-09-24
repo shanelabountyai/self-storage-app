@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { ledgerExceptionsFor } from '@/lib/admin/ledger'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -51,7 +52,7 @@ export default async function LedgerExceptionsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Ledger exceptions</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Ledger exceptions</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Leases where the ledger balance is not what the invoices say is owed. The delinquency
           ladder reads the ledger, so a balance here that the invoices do not back keeps chasing a
@@ -94,44 +95,44 @@ export default async function LedgerExceptionsPage() {
         </p>
       ) : (
         <ScrollRegion aria-label="Ledger exceptions">
-          <table className="w-full min-w-4xl border-collapse text-sm">
+          <DataTable className="min-w-4xl">
             <caption className="sr-only">
               Leases whose ledger balance disagrees with their invoices, largest difference first
               within each facility
               {reviewed > 0 ? `; ${reviewed} of ${exceptions.length} already reviewed` : ''}
             </caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Tenant
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Facility
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Unit
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Ledger balance
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Invoices outstanding
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Difference
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Likely cause
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Reviewed
                 </th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {exceptions.map((row) => (
-                <tr key={row.leaseId} className="border-input border-b">
-                  <th scope="row" className="py-2 pr-4 text-left font-medium">
+                <DataTable.Row key={row.leaseId} className="border-input border-b">
+                  <th scope="row" className="px-3 py-2 text-left font-medium">
                     <Link
                       href={`/admin/tenants/${row.tenantId}/ledger/${row.leaseId}`}
                       className="underline underline-offset-2"
@@ -139,23 +140,23 @@ export default async function LedgerExceptionsPage() {
                       {row.tenantName}
                     </Link>
                   </th>
-                  <td className="py-2 pr-4">{row.facilityName}</td>
-                  <td className="py-2 pr-4">{row.unitNumber}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2">{row.facilityName}</td>
+                  <td className="px-3 py-2">{row.unitNumber}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(row.ledgerBalanceCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(row.invoiceOutstandingCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {signedCents(row.reconciliation.differenceCents)}
                   </td>
-                  <td className="py-2 pr-4 text-pretty">{row.reconciliation.explanation}</td>
+                  <td className="px-3 py-2 text-pretty">{row.reconciliation.explanation}</td>
                   {/* B-304. Never hidden, and never colour alone (1.4.1): the
                       word "Reviewed" and the name carry it. The row stays
                       because the ledger still disagrees — this only stops the
                       daily task naming it. */}
-                  <td className="py-2 pr-4 text-pretty">
+                  <td className="px-3 py-2 text-pretty">
                     {row.acknowledgement ? (
                       <>
                         <span className="font-medium">Reviewed</span> by{' '}
@@ -174,10 +175,10 @@ export default async function LedgerExceptionsPage() {
                       <span className="text-muted-foreground">Not reviewed</span>
                     )}
                   </td>
-                </tr>
+                </DataTable.Row>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       )}
       </AnnounceRegion>

@@ -1,4 +1,6 @@
 import { ScrollRegion } from "@/components/ui/scroll-region"
+import { DataTable } from '@/components/ui/data-table'
+import { EmptyState } from '@/components/ui/empty-state'
 import { LOCALES, LOCALE_NAMES } from "@/lib/i18n";
 import { ApplyCreditForm } from "@/components/admin/apply-credit-form";
 import Link from "next/link";
@@ -379,7 +381,7 @@ export default async function TenantProfilePage({
         >
           ← Back to search
         </Link>
-        <h1 className="mt-1 text-lg font-semibold">
+        <h1 className="mt-1 text-2xl font-bold tracking-tight">
           {profile.firstName} {profile.lastName}
         </h1>
         {/* "Profile shows delinquency status prominently" — but nothing sets
@@ -584,7 +586,7 @@ export default async function TenantProfilePage({
           Leases
         </h2>
         {profile.leases.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No leases on file.</p>
+          <EmptyState>No leases on file.</EmptyState>
         ) : (
           /* B-217. Two renderings of the same leases, and the UX call B-199
              left open. B-199 gave this table the scroll wrapper and the
@@ -602,17 +604,17 @@ export default async function TenantProfilePage({
              how one of them acquires a fifth link the other never gets. */
           <>
           <ScrollRegion aria-label="Leases" className="hidden sm:block">
-            <table className="w-full min-w-2xl text-sm">
+            <DataTable className="min-w-2xl">
               <caption className="sr-only">Leases held by this tenant</caption>
-              <thead>
-                <tr className="border-b text-left">
-                  <th scope="col" className="py-2 font-medium">
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Facility / Unit
                   </th>
-                  <th scope="col" className="py-2 font-medium">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Status
                   </th>
-                  <th scope="col" className="py-2 font-medium">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Rate
                   </th>
                   {/* B-212. "Total balance", not "Balance": the plan builder
@@ -621,42 +623,42 @@ export default async function TenantProfilePage({
                       the installments was refused with no way to tell which
                       number the form meant. The builder names both; this names
                       itself the same way. */}
-                  <th scope="col" className="py-2 text-right font-medium">
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">
                     Total balance
                   </th>
-                  <th scope="col" className="py-2 font-medium">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Started
                   </th>
-                  <th scope="col" className="py-2 font-medium">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Notice given
                   </th>
-                  <th scope="col" className="py-2 font-medium">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {profile.leases.map((lease) => (
-                  <tr key={lease.leaseId} className="border-b">
-                    <td className="py-2">
+                  <DataTable.Row key={lease.leaseId} className="border-b">
+                    <td className="px-3 py-2">
                       {lease.facilityName} — {lease.unitNumber}
                     </td>
-                    <td className="py-2 capitalize">
+                    <td className="px-3 py-2 capitalize">
                       {leaseStatusLabel(lease.status)}
                     </td>
-                    <td className="py-2">
+                    <td className="px-3 py-2">
                       {formatCents(lease.monthlyRateCents)}/mo
                     </td>
                     <td
-                      className={`py-2 text-right tabular-nums ${lease.balanceCents > 0 ? "font-medium text-danger-fg" : ""}`}
+                      className={`px-3 py-2 text-right tabular-nums ${lease.balanceCents > 0 ? "font-medium text-danger-fg" : ""}`}
                     >
                       {formatCents(lease.balanceCents)}
                     </td>
-                    <td className="py-2">{calendarDate(lease.startDate)}</td>
-                    <td className="py-2">
+                    <td className="px-3 py-2">{calendarDate(lease.startDate)}</td>
+                    <td className="px-3 py-2">
                       <NoticeGiven lease={lease} tenantId={tenantId} />
                     </td>
-                    <td className="py-2">
+                    <td className="px-3 py-2">
                       <LeaseActions
                         lease={lease}
                         tenantId={tenantId}
@@ -664,10 +666,10 @@ export default async function TenantProfilePage({
                         linkClassName="underline underline-offset-2"
                       />
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </ScrollRegion>
 
           <ul className="flex flex-col gap-3 sm:hidden">
@@ -795,38 +797,38 @@ export default async function TenantProfilePage({
               {formatCents(plan.collectedCents)} collected of{" "}
               {formatCents(plan.totalCents)} deferred.
             </p>
-            <table className="mt-2 w-full text-sm">
+            <DataTable className="mt-2">
               <caption className="sr-only">
                 Installment schedule for unit {plan.unitNumber}
               </caption>
-              <thead>
-                <tr className="border-b text-left">
-                  <th scope="col" className="py-1 font-medium">
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Due
                   </th>
-                  <th scope="col" className="py-1 text-right font-medium">
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">
                     Amount
                   </th>
                   {/* B-192. What a staffer and a tenant both read a schedule
                       for is "how much is left after this one", and neither
                       table showed it — six amounts and a total, with the
                       subtraction left to the reader on the phone. */}
-                  <th scope="col" className="py-1 text-right font-medium">
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">
                     Left after
                   </th>
-                  <th scope="col" className="py-1 font-medium">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Status
                   </th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {plan.installments.map((installment, index) => (
-                  <tr key={installment.position} className="border-b last:border-0">
-                    <td className="py-1">{calendarDate(installment.dueDate)}</td>
-                    <td className="py-1 text-right tabular-nums">
+                  <DataTable.Row key={installment.position} className="border-b last:border-0">
+                    <td className="px-3 py-1">{calendarDate(installment.dueDate)}</td>
+                    <td className="px-3 py-1 text-right tabular-nums">
                       {formatCents(installment.amountCents)}
                     </td>
-                    <td className="py-1 text-right tabular-nums">
+                    <td className="px-3 py-1 text-right tabular-nums">
                       {formatCents(
                         plan.totalCents -
                           plan.installments
@@ -839,7 +841,7 @@ export default async function TenantProfilePage({
                         deadline in it — a staffer reading "Missed" to a tenant
                         who has three days left is quoting a rule the product
                         does not run. */}
-                    <td className="py-1 capitalize">
+                    <td className="px-3 py-1 capitalize">
                       {installment.status === "missed" ? (
                         <span className="font-medium text-danger-fg">Missed</span>
                       ) : installment.status === "late" ? (
@@ -850,10 +852,10 @@ export default async function TenantProfilePage({
                         installment.status
                       )}
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
             {/* D-97. Which of the two kinds of plan this is, in words rather
                 than an icon — a staffer reading the schedule to a tenant on
                 the phone is answering "what happens on the 15th", and the
@@ -1113,7 +1115,7 @@ export default async function TenantProfilePage({
             {profile.address.postalCode}
           </p>
         ) : (
-          <p className="text-muted-foreground text-sm">No address on record.</p>
+          <EmptyState>No address on record.</EmptyState>
         )}
         {/* Stays in the open, deliberately. It is not an edit — it is the
             counterpart to the alert above, one click, and the thing a staffer
@@ -1218,36 +1220,36 @@ export default async function TenantProfilePage({
             Referrals
           </h2>
           <ScrollRegion aria-label="Referrals">
-            <table className="w-full border-collapse text-sm">
+            <DataTable className="">
               <caption className="sr-only">
                 Referrals this tenant made or arrived on, with the reward state
                 and the rule that refused any that did not pay
               </caption>
-              <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Who
                   </th>
-                  <th scope="col" className="py-2 pr-4">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     State
                   </th>
-                  <th scope="col" className="py-2 pr-4">
+                  <th scope="col" className="px-3 py-2 font-semibold">
                     Rewards
                   </th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {referrals.map((referral) => (
-                  <tr
+                  <DataTable.Row
                     key={referral.id}
                     className="border-input border-b align-top"
                   >
-                    <th scope="row" className="py-2 pr-4 text-left font-medium">
+                    <th scope="row" className="px-3 py-2 text-left font-medium">
                       {referral.role === "referrer"
                         ? `Referred ${referral.refereeName ?? "nobody yet"}`
                         : `Referred by ${referral.referrerName}`}
                     </th>
-                    <td className="py-2 pr-4">
+                    <td className="px-3 py-2">
                       {/* In words, never a colour alone — the same 1.4.1 rule
                           the portal table follows. */}
                       {en[REFERRAL_STATE_LABELS[referral.state]]}
@@ -1265,7 +1267,7 @@ export default async function TenantProfilePage({
                         </>
                       )}
                     </td>
-                    <td className="py-2 pr-4 tabular-nums">
+                    <td className="px-3 py-2 tabular-nums">
                       {referral.state === "earned" ? (
                         <>
                           {formatCents(referral.referrerRewardCents)} referrer ·{" "}
@@ -1275,10 +1277,10 @@ export default async function TenantProfilePage({
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </ScrollRegion>
         </section>
       )}

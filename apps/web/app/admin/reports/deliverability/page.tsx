@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { commsDashboard, type RateRow } from '@/lib/admin/comms-dashboard'
@@ -23,10 +24,10 @@ function percent(ratio: number | null): string {
 function rateCells(row: RateRow, showSms: boolean) {
   return (
     <>
-      <td className="py-2 pr-4 text-right tabular-nums">{row.counts.sent + row.counts.delivered + row.counts.bounced + row.counts.failed}</td>
-      <td className="py-2 pr-4 text-right tabular-nums">{percent(row.deliveryRate)}</td>
-      <td className="py-2 pr-4 text-right tabular-nums">{percent(row.bounceRate)}</td>
-      <td className="py-2 pr-4 text-right tabular-nums">{showSms ? percent(row.smsFailureRate) : '—'}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{row.counts.sent + row.counts.delivered + row.counts.bounced + row.counts.failed}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{percent(row.deliveryRate)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{percent(row.bounceRate)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">{showSms ? percent(row.smsFailureRate) : '—'}</td>
     </>
   )
 }
@@ -53,7 +54,7 @@ export default async function DeliverabilityPage({
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Deliverability — {range.label}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Deliverability — {range.label}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Sends, delivery and bounce rates by template.{' '}
           <Link href="/admin/reports" className="underline underline-offset-2">
@@ -101,20 +102,20 @@ export default async function DeliverabilityPage({
           Overall
         </h2>
         <ScrollRegion aria-label="Deliverability summary">
-          <table className="w-full min-w-md border-collapse text-sm">
+          <DataTable className="min-w-md">
             <caption className="sr-only">Sends, delivery rate, bounce rate and SMS failure rate for {range.label}</caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">Sent</th>
-                <th scope="col" className="py-2 pr-4">Delivered</th>
-                <th scope="col" className="py-2 pr-4">Bounced</th>
-                <th scope="col" className="py-2 pr-4">SMS failed</th>
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">Sent</th>
+                <th scope="col" className="px-3 py-2 font-semibold">Delivered</th>
+                <th scope="col" className="px-3 py-2 font-semibold">Bounced</th>
+                <th scope="col" className="px-3 py-2 font-semibold">SMS failed</th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
-              <tr>{rateCells(report.overall, true)}</tr>
+              <DataTable.Row>{rateCells(report.overall, true)}</DataTable.Row>
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       </section>
 
@@ -123,35 +124,35 @@ export default async function DeliverabilityPage({
           By template
         </h2>
         <ScrollRegion aria-label="By template and channel">
-          <table className="w-full min-w-2xl border-collapse text-sm">
+          <DataTable className="min-w-2xl">
             <caption className="sr-only">Sends and delivery outcomes broken down by template and channel</caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">Template</th>
-                <th scope="col" className="py-2 pr-4">Channel</th>
-                <th scope="col" className="py-2 pr-4 text-right">Sent</th>
-                <th scope="col" className="py-2 pr-4 text-right">Delivered</th>
-                <th scope="col" className="py-2 pr-4 text-right">Bounced</th>
-                <th scope="col" className="py-2 pr-4 text-right">SMS failed</th>
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">Template</th>
+                <th scope="col" className="px-3 py-2 font-semibold">Channel</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Sent</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Delivered</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Bounced</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">SMS failed</th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {report.templates.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="text-muted-foreground py-4 text-center">
+                <DataTable.Row>
+                  <td colSpan={6} className="px-3 text-muted-foreground py-4 text-center">
                     Nothing sent in this range.
                   </td>
-                </tr>
+                </DataTable.Row>
               )}
               {report.templates.map((row) => (
-                <tr key={`${row.templateKey}:${row.channel}`} className="border-input border-b">
-                  <th scope="row" className="py-2 pr-4 text-left font-normal">{row.templateKey}</th>
-                  <td className="py-2 pr-4">{row.channel === 'sms' ? 'Text' : 'Email'}</td>
+                <DataTable.Row key={`${row.templateKey}:${row.channel}`} className="border-input border-b">
+                  <th scope="row" className="px-3 py-2 text-left font-normal">{row.templateKey}</th>
+                  <td className="px-3 py-2">{row.channel === 'sms' ? 'Text' : 'Email'}</td>
                   {rateCells(row, row.channel === 'sms')}
-                </tr>
+                </DataTable.Row>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       </section>
 
@@ -160,40 +161,40 @@ export default async function DeliverabilityPage({
           By day
         </h2>
         <ScrollRegion aria-label="Sends per day">
-          <table className="w-full min-w-md border-collapse text-sm">
+          <DataTable className="min-w-md">
             <caption className="sr-only">Sends per day for {range.label}</caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">Day</th>
-                <th scope="col" className="py-2 pr-4 text-right">Sent</th>
-                <th scope="col" className="py-2 pr-4 text-right">Delivered</th>
-                <th scope="col" className="py-2 pr-4 text-right">Bounced</th>
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">Day</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Sent</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Delivered</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Bounced</th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {/* The same colSpan row the templates table above carries. Without
                   it a range with no sends renders four column headers over an
                   empty tbody, which axe flags as `th-has-data-cells` and a
                   screen reader reads as a table that is simply missing. */}
               {report.daily.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="text-muted-foreground py-4 text-center">
+                <DataTable.Row>
+                  <td colSpan={4} className="px-3 text-muted-foreground py-4 text-center">
                     Nothing sent in this range.
                   </td>
-                </tr>
+                </DataTable.Row>
               )}
               {report.daily.map((row) => (
-                <tr key={row.day} className="border-input border-b">
-                  <th scope="row" className="py-2 pr-4 text-left font-normal">{row.day}</th>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                <DataTable.Row key={row.day} className="border-input border-b">
+                  <th scope="row" className="px-3 py-2 text-left font-normal">{row.day}</th>
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {row.counts.sent + row.counts.delivered + row.counts.bounced + row.counts.failed}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">{percent(row.deliveryRate)}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums">{percent(row.bounceRate)}</td>
-                </tr>
+                  <td className="px-3 py-2 text-right tabular-nums">{percent(row.deliveryRate)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{percent(row.bounceRate)}</td>
+                </DataTable.Row>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       </section>
 
@@ -217,37 +218,37 @@ export default async function DeliverabilityPage({
           </p>
         ) : (
           <ScrollRegion aria-label="Exhausted retries">
-            <table className="w-full min-w-2xl border-collapse text-sm">
+            <DataTable className="min-w-2xl">
               <caption className="sr-only">Events that exhausted every retry attempt and need a human look</caption>
-              <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">Event</th>
-                  <th scope="col" className="py-2 pr-4">Entity</th>
-                  <th scope="col" className="py-2 pr-4">Consumer</th>
-                  <th scope="col" className="py-2 pr-4">Last error</th>
-                  <th scope="col" className="py-2 pr-4">When</th>
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">Event</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Entity</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Consumer</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Last error</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">When</th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {report.deadLetters.map((row) => (
-                  <tr key={row.id} className="border-input border-b">
-                    <td className="py-2 pr-4">{row.eventName}</td>
-                    <td className="py-2 pr-4">
+                  <DataTable.Row key={row.id} className="border-input border-b">
+                    <td className="px-3 py-2">{row.eventName}</td>
+                    <td className="px-3 py-2">
                       {row.entityType} {row.entityId}
                     </td>
-                    <td className="py-2 pr-4">{row.consumer}</td>
-                    <td className="py-2 pr-4 max-w-xs truncate" title={row.lastError ?? ''}>
+                    <td className="px-3 py-2">{row.consumer}</td>
+                    <td className="px-3 py-2 max-w-xs truncate" title={row.lastError ?? ''}>
                       {row.lastError ?? '—'}
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="px-3 py-2">
                       {row.completedAt
                         ? new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeStyle: 'short' }).format(row.completedAt)
                         : '—'}
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </ScrollRegion>
         )}
       </section>

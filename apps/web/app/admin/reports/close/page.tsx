@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import { getSwitcherData } from '@/lib/admin/context'
@@ -145,7 +146,7 @@ export default async function MonthlyClosePage() {
   return (
     <div className="flex max-w-4xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Monthly close — {selected.facility.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Monthly close — {selected.facility.name}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Filing a month freezes its figures so they stop moving. Two of them cannot be recovered
           any other way: nothing here records what a unit&apos;s status used to be, and the aging
@@ -221,49 +222,49 @@ export default async function MonthlyClosePage() {
 
                   {drift.length > 0 && (
                     <ScrollRegion aria-label="Restated figures" className="mt-3">
-                      <table className="w-full text-left text-sm">
+                      <DataTable>
                         <caption className="sr-only">
                           Figures that no longer match what was filed for {period.label}
                         </caption>
-                        <thead>
-                          <tr className="text-muted-foreground">
-                            <th scope="col" className="pb-1 font-normal">
+                        <DataTable.Head>
+                          <tr>
+                            <th scope="col" className="px-3 py-2 font-semibold">
                               Figure
                             </th>
-                            <th scope="col" className="pb-1 text-right font-normal">
+                            <th scope="col" className="px-3 py-2 text-right font-semibold">
                               Filed
                             </th>
-                            <th scope="col" className="pb-1 text-right font-normal">
+                            <th scope="col" className="px-3 py-2 text-right font-semibold">
                               Today
                             </th>
-                            <th scope="col" className="pb-1 text-right font-normal">
+                            <th scope="col" className="px-3 py-2 text-right font-semibold">
                               Difference
                             </th>
                           </tr>
-                        </thead>
+                        </DataTable.Head>
                         <tbody>
                           {drift.map((row) => (
-                            <tr key={row.key}>
-                              <th scope="row" className="py-1 text-left font-normal">
+                            <DataTable.Row key={row.key}>
+                              <th scope="row" className="px-3 py-1 text-left font-normal">
                                 {row.label}
                               </th>
-                              <td className="py-1 text-right tabular-nums">
+                              <td className="px-3 py-1 text-right tabular-nums">
                                 {formatDrift(row, row.filedValue)}
                               </td>
-                              <td className="py-1 text-right tabular-nums">
+                              <td className="px-3 py-1 text-right tabular-nums">
                                 {formatDrift(row, row.currentValue)}
                               </td>
-                              <td className="py-1 text-right tabular-nums">
+                              <td className="px-3 py-1 text-right tabular-nums">
                                 {/* Signed, because the direction is the
                                     information — money appearing after a close
                                     is a different problem from money going. */}
                                 {row.deltaValue > 0 ? '+' : ''}
                                 {formatDrift(row, row.deltaValue)}
                               </td>
-                            </tr>
+                            </DataTable.Row>
                           ))}
                         </tbody>
-                      </table>
+                      </DataTable>
                     </ScrollRegion>
                   )}
                 </div>

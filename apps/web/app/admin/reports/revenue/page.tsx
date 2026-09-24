@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { EmptyState } from '@/components/ui/empty-state'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { billedTotal, collectedTotal, revenueReport, type RevenueRow } from '@/lib/admin/revenue-report'
@@ -54,7 +56,7 @@ export default async function RevenuePage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Revenue — {range.label}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Revenue — {range.label}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           <strong>Billed</strong> is what invoices issued in this range charged.{' '}
           <strong>Collected</strong> is what payments received in this range settled. They are
@@ -123,39 +125,39 @@ export default async function RevenuePage({
       </section>
 
       <ScrollRegion aria-label="Billed and collected">
-        <table className="w-full min-w-4xl border-collapse text-sm">
+        <DataTable className="min-w-4xl">
           <caption className="sr-only">
             Billed and collected by category, per facility, for {range.label}
           </caption>
-          <thead>
-            <tr className="border-input border-b text-left">
-              <th scope="col" className="py-2 pr-4">
+          <DataTable.Head>
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">
                 Facility
               </th>
               {REVENUE_CATEGORIES.map((category) => (
-                <th key={category} scope="col" className="py-2 pr-4 text-right">
+                <th key={category} scope="col" className="px-3 py-2 text-right font-semibold">
                   {CATEGORY_LABELS[category]}
                 </th>
               ))}
-              <th scope="col" className="py-2 pr-4 text-right">
+              <th scope="col" className="px-3 py-2 text-right font-semibold">
                 Unapplied
               </th>
-              <th scope="col" className="py-2 pr-4 text-right">
+              <th scope="col" className="px-3 py-2 text-right font-semibold">
                 Total
               </th>
             </tr>
-          </thead>
+          </DataTable.Head>
           <tbody>
             {report.rows.map((row) => (
               <RowPair key={row.facilityId} row={row} />
             ))}
             {report.rows.length > 0 && <RowPair row={report.total} emphasis />}
           </tbody>
-        </table>
+        </DataTable>
         {report.rows.length === 0 && (
-          <p className="text-muted-foreground mt-3 text-sm">
+          <EmptyState>
             No facilities you can see financial reports for.
-          </p>
+          </EmptyState>
         )}
       </ScrollRegion>
 
@@ -247,8 +249,8 @@ function RowPair({ row, emphasis = false }: { row: RevenueRow; emphasis?: boolea
   const rollUp = emphasis ? ' (roll-up of every facility above)' : ''
   return (
     <>
-      <tr className={`${weight}`}>
-        <th scope="row" className="py-2 pr-4 text-left align-top font-medium">
+      <DataTable.Row className={`${weight}`}>
+        <th scope="row" className="px-3 py-2 text-left align-top font-medium">
           <span className="block">
             {row.facilityName}
             {emphasis && <span className="sr-only">{rollUp}</span>}
@@ -256,17 +258,17 @@ function RowPair({ row, emphasis = false }: { row: RevenueRow; emphasis?: boolea
           <span className="text-muted-foreground block text-xs font-normal uppercase">Billed</span>
         </th>
         {REVENUE_CATEGORIES.map((category) => (
-          <td key={category} className="py-2 pr-4 text-right align-bottom tabular-nums">
+          <td key={category} className="px-3 py-2 text-right align-bottom tabular-nums">
             {formatCents(row.billed[category])}
           </td>
         ))}
-        <td className="text-muted-foreground py-2 pr-4 text-right align-bottom">—</td>
-        <td className="py-2 pr-4 text-right align-bottom tabular-nums">
+        <td className="px-3 text-muted-foreground py-2 text-right align-bottom">—</td>
+        <td className="px-3 py-2 text-right align-bottom tabular-nums">
           {formatCents(billedTotal(row))}
         </td>
-      </tr>
-      <tr className={`border-input border-b ${weight}`}>
-        <th scope="row" className="py-2 pr-4 text-left align-top font-medium">
+      </DataTable.Row>
+      <DataTable.Row className={`border-input border-b ${weight}`}>
+        <th scope="row" className="px-3 py-2 text-left align-top font-medium">
           <span className="sr-only">
             {row.facilityName}
             {rollUp}{' '}
@@ -274,13 +276,13 @@ function RowPair({ row, emphasis = false }: { row: RevenueRow; emphasis?: boolea
           <span className="text-muted-foreground block text-xs font-normal uppercase">Coll.</span>
         </th>
         {REVENUE_CATEGORIES.map((category) => (
-          <td key={category} className="py-2 pr-4 text-right tabular-nums">
+          <td key={category} className="px-3 py-2 text-right tabular-nums">
             {formatCents(row.collected[category])}
           </td>
         ))}
-        <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.unappliedCents)}</td>
-        <td className="py-2 pr-4 text-right tabular-nums">{formatCents(collectedTotal(row))}</td>
-      </tr>
+        <td className="px-3 py-2 text-right tabular-nums">{formatCents(row.unappliedCents)}</td>
+        <td className="px-3 py-2 text-right tabular-nums">{formatCents(collectedTotal(row))}</td>
+      </DataTable.Row>
     </>
   )
 }

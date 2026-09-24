@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -12,9 +13,18 @@ import {
 } from '@/lib/admin/tenant-list'
 import { formatCents } from '@/lib/format'
 import { ContactLinks } from '@/components/admin/contact-links'
+import { Alert } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Tenants' }
+
+const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger'> = {
+  Active: 'success',
+  'Past due': 'warning',
+  'Pending auction': 'danger',
+}
 
 // PRD 02 §4.4 US-13, §5.5 FR-22/FR-23.
 //
@@ -69,7 +79,7 @@ export default async function TenantsPage({
         {hasPermissionAnywhere(actor, ['tenants:edit']) && (
           <Link
             href="/admin/tenants/new"
-            className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+            className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
           >
             Add a tenant
           </Link>
@@ -118,6 +128,7 @@ export default async function TenantsPage({
                 }
               >
                 {TENANT_FILTER_LABELS[option]}
+                {list && <span className="ml-1.5 font-mono text-xs tabular-nums">{list.counts[option]}</span>}
               </Link>
             )
           })}
@@ -125,39 +136,39 @@ export default async function TenantsPage({
       )}
 
       {q && results.length === 0 && (
-        <p className="text-muted-foreground text-sm">No tenants match &ldquo;{q}&rdquo;.</p>
+        <EmptyState>No tenants match &ldquo;{q}&rdquo;.</EmptyState>
       )}
 
       {/* A capped search that says nothing is a search that lies: the tenant
           somebody is looking for may be the twenty-sixth match, and twenty
           suites in this repo seed a tenant called "Ada Renter". */}
       {q && results.length >= TENANT_SEARCH_LIMIT && (
-        <p role="status" className="border-input rounded-md border p-3 text-sm">
+        <Alert tone="info" role="status">
           Showing the first {TENANT_SEARCH_LIMIT} matches for &ldquo;{q}&rdquo;. There may be more —
           add a last name, a unit number or a phone number to narrow it down.
-        </p>
+        </Alert>
       )}
 
       {q && results.length > 0 && (
-        <table className="w-full text-sm">
+        <DataTable>
           <caption className="sr-only">Tenants matching &ldquo;{q}&rdquo;</caption>
-          <thead>
-            <tr className="border-b text-left">
-              <th scope="col" className="py-2 font-medium">
+          <DataTable.Head>
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">
                 Name
               </th>
-              <th scope="col" className="py-2 font-medium">
+              <th scope="col" className="px-3 py-2 font-semibold">
                 Contact
               </th>
-              <th scope="col" className="py-2 font-medium">
+              <th scope="col" className="px-3 py-2 font-semibold">
                 Units
               </th>
             </tr>
-          </thead>
+          </DataTable.Head>
           <tbody>
             {results.map((tenant) => (
-              <tr key={tenant.tenantId} className="border-b">
-                <td className="py-2">
+              <DataTable.Row key={tenant.tenantId} className="border-b">
+                <td className="px-3 py-2">
                   <Link
                     href={`/admin/tenants/${tenant.tenantId}`}
                     className="underline underline-offset-2"
@@ -165,7 +176,7 @@ export default async function TenantsPage({
                     {tenant.name}
                   </Link>
                 </td>
-                <td className="py-2">
+                <td className="px-3 py-2">
                   {/* D-111: a renter may have no address, and a blank cell
                       reads as a column that failed to load rather than as a
                       fact. Said in words — and it is the fact staff most need
@@ -178,23 +189,23 @@ export default async function TenantsPage({
                   )}
                   {tenant.phone && <div className="text-muted-foreground">{tenant.phone}</div>}
                 </td>
-                <td className="py-2">
+                <td className="px-3 py-2">
                   {tenant.units.length === 0
                     ? '—'
                     : tenant.units.map((u) => `${u.facilityName} — ${u.unitNumber}`).join(', ')}
                 </td>
-              </tr>
+              </DataTable.Row>
             ))}
           </tbody>
-        </table>
+        </DataTable>
       )}
 
       {list && list.total === 0 && (
-        <p className="text-muted-foreground text-sm">
+        <EmptyState>
           {filter === 'all'
             ? 'No tenants here yet.'
             : `No tenants match “${TENANT_FILTER_LABELS[filter]}”.`}
-        </p>
+        </EmptyState>
       )}
 
       {list && list.total > 0 && (
@@ -204,12 +215,12 @@ export default async function TenantsPage({
           </p>
 
           <ScrollRegion aria-label="Tenants">
-            <table className="bg-card w-full min-w-2xl overflow-hidden rounded-xl border text-sm">
+            <DataTable className="min-w-2xl">
               <caption className="sr-only">
                 Tenants, newest lease first, filtered to {TENANT_FILTER_LABELS[filter]}
               </caption>
-              <thead>
-                <tr className="bg-muted/50 border-b text-left text-xs tracking-wide uppercase">
+              <DataTable.Head>
+                <tr>
                   <th scope="col" className="px-3 py-2 font-semibold">
                     Name
                   </th>
@@ -229,12 +240,12 @@ export default async function TenantsPage({
                     Days past due
                   </th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {list.rows.map((row) => {
                   const late = row.daysPastDue > 0 && row.balanceCents > 0
                   return (
-                    <tr key={row.tenantId} className="border-b">
+                    <DataTable.Row key={row.tenantId} className="border-b">
                       <th scope="row" className="px-3 py-2 text-left font-normal">
                         <Link
                           href={`/admin/tenants/${row.tenantId}`}
@@ -253,7 +264,9 @@ export default async function TenantsPage({
                       <td className="px-3 py-2">
                         <ContactLinks name={row.name} phone={row.phone} />
                       </td>
-                      <td className="px-3 py-2">{row.statusLabel}</td>
+                      <td className="px-3 py-2">
+                        <Badge tone={STATUS_TONE[row.statusLabel] ?? 'neutral'}>{row.statusLabel}</Badge>
+                      </td>
                       <td className={`px-3 py-2 text-right font-mono tabular-nums ${late ? 'text-destructive font-semibold' : ''}`}>
                         {formatCents(row.balanceCents)}
                       </td>
@@ -269,11 +282,11 @@ export default async function TenantsPage({
                           <span className="text-muted-foreground">Current</span>
                         )}
                       </td>
-                    </tr>
+                    </DataTable.Row>
                   )
                 })}
               </tbody>
-            </table>
+            </DataTable>
           </ScrollRegion>
 
           {lastPage > 1 && (

@@ -1,3 +1,4 @@
+import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
@@ -55,7 +56,7 @@ export default async function DelinquencyQueuePage({
     // default context deserves an answer rather than an instruction.
     return (
       <div className="flex max-w-3xl flex-col gap-4">
-        <h1 className="text-lg font-semibold">Delinquency</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Delinquency</h1>
         <FacilityRollup heading="Money owed, by facility" rows={await moneyOwedRollup(actor)} />
         <p className="text-muted-foreground text-sm">
           Open a facility for the steps due there today — an overlock or a notice is executed at
@@ -69,6 +70,12 @@ export default async function DelinquencyQueuePage({
     delinquencyQueue(actor, selected.facility.id),
     haltedLeases([selected.facility.id]),
   ])
+  // Metric strip: one figure per lease, however many steps it has due.
+  const byLease = new Map(groups.flatMap((g) => g.tasks).map((t) => [t.entityId, t.balanceCents]))
+  const pastDueCents = [...byLease.values()].reduce((sum, cents) => sum + Math.max(0, cents), 0)
+  const lockOutEligible = new Set(
+    groups.filter((g) => g.type === 'overlock_apply').flatMap((g) => g.tasks.map((t) => t.entityId)),
+  ).size
   const overdueCount = groups.reduce((sum, group) => sum + group.tasks.filter((t) => t.overdue).length, 0)
 
   return (
@@ -79,6 +86,19 @@ export default async function DelinquencyQueuePage({
           Today&apos;s steps from every active timeline, grouped by what they need done.
         </p>
       </div>
+
+      <dl className="grid grid-cols-3 gap-3">
+        {[
+          ['Past due', formatCents(pastDueCents)],
+          ['Tenants', String(byLease.size)],
+          ['Lock-out eligible', String(lockOutEligible)],
+        ].map(([label, value]) => (
+          <Card key={label} className="p-3">
+            <dt className="text-muted-foreground text-xs font-semibold uppercase">{label}</dt>
+            <dd className="font-mono text-xl font-semibold tabular-nums">{value}</dd>
+          </Card>
+        ))}
+      </dl>
 
       {overdueCount > 0 && (
         // FR-23: never colour alone — the count is text, read from across a

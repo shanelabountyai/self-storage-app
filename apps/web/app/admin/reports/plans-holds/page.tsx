@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { plansAndHoldsReport, type HaltedLeaseRow } from '@/lib/admin/plans-holds-report'
@@ -94,7 +95,7 @@ export default async function PlansHoldsPage({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold">Plans &amp; holds</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Plans &amp; holds</h1>
           <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
             The money the delinquency ladder is <strong>not</strong> chasing, and why. Every lease
             under a hold that stops collections — an agreed payment plan, a bankruptcy, a
@@ -216,42 +217,42 @@ export default async function PlansHoldsPage({
                   {formatCents(facility.deferredCents)} deferred
                 </summary>
                 <ScrollRegion aria-label="Halted leases" className="mt-3">
-                  <table className="w-full min-w-4xl border-collapse text-sm">
+                  <DataTable className="min-w-4xl">
                     <caption className="sr-only">
                       Leases halted at {facility.facilityName}, longest halted first
                     </caption>
-                    <thead>
-                      <tr className="border-input border-b text-left">
-                        <th scope="col" className="py-2 pr-4">
+                    <DataTable.Head>
+                      <tr>
+                        <th scope="col" className="px-3 py-2 font-semibold">
                           Tenant
                         </th>
-                        <th scope="col" className="py-2 pr-4">
+                        <th scope="col" className="px-3 py-2 font-semibold">
                           Unit
                         </th>
-                        <th scope="col" className="py-2 pr-4">
+                        <th scope="col" className="px-3 py-2 font-semibold">
                           Lease
                         </th>
-                        <th scope="col" className="py-2 pr-4">
+                        <th scope="col" className="px-3 py-2 font-semibold">
                           Halted by
                         </th>
-                        <th scope="col" className="py-2 pr-4 text-right">
+                        <th scope="col" className="px-3 py-2 text-right font-semibold">
                           Days halted
                         </th>
-                        <th scope="col" className="py-2 pr-4">
+                        <th scope="col" className="px-3 py-2 font-semibold">
                           Plan
                         </th>
-                        <th scope="col" className="py-2 pr-4">
+                        <th scope="col" className="px-3 py-2 font-semibold">
                           Next due
                         </th>
-                        <th scope="col" className="py-2 pr-4 text-right">
+                        <th scope="col" className="px-3 py-2 text-right font-semibold">
                           Deferred
                         </th>
                       </tr>
-                    </thead>
+                    </DataTable.Head>
                     <tbody>
                       {facility.rows.map((row) => (
-                        <tr key={row.leaseId} className="border-input border-b">
-                          <th scope="row" className="py-2 pr-4 text-left font-medium">
+                        <DataTable.Row key={row.leaseId} className="border-input border-b">
+                          <th scope="row" className="px-3 py-2 text-left font-medium">
                             <Link
                               href={`/admin/tenants/${row.tenantId}`}
                               className="underline underline-offset-2"
@@ -259,14 +260,14 @@ export default async function PlansHoldsPage({
                               {row.tenantName}
                             </Link>
                           </th>
-                          <td className="py-2 pr-4">{row.unitNumber}</td>
-                          <td className="py-2 pr-4">
+                          <td className="px-3 py-2">{row.unitNumber}</td>
+                          <td className="px-3 py-2">
                             {LEASE_STATUS_LABELS[row.leaseStatus] ?? row.leaseStatus}
                           </td>
                           {/* The reason in words. Never a badge colour — a
                               bankruptcy and a payment plan are opposite
                               situations and both are "halted" (1.4.1). */}
-                          <td className="py-2 pr-4">
+                          <td className="px-3 py-2">
                             {row.holdLabels.join(', ')}
                             {row.otherHoldLabels.length > 0 && (
                               <span className="text-muted-foreground block text-xs">
@@ -277,8 +278,8 @@ export default async function PlansHoldsPage({
                               Since {formatDate(row.haltedSince)}
                             </span>
                           </td>
-                          <td className="py-2 pr-4 text-right tabular-nums">{row.daysHalted}</td>
-                          <td className="py-2 pr-4">
+                          <td className="px-3 py-2 text-right tabular-nums">{row.daysHalted}</td>
+                          <td className="px-3 py-2">
                             {row.plan ? (
                               <>
                                 {PLAN_STATUS_LABELS[row.plan.status]}
@@ -294,14 +295,14 @@ export default async function PlansHoldsPage({
                               <span className="text-muted-foreground">None</span>
                             )}
                           </td>
-                          <td className="py-2 pr-4">{nextStepText(row)}</td>
-                          <td className="py-2 pr-4 text-right tabular-nums">
+                          <td className="px-3 py-2">{nextStepText(row)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">
                             {formatCents(row.deferredCents)}
                           </td>
-                        </tr>
+                        </DataTable.Row>
                       ))}
                     </tbody>
-                  </table>
+                  </DataTable>
                 </ScrollRegion>
               </details>
             ))
@@ -324,100 +325,100 @@ export default async function PlansHoldsPage({
           agreed.
         </p>
         <ScrollRegion aria-label="Payment plan outcomes">
-          <table className="w-full min-w-3xl border-collapse text-sm">
+          <DataTable className="min-w-3xl">
             <caption className="sr-only">
               Payment plans agreed, collected, waived, broken and completed in {label}, per facility
             </caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Facility
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Plans agreed
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Put on plans
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Collected
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Waived
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Plans broken
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Still owed on those
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Plans completed
                 </th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {report.facilities.map((facility) => (
-                <tr key={facility.facilityId} className="border-input border-b">
-                  <th scope="row" className="py-2 pr-4 text-left font-medium">
+                <DataTable.Row key={facility.facilityId} className="border-input border-b">
+                  <th scope="row" className="px-3 py-2 text-left font-medium">
                     {facility.facilityName}
                   </th>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {facility.effectiveness.agreedCount}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(facility.effectiveness.agreedCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(facility.effectiveness.collectedCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(facility.effectiveness.waivedCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {facility.effectiveness.brokenCount}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(facility.effectiveness.brokenCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {facility.effectiveness.completedCount}
                   </td>
-                </tr>
+                </DataTable.Row>
               ))}
               {report.facilities.length > 0 && (
-                <tr className="border-input border-b font-semibold">
-                  <th scope="row" className="py-2 pr-4 text-left">
+                <DataTable.Row className="border-input border-b font-semibold">
+                  <th scope="row" className="px-3 py-2 text-left">
                     All facilities
                   </th>
-                  <td className="py-2 pr-4 text-right tabular-nums">{report.total.agreedCount}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">{report.total.agreedCount}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(report.total.agreedCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(report.total.collectedCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(report.total.waivedCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">{report.total.brokenCount}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">{report.total.brokenCount}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(report.total.brokenCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {report.total.completedCount}
                   </td>
-                </tr>
+                </DataTable.Row>
               )}
               {report.facilities.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="text-muted-foreground py-3">
+                <DataTable.Row>
+                  <td colSpan={8} className="px-3 text-muted-foreground py-3">
                     No facilities you can see money for.
                   </td>
-                </tr>
+                </DataTable.Row>
               )}
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       </section>
     </div>

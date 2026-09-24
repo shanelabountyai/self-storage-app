@@ -1,3 +1,6 @@
+import { Alert } from '@/components/ui/alert'
+import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import Link from 'next/link'
 import { prisma } from '@storage/db'
 import { getSwitcherData } from '@/lib/admin/context'
@@ -30,7 +33,7 @@ export default async function PosPage({
   if (selected.mode !== 'single') {
     return (
       <div className="flex flex-col gap-3">
-        <h1 className="text-lg font-semibold">POS</h1>
+        <h1 className="text-2xl font-bold tracking-tight">POS</h1>
         <p className="text-muted-foreground text-sm text-pretty">
           Choose a single facility in the switcher above. Money is taken at one counter, so this
           screen needs to know which.
@@ -72,7 +75,7 @@ export default async function PosPage({
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">POS — {selected.facility.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">POS — {selected.facility.name}</h1>
         <div className="flex flex-wrap gap-4">
           <Link href="/admin/pos/drawer" className="text-sm underline underline-offset-2">
             Drawer
@@ -87,9 +90,9 @@ export default async function PosPage({
       </div>
 
       {soldOut && (
-        <p role="alert" className="border-input rounded-md border p-3 text-sm">
+        <Alert tone="warning">
           That size has nothing available right now. Pick another, or check the units screen.
-        </p>
+        </Alert>
       )}
 
       <section aria-labelledby="payment-heading" className="flex flex-col gap-3">
@@ -116,9 +119,7 @@ export default async function PosPage({
         </form>
 
         {q && results.length === 0 && accountResults.length === 0 && (
-          <p className="text-muted-foreground text-sm">
-            No tenants or business accounts match &ldquo;{q}&rdquo;.
-          </p>
+          <EmptyState>No tenants or business accounts match &ldquo;{q}&rdquo;.</EmptyState>
         )}
 
         {results.length + accountResults.length > 0 && !selectedTenant && (
@@ -153,15 +154,15 @@ export default async function PosPage({
         )}
 
         {selectedTenant && (
-          <div className="border-input rounded-lg border p-4">
+          <Card className="p-4">
             <p className="text-sm font-medium">
               {selectedTenant.firstName} {selectedTenant.lastName}
             </p>
             {payableLeases.length === 0 && payableAccounts.length === 0 ? (
-              <p className="text-muted-foreground mt-2 text-sm">
+              <EmptyState>
                 No unit at this facility with anything to pay — no open lease, and no ended
                 one still owing.
-              </p>
+              </EmptyState>
             ) : (
               <CounterPaymentForm
                 facilityId={facilityId}
@@ -171,7 +172,7 @@ export default async function PosPage({
                 defaultLeaseId={preselectedLeaseId}
               />
             )}
-          </div>
+          </Card>
         )}
       </section>
 

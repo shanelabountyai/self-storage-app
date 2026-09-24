@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { EmptyState } from '@/components/ui/empty-state'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { formatCents } from '@/lib/format'
@@ -39,7 +41,7 @@ export default async function PromotionsReportPage({
   return (
     <div className="flex max-w-4xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Promotions — {range.label}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Promotions — {range.label}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           What each discount gave away, and what it bought.{' '}
           <Link href="/admin/reports" className="underline underline-offset-2">
@@ -77,107 +79,107 @@ export default async function PromotionsReportPage({
       </form>
 
       {report.rows.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
+        <EmptyState>
           No promotions were redeemed in this range.
-        </p>
+        </EmptyState>
       ) : (
         <ScrollRegion aria-label="Promotions redeemed">
-          <table className="w-full min-w-4xl border-collapse text-sm">
+          <DataTable className="min-w-4xl">
             <caption className="sr-only">
               Promotions redeemed in {range.label}, with discount given, discount still owed, what
               the minimum stay recovered, and the rent the discount bought
             </caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">Promotion</th>
-                <th scope="col" className="py-2 pr-4 text-right">Redeemed</th>
-                <th scope="col" className="py-2 pr-4 text-right">Moved in</th>
-                <th scope="col" className="py-2 pr-4 text-right">Still renting</th>
-                <th scope="col" className="py-2 pr-4 text-right">Discount given</th>
-                <th scope="col" className="py-2 pr-4 text-right">Still to give</th>
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">Promotion</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Redeemed</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Moved in</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Still renting</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Discount given</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Still to give</th>
                 {/* B-168. Three columns and not one: a minimum stay that
                     bills $4,000 and waives $3,800 at the counter is not a
                     term, and one that bills $4,000 and collects $600 from
                     tenants who have already gone is a different failure. */}
-                <th scope="col" className="py-2 pr-4 text-right">Recapture billed</th>
-                <th scope="col" className="py-2 pr-4 text-right">Waived</th>
-                <th scope="col" className="py-2 pr-4 text-right">Collected</th>
-                <th scope="col" className="py-2 pr-4 text-right">Rent per month</th>
-                <th scope="col" className="py-2 pr-4 text-right">Months to earn back</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Recapture billed</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Waived</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Collected</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Rent per month</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Months to earn back</th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {report.rows.map((row) => (
-                <tr key={row.promotionId} className="border-input border-b">
-                  <th scope="row" className="py-2 pr-4 text-left font-medium">
+                <DataTable.Row key={row.promotionId} className="border-input border-b">
+                  <th scope="row" className="px-3 py-2 text-left font-medium">
                     {row.name}
                   </th>
-                  <td className="py-2 pr-4 text-right tabular-nums">{row.redemptions}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums">{row.moveIns}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums">{row.stillRenting}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.redemptions}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.moveIns}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.stillRenting}</td>
                   {/* Given, then still to give. Two columns and never one:
                       "first month free" commits the whole discount on the day
                       it is redeemed and realises it only when billing writes
                       the line, so a single figure either overstates the cost of
                       every short tenancy or understates the exposure of every
                       promotion still running. */}
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(row.realisedCents)}
                   </td>
-                  <td className="text-muted-foreground py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 text-muted-foreground py-2 text-right tabular-nums">
                     {formatCents(row.outstandingCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(row.recaptureChargedCents)}
                   </td>
-                  <td className="text-muted-foreground py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 text-muted-foreground py-2 text-right tabular-nums">
                     {formatCents(row.recaptureWaivedCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(row.recaptureCollectedCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(row.monthlyRentCents)}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {months(paybackMonths(row))}
                   </td>
-                </tr>
+                </DataTable.Row>
               ))}
             </tbody>
             <tfoot>
-              <tr className="font-medium">
-                <th scope="row" className="py-2 pr-4 text-left">
+              <DataTable.Row className="font-medium">
+                <th scope="row" className="px-3 py-2 text-left">
                   All promotions
                 </th>
-                <td className="py-2 pr-4 text-right tabular-nums">{report.totals.redemptions}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{report.totals.moveIns}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{report.totals.stillRenting}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 py-2 text-right tabular-nums">{report.totals.redemptions}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{report.totals.moveIns}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{report.totals.stillRenting}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
                   {formatCents(report.totals.realisedCents)}
                 </td>
-                <td className="text-muted-foreground py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 text-muted-foreground py-2 text-right tabular-nums">
                   {formatCents(report.totals.outstandingCents)}
                 </td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 py-2 text-right tabular-nums">
                   {formatCents(report.totals.recaptureChargedCents)}
                 </td>
-                <td className="text-muted-foreground py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 text-muted-foreground py-2 text-right tabular-nums">
                   {formatCents(report.totals.recaptureWaivedCents)}
                 </td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 py-2 text-right tabular-nums">
                   {formatCents(report.totals.recaptureCollectedCents)}
                 </td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 py-2 text-right tabular-nums">
                   {formatCents(report.totals.monthlyRentCents)}
                 </td>
                 {/* No total payback. It is a ratio, and summing ratios across
                     rows produces a number that is not the portfolio's payback
                     and that somebody will quote anyway. */}
-                <td className="py-2 pr-4 text-right">—</td>
-              </tr>
+                <td className="px-3 py-2 text-right">—</td>
+              </DataTable.Row>
             </tfoot>
-          </table>
+          </DataTable>
         </ScrollRegion>
       )}
 

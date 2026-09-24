@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { agingByFacility, delinquencyDetail } from '@/lib/admin/delinquency-detail'
@@ -47,7 +48,7 @@ export default async function DelinquencyPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Delinquency aging</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Delinquency aging</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Every lease carrying a balance, aged from the <strong>original</strong> due date of its
           oldest unpaid invoice — never from a retry attempt. Point-in-time, as of now: how old a
@@ -165,45 +166,45 @@ export default async function DelinquencyPage() {
           Tenant detail
         </h2>
         <ScrollRegion aria-label="Leases carrying a balance">
-          <table className="w-full min-w-4xl border-collapse text-sm">
+          <DataTable className="min-w-4xl">
             <caption className="sr-only">
               Every lease carrying a balance, oldest debt first
             </caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Tenant
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Facility
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Unit
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Lease
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Days
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Bucket
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Step
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Collections
                 </th>
-                <th scope="col" className="py-2 pr-4 text-right">
+                <th scope="col" className="px-3 py-2 text-right font-semibold">
                   Owed
                 </th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {report.rows.map((row) => (
-                <tr key={row.leaseId} className="border-input border-b">
-                  <th scope="row" className="py-2 pr-4 text-left font-medium">
+                <DataTable.Row key={row.leaseId} className="border-input border-b">
+                  <th scope="row" className="px-3 py-2 text-left font-medium">
                     <Link
                       href={`/admin/tenants/${row.tenantId}`}
                       className="underline underline-offset-2"
@@ -211,14 +212,14 @@ export default async function DelinquencyPage() {
                       {row.tenantName}
                     </Link>
                   </th>
-                  <td className="py-2 pr-4">{row.facilityName}</td>
-                  <td className="py-2 pr-4">{row.unitNumber}</td>
+                  <td className="px-3 py-2">{row.facilityName}</td>
+                  <td className="px-3 py-2">{row.unitNumber}</td>
                   {/* The status is text, never a colour alone (WCAG 1.4.1) —
                       and "Moved out" is the word that has to be readable. */}
-                  <td className="py-2 pr-4">{STATUS_LABELS[row.leaseStatus] ?? row.leaseStatus}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums">{row.daysPastDue}</td>
-                  <td className="py-2 pr-4">{AR_BUCKET_LABELS[row.bucket]}</td>
-                  <td className="py-2 pr-4">
+                  <td className="px-3 py-2">{STATUS_LABELS[row.leaseStatus] ?? row.leaseStatus}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.daysPastDue}</td>
+                  <td className="px-3 py-2">{AR_BUCKET_LABELS[row.bucket]}</td>
+                  <td className="px-3 py-2">
                     {row.dunningStep === 0 ? '—' : row.dunningStep}
                     {row.nextStepDay !== null && (
                       <span className="text-muted-foreground text-xs">
@@ -231,7 +232,7 @@ export default async function DelinquencyPage() {
                       step column cannot say this — a halted lease keeps the
                       rung it had reached, so it reads "step 2" for ever while
                       nothing at all is being sent (1.4.1). */}
-                  <td className="py-2 pr-4">
+                  <td className="px-3 py-2">
                     {row.halted ? (
                       <>
                         Halted — {row.haltReasons.join(', ')}
@@ -245,20 +246,20 @@ export default async function DelinquencyPage() {
                       'Being chased'
                     )}
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {formatCents(row.outstandingCents)}
                   </td>
-                </tr>
+                </DataTable.Row>
               ))}
               {report.rows.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="text-muted-foreground py-3">
+                <DataTable.Row>
+                  <td colSpan={9} className="px-3 text-muted-foreground py-3">
                     Nobody owes anything. Worth checking the date on that.
                   </td>
-                </tr>
+                </DataTable.Row>
               )}
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       </section>
     </div>

@@ -1,4 +1,5 @@
 import { ScrollRegion } from '@/components/ui/scroll-region'
+import { DataTable } from '@/components/ui/data-table'
 import Link from 'next/link'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -35,7 +36,7 @@ function formatCrawl(value: string | null): string {
 
 function StateCell({ row }: { row: UrlIndexation }) {
   return (
-    <td className="py-2 pr-4">
+    <td className="px-3 py-2">
       {/* The state in words. No colour-coded dot: 1.4.1 forbids carrying the
           whole meaning of a row in a hue, and "Not indexed" is shorter to read
           than a legend anyway. */}
@@ -70,7 +71,7 @@ export default async function IndexationPage() {
   return (
     <div className="flex max-w-4xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Indexation</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Indexation</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Of the {urls.length} pages our sitemap advertises, which has Google actually indexed?{' '}
           <Link href="/admin/reports" className="underline underline-offset-2">
@@ -147,18 +148,18 @@ export default async function IndexationPage() {
           )}
 
           <ScrollRegion aria-label="Sitemap URLs">
-            <table className="w-full min-w-2xl border-collapse text-sm">
+            <DataTable className="min-w-2xl">
               <caption className="sr-only">
                 Every URL in the sitemap with its Search Console index status, pages needing
                 attention first
               </caption>
-              <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">Page</th>
-                  <th scope="col" className="py-2 pr-4">Status</th>
-                  <th scope="col" className="py-2 pr-4">Last crawled</th>
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">Page</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Status</th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Last crawled</th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {/* Needs-attention first, then the rest. An operator opens this
                     to find the problems, not to admire the indexed pages. */}
@@ -166,8 +167,8 @@ export default async function IndexationPage() {
                   ...summary.needsAttention,
                   ...rows.filter((row) => row.state === 'indexed'),
                 ].map((row) => (
-                  <tr key={row.url} className="border-input border-b">
-                    <th scope="row" className="py-2 pr-4 text-left font-normal">
+                  <DataTable.Row key={row.url} className="border-input border-b">
+                    <th scope="row" className="px-3 py-2 text-left font-normal">
                       <a
                         href={row.url}
                         className="underline underline-offset-2"
@@ -179,13 +180,13 @@ export default async function IndexationPage() {
                       </a>
                     </th>
                     <StateCell row={row} />
-                    <td className="text-muted-foreground py-2 pr-4 tabular-nums">
+                    <td className="px-3 text-muted-foreground py-2 tabular-nums">
                       {formatCrawl(row.lastCrawledAt)}
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </ScrollRegion>
         </>
       )}

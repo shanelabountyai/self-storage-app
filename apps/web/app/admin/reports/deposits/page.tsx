@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { reportRangeForActor } from '@/lib/admin/reports'
@@ -29,7 +30,7 @@ export default async function DepositsPage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Deposits — {range.label}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Deposits — {range.label}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           What the system recorded against what somebody counted.{' '}
           <Link href="/admin/reports" className="underline underline-offset-2">
@@ -71,52 +72,52 @@ export default async function DepositsPage({
       )}
 
       <ScrollRegion aria-label="Deposits by method">
-        <table className="w-full min-w-2xl border-collapse text-sm">
+        <DataTable className="min-w-2xl">
           <caption className="sr-only">
             Recorded payments by method against drawer close-outs, per facility per day
           </caption>
-          <thead>
-            <tr className="border-input border-b text-left">
-              <th scope="col" className="py-2 pr-4">Day</th>
-              <th scope="col" className="py-2 pr-4">Facility</th>
-              <th scope="col" className="py-2 pr-4 text-right">Cash</th>
-              <th scope="col" className="py-2 pr-4 text-right">Checks</th>
-              <th scope="col" className="py-2 pr-4 text-right">Card</th>
-              <th scope="col" className="py-2 pr-4 text-right">Counted</th>
-              <th scope="col" className="py-2 pr-4 text-right">Over/short</th>
-              <th scope="col" className="py-2 pr-4 text-right">Unreconciled</th>
+          <DataTable.Head>
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">Day</th>
+              <th scope="col" className="px-3 py-2 font-semibold">Facility</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">Cash</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">Checks</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">Card</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">Counted</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">Over/short</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">Unreconciled</th>
             </tr>
-          </thead>
+          </DataTable.Head>
           <tbody>
             {report.rows.length === 0 && (
-              <tr>
-                <td colSpan={8} className="text-muted-foreground py-4 text-center">
+              <DataTable.Row>
+                <td colSpan={8} className="px-3 text-muted-foreground py-4 text-center">
                   Nothing taken in this range.
                 </td>
-              </tr>
+              </DataTable.Row>
             )}
             {report.rows.map((row) => (
-              <tr key={`${row.facilityId}-${row.businessDate}`} className="border-input border-b">
-                <th scope="row" className="py-2 pr-4 text-left font-normal">{row.businessDate}</th>
-                <td className="py-2 pr-4">{row.facilityName}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.cashRecordedCents)}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.checksRecordedCents)}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">{formatCents(row.cardRecordedCents)}</td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+              <DataTable.Row key={`${row.facilityId}-${row.businessDate}`} className="border-input border-b">
+                <th scope="row" className="px-3 py-2 text-left font-normal">{row.businessDate}</th>
+                <td className="px-3 py-2">{row.facilityName}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatCents(row.cashRecordedCents)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatCents(row.checksRecordedCents)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatCents(row.cardRecordedCents)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
                   {row.countedCashCents === null ? '—' : formatCents(row.countedCashCents)}
                 </td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 py-2 text-right tabular-nums">
                   {row.varianceCents === null || row.varianceCents === 0
                     ? '—'
                     : `${row.varianceCents > 0 ? 'over ' : 'short '}${formatCents(Math.abs(row.varianceCents))}`}
                 </td>
-                <td className="py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 py-2 text-right tabular-nums">
                   {row.unreconciledCents === 0 ? '—' : formatCents(row.unreconciledCents)}
                 </td>
-              </tr>
+              </DataTable.Row>
             ))}
           </tbody>
-        </table>
+        </DataTable>
       </ScrollRegion>
 
       <p className="text-muted-foreground max-w-prose text-xs text-pretty">

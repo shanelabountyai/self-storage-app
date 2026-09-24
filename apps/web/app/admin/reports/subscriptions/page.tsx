@@ -40,7 +40,7 @@ export default async function ReportSubscriptionsPage() {
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Scheduled reports — {selected.facility.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Scheduled reports — {selected.facility.name}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Reports that arrive by email without anybody opening the dashboard. They go out at 6am
           this facility&apos;s time — after the overnight billing and delinquency jobs, so the

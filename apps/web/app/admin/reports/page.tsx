@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { EmptyState } from '@/components/ui/empty-state'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import {
   arAgingNote,
@@ -78,41 +80,43 @@ function MoveSplit({
   const rows = Object.entries(counts).filter(([, count]) => count > 0)
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       <h3 className="text-sm font-medium">{heading}</h3>
       <p className="text-muted-foreground text-sm text-pretty">{hint}</p>
       {rows.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No move-ins in this period.</p>
+        <EmptyState>No move-ins in this period.</EmptyState>
       ) : (
-        <table className="w-full text-sm">
+        <ScrollRegion aria-label={heading}>
+          <DataTable className="min-w-md">
           <caption className="sr-only">{heading}</caption>
-          <thead>
-            <tr className="border-b text-left">
-              <th scope="col" className="py-2 font-medium">
+          <DataTable.Head>
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">
                 {heading.replace('Move-ins by ', '').replace(/^./, (c) => c.toUpperCase())}
               </th>
-              <th scope="col" className="py-2 text-right font-medium">
+              <th scope="col" className="px-3 py-2 text-right font-semibold">
                 Move-ins
               </th>
-              <th scope="col" className="py-2 text-right font-medium">
+              <th scope="col" className="px-3 py-2 text-right font-semibold">
                 Share
               </th>
             </tr>
-          </thead>
+          </DataTable.Head>
           <tbody>
             {rows.map(([key, count]) => (
-              <tr key={key} className="border-b">
-                <th scope="row" className="py-2 font-normal">
+              <DataTable.Row key={key} className="border-b">
+                <th scope="row" className="px-3 py-2 font-normal">
                   {labels[key] ?? key}
                 </th>
-                <td className="py-2 text-right tabular-nums">{count}</td>
-                <td className="py-2 text-right tabular-nums">
+                <td className="px-3 py-2 text-right tabular-nums">{count}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
                   {total === 0 ? '—' : percent(count / total)}
                 </td>
-              </tr>
+              </DataTable.Row>
             ))}
           </tbody>
-        </table>
+        </DataTable>
+        </ScrollRegion>
       )}
     </div>
   )
@@ -139,43 +143,45 @@ function AttachSplit({
   const rows = Object.entries(buckets).filter(([, bucket]) => bucket.moveIns > 0)
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       <h3 className="text-sm font-medium">{heading}</h3>
       <p className="text-muted-foreground text-sm text-pretty">{hint}</p>
       {rows.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No move-ins in this period.</p>
+        <EmptyState>No move-ins in this period.</EmptyState>
       ) : (
-        <table className="w-full text-sm">
+        <ScrollRegion aria-label={heading}>
+          <DataTable className="min-w-md">
           <caption className="sr-only">{heading}</caption>
-          <thead>
-            <tr className="border-b text-left">
-              <th scope="col" className="py-2 font-medium">
+          <DataTable.Head>
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">
                 {rowHeading}
               </th>
-              <th scope="col" className="py-2 text-right font-medium">
+              <th scope="col" className="px-3 py-2 text-right font-semibold">
                 Move-ins
               </th>
-              <th scope="col" className="py-2 text-right font-medium">
+              <th scope="col" className="px-3 py-2 text-right font-semibold">
                 Enrolled
               </th>
-              <th scope="col" className="py-2 text-right font-medium">
+              <th scope="col" className="px-3 py-2 text-right font-semibold">
                 Attach rate
               </th>
             </tr>
-          </thead>
+          </DataTable.Head>
           <tbody>
             {rows.map(([key, bucket]) => (
-              <tr key={key} className="border-b">
-                <th scope="row" className="py-2 font-normal">
+              <DataTable.Row key={key} className="border-b">
+                <th scope="row" className="px-3 py-2 font-normal">
                   {labels[key] ?? key}
                 </th>
-                <td className="py-2 text-right tabular-nums">{bucket.moveIns}</td>
-                <td className="py-2 text-right tabular-nums">{bucket.enrolled}</td>
-                <td className="py-2 text-right tabular-nums">{percent(bucket.rate)}</td>
-              </tr>
+                <td className="px-3 py-2 text-right tabular-nums">{bucket.moveIns}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{bucket.enrolled}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{percent(bucket.rate)}</td>
+              </DataTable.Row>
             ))}
           </tbody>
-        </table>
+        </DataTable>
+        </ScrollRegion>
       )}
     </div>
   )
@@ -288,7 +294,7 @@ export default async function ReportsPage({
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">Reports — {label}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Reports — {label}</h1>
         <form method="GET" className="flex flex-wrap items-end gap-2">
           <label htmlFor="month" className="flex flex-col gap-1 text-sm">
             Month
@@ -339,51 +345,51 @@ export default async function ReportsPage({
           {unitOccupancyNote(occupancy.total.unitOccupancy, label)}
         </p>
         <ScrollRegion aria-label="Occupancy per facility">
-          <table className="w-full min-w-2xl text-sm" aria-describedby="occupancy-as-at">
+          <DataTable className="min-w-2xl" aria-describedby="occupancy-as-at">
             <caption className="sr-only">
               Unit occupancy, square-foot occupancy and economic occupancy per facility for {label}
             </caption>
-            <thead>
-              <tr className="border-b text-left">
-                <th scope="col" className="py-2 font-medium">Facility</th>
-                <th scope="col" className="py-2 text-right font-medium">Occupied</th>
-                <th scope="col" className="py-2 text-right font-medium">Rentable</th>
-                <th scope="col" className="py-2 text-right font-medium">Unit occ.</th>
-                <th scope="col" className="py-2 text-right font-medium">Sq-ft occ.</th>
-                <th scope="col" className="py-2 text-right font-medium">Collected</th>
-                <th scope="col" className="py-2 text-right font-medium">Economic occ.</th>
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">Facility</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Occupied</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Rentable</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Unit occ.</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Sq-ft occ.</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Collected</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Economic occ.</th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {occupancy.rows.map((row) => (
-                <tr key={row.facilityId} className="border-b">
+                <DataTable.Row key={row.facilityId} className="border-b">
                   {/* B-150 / FR-22. The facility names this row, so it is a
                       row header — a `<td>` leaves a screen reader announcing
                       "94%" with no way to know which site it belongs to. */}
-                  <th scope="row" className="py-2 font-normal">
+                  <th scope="row" className="px-3 py-2 font-normal">
                     <Link href={`/admin/reports/rent-roll?facility=${row.facilityId}`} className="underline underline-offset-2">
                       {row.facilityName}
                     </Link>
                   </th>
-                  <td className="py-2 text-right tabular-nums">{row.occupancy.occupiedCount}</td>
-                  <td className="py-2 text-right tabular-nums">{row.occupancy.rentableCount}</td>
-                  <td className="py-2 text-right tabular-nums">{percent(row.occupancy.ratio)}</td>
-                  <td className="py-2 text-right tabular-nums">{percent(row.occupancy.squareFootRatio)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatCents(row.economic.collectedCents)}</td>
-                  <td className="py-2 text-right tabular-nums">{percent(row.economic.ratio)}</td>
-                </tr>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.occupancy.occupiedCount}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.occupancy.rentableCount}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{percent(row.occupancy.ratio)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{percent(row.occupancy.squareFootRatio)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatCents(row.economic.collectedCents)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{percent(row.economic.ratio)}</td>
+                </DataTable.Row>
               ))}
-              <tr className="font-medium">
-                <th scope="row" className="py-2 font-medium">All facilities</th>
-                <td className="py-2 text-right tabular-nums">{occupancy.total.occupancy.occupiedCount}</td>
-                <td className="py-2 text-right tabular-nums">{occupancy.total.occupancy.rentableCount}</td>
-                <td className="py-2 text-right tabular-nums">{percent(occupancy.total.occupancy.ratio)}</td>
-                <td className="py-2 text-right tabular-nums">{percent(occupancy.total.occupancy.squareFootRatio)}</td>
-                <td className="py-2 text-right tabular-nums">{formatCents(occupancy.total.economic.collectedCents)}</td>
-                <td className="py-2 text-right tabular-nums">{percent(occupancy.total.economic.ratio)}</td>
-              </tr>
+              <DataTable.Row className="font-medium">
+                <th scope="row" className="px-3 py-2 font-medium">All facilities</th>
+                <td className="px-3 py-2 text-right tabular-nums">{occupancy.total.occupancy.occupiedCount}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{occupancy.total.occupancy.rentableCount}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{percent(occupancy.total.occupancy.ratio)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{percent(occupancy.total.occupancy.squareFootRatio)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatCents(occupancy.total.economic.collectedCents)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{percent(occupancy.total.economic.ratio)}</td>
+              </DataTable.Row>
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       </section>
 
@@ -486,50 +492,50 @@ export default async function ReportsPage({
           Move-ins and move-outs
         </h2>
         <ScrollRegion aria-label="Move-ins and move-outs">
-          <table className="w-full min-w-2xl text-sm">
+          <DataTable className="min-w-2xl">
             <caption className="sr-only">Move-ins, move-outs, net and reservation conversion per facility for {label}</caption>
-            <thead>
-              <tr className="border-b text-left">
-                <th scope="col" className="py-2 font-medium">Facility</th>
-                <th scope="col" className="py-2 text-right font-medium">Move-ins</th>
-                <th scope="col" className="py-2 text-right font-medium">Move-outs</th>
-                <th scope="col" className="py-2 text-right font-medium">Net</th>
-                <th scope="col" className="py-2 text-right font-medium">Reservations</th>
-                <th scope="col" className="py-2 text-right font-medium">Converted</th>
-                <th scope="col" className="py-2 text-right font-medium">Avg days to move-in</th>
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">Facility</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Move-ins</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Move-outs</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Net</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Reservations</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Converted</th>
+                <th scope="col" className="px-3 py-2 text-right font-semibold">Avg days to move-in</th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {moves.rows.map((row) => (
-                <tr key={row.facilityId} className="border-b">
-                  <th scope="row" className="py-2 font-normal">{row.facilityName}</th>
-                  <td className="py-2 text-right tabular-nums">{row.moves.moveIns}</td>
-                  <td className="py-2 text-right tabular-nums">{row.moves.moveOuts}</td>
-                  <td className="py-2 text-right tabular-nums">{row.moves.net}</td>
-                  <td className="py-2 text-right tabular-nums">{row.conversion.reservations}</td>
-                  <td className="py-2 text-right tabular-nums">
+                <DataTable.Row key={row.facilityId} className="border-b">
+                  <th scope="row" className="px-3 py-2 font-normal">{row.facilityName}</th>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.moves.moveIns}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.moves.moveOuts}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.moves.net}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{row.conversion.reservations}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {row.conversion.converted} ({percent(row.conversion.conversionRatio)})
                   </td>
-                  <td className="py-2 text-right tabular-nums">
+                  <td className="px-3 py-2 text-right tabular-nums">
                     {row.conversion.averageDaysToMoveIn === null
                       ? '—'
                       : row.conversion.averageDaysToMoveIn.toFixed(1)}
                   </td>
-                </tr>
+                </DataTable.Row>
               ))}
-              <tr className="font-medium">
-                <th scope="row" className="py-2 font-medium">All facilities</th>
-                <td className="py-2 text-right tabular-nums">{moves.total.moves.moveIns}</td>
-                <td className="py-2 text-right tabular-nums">{moves.total.moves.moveOuts}</td>
-                <td className="py-2 text-right tabular-nums">{moves.total.moves.net}</td>
-                <td className="py-2 text-right tabular-nums">{moves.total.conversion.reservations}</td>
-                <td className="py-2 text-right tabular-nums">
+              <DataTable.Row className="font-medium">
+                <th scope="row" className="px-3 py-2 font-medium">All facilities</th>
+                <td className="px-3 py-2 text-right tabular-nums">{moves.total.moves.moveIns}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{moves.total.moves.moveOuts}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{moves.total.moves.net}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{moves.total.conversion.reservations}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
                   {moves.total.conversion.converted} ({percent(moves.total.conversion.conversionRatio)})
                 </td>
-                <td className="py-2 text-right tabular-nums">—</td>
-              </tr>
+                <td className="px-3 py-2 text-right tabular-nums">—</td>
+              </DataTable.Row>
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
         {/* B-082 part 1. Two splits of the SAME move-ins, which is why they are
             two tables and not one: they are different questions, and a reader

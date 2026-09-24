@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
@@ -50,7 +51,7 @@ export default async function ProtectionCoveragePage({
   if (selected.mode !== 'single') {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-lg font-semibold">Uncovered units</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Uncovered units</h1>
         <FacilityRollup heading="Uncovered units, by facility" rows={await protectionGapRollup(actor)} />
         <p className="text-muted-foreground text-sm">
           Open a facility to see which units — the protection policy is a per-facility setting, so a
@@ -65,7 +66,7 @@ export default async function ProtectionCoveragePage({
   return (
     <div className="flex max-w-4xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">Uncovered units — {gap.facilityName}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Uncovered units — {gap.facilityName}</h1>
         <Link href="/admin/reports" className="text-sm underline underline-offset-2">
           All reports
         </Link>
@@ -98,37 +99,37 @@ export default async function ProtectionCoveragePage({
         </p>
       ) : (
         <ScrollRegion aria-label="Uncovered units">
-          <table className="w-full min-w-2xl border-collapse text-sm">
+          <DataTable className="min-w-2xl">
             <caption className="sr-only">
               Occupied units with no protection plan and no unexpired proof of insurance, longest
               uncovered first
             </caption>
-            <thead>
-              <tr className="border-input border-b text-left">
-                <th scope="col" className="py-2 pr-4">
+            <DataTable.Head>
+              <tr>
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Unit
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Tenant
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Why
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Since
                 </th>
-                <th scope="col" className="py-2 pr-4">
+                <th scope="col" className="px-3 py-2 font-semibold">
                   Days
                 </th>
               </tr>
-            </thead>
+            </DataTable.Head>
             <tbody>
               {gap.rows.map((row) => (
-                <tr key={row.leaseId} className="border-input border-b">
-                  <th scope="row" className="py-2 pr-4 text-left font-normal">
+                <DataTable.Row key={row.leaseId} className="border-input border-b">
+                  <th scope="row" className="px-3 py-2 text-left font-normal">
                     {row.unitNumber}
                   </th>
-                  <td className="py-2 pr-4">
+                  <td className="px-3 py-2">
                     <Link
                       href={`/admin/tenants/${row.tenantId}`}
                       className="underline underline-offset-2"
@@ -136,7 +137,7 @@ export default async function ProtectionCoveragePage({
                       {row.tenantName}
                     </Link>
                   </td>
-                  <td className="py-2 pr-4">
+                  <td className="px-3 py-2">
                     {/* The two reasons are different conversations: one tenant
                         had cover and let it run out, the other never showed us
                         any. Never colour alone (WCAG 1.4.1) — the words say it. */}
@@ -144,19 +145,19 @@ export default async function ProtectionCoveragePage({
                       ? 'Certificate expired'
                       : 'No certificate was ever recorded'}
                   </td>
-                  <td className="text-muted-foreground py-2 pr-4">
+                  <td className="px-3 text-muted-foreground py-2">
                     {formatDay(row.proofExpiredOn ?? row.startDate)}
                     {row.reason === 'never_recorded' && (
                       <span className="block text-xs">lease started</span>
                     )}
                   </td>
-                  <td className="py-2 pr-4 tabular-nums">
+                  <td className="px-3 py-2 tabular-nums">
                     {row.daysUncovered === null ? '—' : row.daysUncovered}
                   </td>
-                </tr>
+                </DataTable.Row>
               ))}
             </tbody>
-          </table>
+          </DataTable>
         </ScrollRegion>
       )}
     </div>

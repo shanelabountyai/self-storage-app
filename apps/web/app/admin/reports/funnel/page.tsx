@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { EmptyState } from '@/components/ui/empty-state'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { funnelReport } from '@/lib/analytics/funnel'
@@ -69,7 +71,7 @@ export default async function FunnelPage({
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold">Funnel — {range.label}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Funnel — {range.label}</h1>
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           How many people got from looking to moving in.{' '}
           <Link href="/admin/reports" className="underline underline-offset-2">
@@ -152,37 +154,37 @@ export default async function FunnelPage({
       </form>
 
       <ScrollRegion aria-label="Funnel steps">
-        <table className="w-full min-w-2xl border-collapse text-sm">
+        <DataTable className="min-w-2xl">
           <caption className="sr-only">
             Funnel steps with conversion rates for {range.label}
           </caption>
-          <thead>
-            <tr className="border-input border-b text-left">
-              <th scope="col" className="py-2 pr-4">Step</th>
-              <th scope="col" className="py-2 pr-4 text-right">Sessions</th>
-              <th scope="col" className="py-2 pr-4 text-right">From the step above</th>
-              <th scope="col" className="py-2 pr-4 text-right">From the top</th>
+          <DataTable.Head>
+            <tr>
+              <th scope="col" className="px-3 py-2 font-semibold">Step</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">Sessions</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">From the step above</th>
+              <th scope="col" className="px-3 py-2 text-right font-semibold">From the top</th>
             </tr>
-          </thead>
+          </DataTable.Head>
           <tbody>
             {report.steps.map((step) => (
-              <tr key={step.key} className="border-input border-b">
-                <th scope="row" className="py-2 pr-4 text-left font-medium">
+              <DataTable.Row key={step.key} className="border-input border-b">
+                <th scope="row" className="px-3 py-2 text-left font-medium">
                   {step.label}
                 </th>
-                <td className="py-2 pr-4 text-right tabular-nums">{step.count}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{step.count}</td>
                 {/* "From the step above" first, because it is the number
                     somebody can act on: "half the people who started a hold
                     finished it" is a fixable problem, while "0.3% of sessions
                     moved in" is a statistic. */}
-                <td className="py-2 pr-4 text-right tabular-nums">{percent(step.fromPrevious)}</td>
-                <td className="text-muted-foreground py-2 pr-4 text-right tabular-nums">
+                <td className="px-3 py-2 text-right tabular-nums">{percent(step.fromPrevious)}</td>
+                <td className="px-3 text-muted-foreground py-2 text-right tabular-nums">
                   {percent(step.fromTop)}
                 </td>
-              </tr>
+              </DataTable.Row>
             ))}
           </tbody>
-        </table>
+        </DataTable>
       </ScrollRegion>
 
       <p className="text-muted-foreground max-w-prose text-xs text-pretty">
@@ -207,26 +209,26 @@ export default async function FunnelPage({
           </p>
         ) : (
           <ScrollRegion aria-label="Funnel by source and medium">
-            <table className="w-full min-w-2xl border-collapse text-sm">
+            <DataTable className="min-w-2xl">
               <caption className="sr-only">
                 Funnel steps by campaign source and medium for {range.label}. Rows total the
                 figures in the funnel table above.
               </caption>
-              <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">Source / medium</th>
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">Source / medium</th>
                   {report.steps.map((step) => (
-                    <th key={step.key} scope="col" className="py-2 pr-4 text-right">
+                    <th key={step.key} scope="col" className="px-3 py-2 text-right font-semibold">
                       {step.label}
                     </th>
                   ))}
-                  <th scope="col" className="py-2 pr-4 text-right">Session to move-in</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">Session to move-in</th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {report.bySourceMedium.map((row) => (
-                  <tr key={`${row.source ?? ''}/${row.medium ?? ''}`} className="border-input border-b">
-                    <th scope="row" className="py-2 pr-4 text-left font-medium">
+                  <DataTable.Row key={`${row.source ?? ''}/${row.medium ?? ''}`} className="border-input border-b">
+                    <th scope="row" className="px-3 py-2 text-left font-medium">
                       {/* Untagged traffic is named, never dropped. It is
                           normally the largest row, and a breakdown that omits
                           its biggest row is worse than no breakdown at all. */}
@@ -235,17 +237,17 @@ export default async function FunnelPage({
                         : 'Direct or untagged'}
                     </th>
                     {row.steps.map((step) => (
-                      <td key={step.key} className="py-2 pr-4 text-right tabular-nums">
+                      <td key={step.key} className="px-3 py-2 text-right tabular-nums">
                         {step.count}
                       </td>
                     ))}
-                    <td className="py-2 pr-4 text-right tabular-nums">
+                    <td className="px-3 py-2 text-right tabular-nums">
                       {percent(row.steps[row.steps.length - 1].fromTop)}
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           </ScrollRegion>
         )}
       </section>
@@ -257,35 +259,35 @@ export default async function FunnelPage({
           Move-ins a follow-up brought back
         </h2>
         {report.sequenceMoveIns === 0 ? (
-          <p className="text-muted-foreground text-sm">No move-ins in this range.</p>
+          <EmptyState>No move-ins in this range.</EmptyState>
         ) : (
           <>
-            <table className="w-full max-w-lg border-collapse text-sm">
+            <DataTable>
               <caption className="sr-only">
                 Move-ins credited to each follow-up sequence, out of{' '}
                 {report.sequenceMoveIns} in {range.label}
               </caption>
-              <thead>
-                <tr className="border-input border-b text-left">
-                  <th scope="col" className="py-2 pr-4">Sequence</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Move-ins</th>
-                  <th scope="col" className="py-2 pr-4 text-right">Share</th>
+              <DataTable.Head>
+                <tr>
+                  <th scope="col" className="px-3 py-2 font-semibold">Sequence</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">Move-ins</th>
+                  <th scope="col" className="px-3 py-2 text-right font-semibold">Share</th>
                 </tr>
-              </thead>
+              </DataTable.Head>
               <tbody>
                 {report.sequences.map((sequence) => (
-                  <tr key={sequence.key} className="border-input border-b">
-                    <th scope="row" className="py-2 pr-4 text-left font-medium">
+                  <DataTable.Row key={sequence.key} className="border-input border-b">
+                    <th scope="row" className="px-3 py-2 text-left font-medium">
                       {sequence.label}
                     </th>
-                    <td className="py-2 pr-4 text-right tabular-nums">{sequence.moveIns}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums">
+                    <td className="px-3 py-2 text-right tabular-nums">{sequence.moveIns}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
                       {percent(sequence.moveIns / report.sequenceMoveIns)}
                     </td>
-                  </tr>
+                  </DataTable.Row>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
             {/* Said in words rather than left for a reader to work out from a
                 column that does not add up to 100%. One renter can be chased by
                 the drip, abandon a checkout, and be brought back by the

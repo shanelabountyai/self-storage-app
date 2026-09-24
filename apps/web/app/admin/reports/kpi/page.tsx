@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DataTable } from '@/components/ui/data-table'
 import { getAdminActor } from '@/lib/admin/context'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { formatCents } from '@/lib/format'
@@ -81,7 +82,7 @@ export default async function OwnerKpiPage() {
   return (
     <div className="flex max-w-5xl flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-lg font-semibold">KPI trend</h1>
+        <h1 className="text-2xl font-bold tracking-tight">KPI trend</h1>
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
           The last {DEFAULT_MONTHS} months across {facilityCount}{' '}
           {facilityCount === 1 ? 'facility' : 'facilities'}, from the figures each month was closed
@@ -166,40 +167,40 @@ export default async function OwnerKpiPage() {
               Month by month
             </h2>
             <ScrollRegion aria-label="Closed-month figures">
-              <table className="w-full min-w-3xl text-left text-sm">
+              <DataTable className="min-w-3xl">
                 <caption className="sr-only">
                   Closed-month figures across the portfolio, oldest first
                 </caption>
-                <thead>
-                  <tr className="border-input border-b">
-                    <th scope="col" className="py-2 pr-4 font-medium">Month</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Sites filed</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Unit occ.</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Economic occ.</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Collected</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Receivables</th>
-                    <th scope="col" className="py-2 pr-4 font-medium">Net moves</th>
+                <DataTable.Head>
+                  <tr>
+                    <th scope="col" className="px-3 py-2 font-semibold">Month</th>
+                    <th scope="col" className="px-3 py-2 font-semibold">Sites filed</th>
+                    <th scope="col" className="px-3 py-2 font-semibold">Unit occ.</th>
+                    <th scope="col" className="px-3 py-2 font-semibold">Economic occ.</th>
+                    <th scope="col" className="px-3 py-2 font-semibold">Collected</th>
+                    <th scope="col" className="px-3 py-2 font-semibold">Receivables</th>
+                    <th scope="col" className="px-3 py-2 font-semibold">Net moves</th>
                   </tr>
-                </thead>
+                </DataTable.Head>
                 <tbody>
                   {points.map((point) => (
-                    <tr key={`${point.year}-${point.month}`} className="border-input border-b">
-                      <td className="py-2 pr-4 whitespace-nowrap">{monthLabel(point)}</td>
-                      <td className="py-2 pr-4">
+                    <DataTable.Row key={`${point.year}-${point.month}`} className="border-input border-b">
+                      <td className="px-3 py-2 whitespace-nowrap">{monthLabel(point)}</td>
+                      <td className="px-3 py-2">
                         {point.facilityIds.length} of {facilityCount}
                       </td>
-                      <td className="py-2 pr-4">{percent(point.unitOccupancyRatio)}</td>
-                      <td className="py-2 pr-4">{percent(point.economicOccupancyRatio)}</td>
-                      <td className="py-2 pr-4">{formatCents(point.collectedCents)}</td>
-                      <td className="py-2 pr-4">{formatCents(point.arTotalCents)}</td>
-                      <td className="py-2 pr-4">
+                      <td className="px-3 py-2">{percent(point.unitOccupancyRatio)}</td>
+                      <td className="px-3 py-2">{percent(point.economicOccupancyRatio)}</td>
+                      <td className="px-3 py-2">{formatCents(point.collectedCents)}</td>
+                      <td className="px-3 py-2">{formatCents(point.arTotalCents)}</td>
+                      <td className="px-3 py-2">
                         {point.netMoves > 0 ? '+' : ''}
                         {point.netMoves}
                       </td>
-                    </tr>
+                    </DataTable.Row>
                   ))}
                 </tbody>
-              </table>
+              </DataTable>
             </ScrollRegion>
           </section>
         </>

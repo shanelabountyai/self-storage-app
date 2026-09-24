@@ -64,6 +64,8 @@ export type TenantListRow = {
 export type TenantList = {
   rows: TenantListRow[]
   total: number
+  /// Per-filter totals, so the tabs can say how many are behind them.
+  counts: Record<TenantFilter, number>
   page: number
   pageSize: number
   filter: TenantFilter
@@ -110,7 +112,7 @@ export async function listTenants(
     },
   })
   if (leases.length === 0) {
-    return { rows: [], total: 0, page: 1, pageSize: TENANT_PAGE_SIZE, filter }
+    return { rows: [], total: 0, counts: Object.fromEntries(TENANT_FILTERS.map((f) => [f, 0])) as Record<TenantFilter, number>, page: 1, pageSize: TENANT_PAGE_SIZE, filter }
   }
 
   const balances = await prisma.ledgerEntry.groupBy({
@@ -177,8 +179,8 @@ export async function listTenants(
   }
 
   const all = [...byTenant.values()]
-  const matching = all.filter((entry) => {
-    switch (filter) {
+  const inFilter = (entry: Aggregate, f: TenantFilter) => {
+    switch (f) {
       // Money owed AND actually late. A balance alone is an invoice raised
       // yesterday; this column is the one somebody acts on.
       case 'past_due':
@@ -194,7 +196,11 @@ export async function listTenants(
       default:
         return true
     }
-  })
+  }
+  const matching = all.filter((entry) => inFilter(entry, filter))
+  const counts = Object.fromEntries(
+    TENANT_FILTERS.map((f) => [f, all.filter((entry) => inFilter(entry, f)).length]),
+  ) as Record<TenantFilter, number>
 
   matching.sort((a, b) => b.latestStart - a.latestStart || a.name.localeCompare(b.name))
 
@@ -210,6 +216,7 @@ export async function listTenants(
       daysPastDue: entry.daysPastDue,
     })),
     total: matching.length,
+    counts,
     page,
     pageSize: TENANT_PAGE_SIZE,
     filter,
