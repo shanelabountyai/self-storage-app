@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { useLocale, useT } from '@/components/i18n/locale-provider'
@@ -34,6 +35,7 @@ const appearance = {
 
 function PaymentForm({ returnUrl }: { returnUrl: string }) {
   const t = useT()
+  const router = useRouter()
   const stripe = useStripe()
   const elements = useElements()
   const [error, setError] = useState<string | null>(null)
@@ -77,8 +79,14 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
       setSubmitting(false)
       return
     }
-    // Success is confirmed by the webhook; the page reloads to whatever the
-    // server now says the step is.
+    // B-390: success is confirmed by the webhook, which can land after this
+    // returns. Stay in the "taking payment" state and re-ask the server until
+    // it advances the step (this form then unmounts); reload once as a last
+    // resort so a lost webhook still shows the server's truth.
+    for (let i = 0; i < 20; i++) {
+      router.refresh()
+      await new Promise((r) => setTimeout(r, 1000))
+    }
     window.location.reload()
   }
 
