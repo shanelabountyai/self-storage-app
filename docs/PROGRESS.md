@@ -11815,3 +11815,12 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it decided.** The 21 September figures of 338 items and 124 migrations came from a different count, so the write-up now uses `✅` rows in the backlog and `ls -d` on the migrations directory. LinkedIn draft 27 said "nine times" and "in the last round alone", but the 31 refusals were round nine; it now reads "eleven times" and "in one round alone" (Ledger Version 33).
 
 **What it left behind.** A real defect, unowned: after a card payment at checkout, `payment-element.tsx` reloads the moment Stripe confirms and can land on *Payment* again because the webhook has not arrived yet; a second reload shows *Done*. DEMO.md documents the workaround. The keypad accept path (a real gate code) was not re-run; the deny path was.
+
+
+## B-390: checkout no longer sits on Payment after a paid card (2026-09-24, `8fb36c9`)
+
+**What it built.** `payment-element.tsx` no longer reloads the moment `confirmPayment` returns. It stays in the "taking payment" state and calls `router.refresh()` once a second, up to 20 times; when the webhook advances the step the server stops rendering the form and it unmounts. If the step never advances it falls back to one `window.location.reload()`.
+
+**What it decided.** No new status endpoint: the page's own server render is the status read. FR-4.4 is unchanged, since finalising still happens only from the webhook.
+
+**What it left behind.** The backlog's delayed-webhook test was not written: no e2e drives real card entry in the Stripe iframe, so it needs a provider key (the D-63 position). Verified by typecheck only; the DEMO.md workaround note about a second reload is now stale and should be re-walked with a real test card. `portal-payment.tsx` untouched, as the row said.
