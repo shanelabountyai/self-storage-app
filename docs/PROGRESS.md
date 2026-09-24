@@ -11785,7 +11785,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-388 — Search filter rail (2026-09-23)
 
-**Commit:** `SHA_PENDING`.
+**Commit:** `af20491`.
 
 **What it built.** `SearchFilterRail` on `/storage/search`: size radios (Any / small / medium / large), feature checkboxes, Apply and Clear all, as a plain GET form that carries `q`/`lat`/`lng` in hidden fields. A `<details>` at every width, open while a filter is set. EN and ES strings.
 
