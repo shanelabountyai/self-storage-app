@@ -421,6 +421,17 @@ export default async function SearchPage({
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12">
+      <nav aria-label={translate(dict, 'chrome.breadcrumb')} className="text-muted-foreground mb-3 text-sm">
+        <ol className="flex flex-wrap gap-x-2">
+          <li>
+            <Link href="/" className="underline underline-offset-4">
+              {translate(dict, 'chrome.home')}
+            </Link>
+            <span aria-hidden="true"> /</span>
+          </li>
+          <li aria-current="page">{translate(dict, 'chrome.findStorage')}</li>
+        </ol>
+      </nav>
       <h1 className="text-3xl font-semibold tracking-tight text-balance">{heading}</h1>
 
       <div className="mt-6 max-w-3xl">

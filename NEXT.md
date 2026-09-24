@@ -1,5 +1,8 @@
 # Next
 
+**B-387 is built** (2026-09-23). **Next item: B-388** (`83azzzzh`), then B-389. Public facility card shows office hours, Open/Closed badge, amenities and a CTA; header has Locations and Sizes with `aria-current`; size guide in the footer. `/admin/pos/done` cash-receipt spec on mobile-chrome flaked once in a sweep and passed alone.
+
+
 **B-385 is built** (2026-09-23, `14c8b70`). **Next item: B-387** (`83azzzzg`), then B-388, B-389. Staff restyle finished on units, POS, tenant profile, delinquency, tenants list and all reports pages. mobile-chrome was not run for it.
 
 

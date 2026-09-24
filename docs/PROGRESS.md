@@ -11770,3 +11770,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **Real bug found.** Two bare report tables (`MoveSplit`, the attach-rate split) had no scroll wrapper: the kit's `px-3` cells pushed them past the viewport at 200% zoom, and a wrapper with a `min-w` floor then widened their flex parent at 320px until it got `min-w-0`.
 
 **Verification.** typecheck and lint clean. e2e on desktop-chrome: admin-tenants, admin-pos, admin-pos-together, admin-reports, a11y 230 passed; admin, admin-tasks, admin-move-out 309 passed + 1 skipped; final admin + admin-reports 341 passed. mobile-chrome not run. Accessibility statement: staff-only, no claim touched.
+
+## B-387 — Public facility card and header (2026-09-23)
+
+**Commit:** `SHA_PENDING`.
+
+**What it built.** `FacilityCard` (home, locations, city and size pages) now shows an Open now / Closed now `Badge` with today's office hours, up to three amenities, and a "View units" outline button. `HomeFacility` gained `officeHours`, `timezone` and `amenities`; `officeToday()` reads the schedule off the facility's own clock and has a unit test. The header gained Locations and Sizes links beside Guides, via a small client `NavLink` that sets `aria-current="page"` on its own route and below it. Size guide is in the footer Help column. `/storage/search` has a Home / Find storage breadcrumb `nav`.
+
+**What it decided.** The badge reads *office* hours, not gate hours (a renter at the desk, not the gate). No published schedule means no badge and no hours line, never a guessed "Closed". The open/closed state is as fresh as `cachedHomeFacts` and the city page's `revalidate` (five minutes), the same ceiling the price already has.
+
+**What it left behind.** UnitCard "N left" and features: not touched, no derivable count on the card that is not already there (`card.onlyLeft*` exists on the facility page). No strikethrough price, since no promotion data exists. Breadcrumbs only on search; other pages are unchanged.
+
+**Verification.** typecheck, lint, `home-facts` unit test clean. e2e (a11y, a11y-own-spec-routes, smoke, i18n) 595 passed + 4 skipped + 1 failed = 600; the one failure was `/admin/pos/done` on mobile-chrome, staff-only and untouched here, which passed alone (4 passed) on rerun. Accessibility statement re-read: it makes no claim about the header links, breadcrumbs or cards, so nothing went stale.

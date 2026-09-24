@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { sortByDistance } from '../apps/web/lib/marketing/home-facts'
-import type { HomeFacility } from '../apps/web/lib/marketing/home-facts'
+import { officeToday, sortByDistance, type HomeFacility } from '../apps/web/lib/marketing/home-facts'
+import type { WeeklySchedule } from '../packages/core/facility-settings'
 
 // B-366. The locations page's nearest-first cut — real enough to deserve its
 // own test (a loop and two branches) rather than only a rendered page.
@@ -18,6 +18,9 @@ function facility(overrides: Partial<HomeFacility> = {}): HomeFacility {
     latitude: null,
     longitude: null,
     from: null,
+    officeHours: null,
+    timezone: 'America/Chicago',
+    amenities: [],
     ...overrides,
   }
 }
@@ -47,5 +50,22 @@ describe('sortByDistance', () => {
     const result = sortByDistance([unknown, known], point)
     expect(result.map((r) => r.facility.id)).toEqual(['known', 'unknown'])
     expect(result[1]!.distanceMiles).toBeUndefined()
+  })
+})
+
+describe('officeToday', () => {
+  const day = { closed: false as const, open: '09:00', close: '18:00' }
+  const week = Object.fromEntries(
+    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map((d) => [d, day]),
+  ) as unknown as WeeklySchedule
+  week.sunday = { closed: true }
+  // 2026-09-23 is a Wednesday; 15:00Z = 10:00 in Chicago (CDT).
+  it('is open inside hours, closed after, in the facility zone', () => {
+    expect(officeToday(week, 'America/Chicago', new Date('2026-09-23T15:00:00Z'))?.open).toBe(true)
+    expect(officeToday(week, 'America/Chicago', new Date('2026-09-24T01:00:00Z'))?.open).toBe(false)
+  })
+  it('is closed on a closed day and null without a schedule', () => {
+    expect(officeToday(week, 'America/Chicago', new Date('2026-09-27T17:00:00Z'))?.open).toBe(false)
+    expect(officeToday(null, 'America/Chicago', new Date())).toBeNull()
   })
 })

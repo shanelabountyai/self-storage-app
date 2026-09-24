@@ -8,7 +8,9 @@ import {
   type FacilityFromRate,
   type SizeFromRate,
 } from '@/lib/inventory/public-inventory'
+import { localReading } from '@storage/core/access'
 import { distanceMiles, type GeoPoint } from '@/lib/geo/geocode'
+import { parseWeeklySchedule, type DaySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 
 // B-365 (D-147: take the voice, derive the facts). Every number the home page
 // states comes from here, read from the active facilities, so the page cannot
@@ -28,6 +30,11 @@ export type HomeFacility = {
   latitude: number | null
   longitude: number | null
   from: FacilityFromRate | null
+  /// B-387. Office hours, null when none are published; the card then says
+  /// nothing rather than guessing open or closed.
+  officeHours: WeeklySchedule | null
+  timezone: string
+  amenities: string[]
 }
 
 export type HomeFacts = {
@@ -57,6 +64,9 @@ async function homeFacts(): Promise<HomeFacts> {
       latitude: true,
       longitude: true,
       reservationHoldGraceDays: true,
+      officeHours: true,
+      timezone: true,
+      amenities: true,
     },
     orderBy: [{ state: 'asc' }, { city: 'asc' }, { name: 'asc' }],
   })
@@ -85,6 +95,9 @@ async function homeFacts(): Promise<HomeFacts> {
       latitude: f.latitude,
       longitude: f.longitude,
       from: fromRates.get(f.id) ?? null,
+      officeHours: parseWeeklySchedule(f.officeHours),
+      timezone: f.timezone,
+      amenities: f.amenities,
     })),
     sizes: [...sizes]
       .sort((a, b) => b.availableUnits - a.availableUnits)
@@ -132,4 +145,21 @@ export function sortByDistance(
       }
       return 0
     })
+}
+
+/// B-387. Today's office hours and whether the desk is staffed right now, read
+/// off the facility's own clock. Null when no schedule is published: the card
+/// then shows neither hours nor a badge, since guessing "closed" would turn
+/// away a renter the office would have served.
+export function officeToday(
+  schedule: WeeklySchedule | null,
+  timezone: string,
+  now: Date,
+): { open: boolean; hours: DaySchedule } | null {
+  if (!schedule) return null
+  const { day, minutes } = localReading(now, timezone)
+  const hours = schedule[day]
+  if (hours.closed) return { open: false, hours }
+  const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3))
+  return { open: minutes >= toMin(hours.open) && minutes < toMin(hours.close), hours }
 }

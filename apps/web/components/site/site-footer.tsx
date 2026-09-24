@@ -56,6 +56,7 @@ export async function SiteFooter({ locale }: { locale: Locale }) {
       heading: 'chrome.footerHelp',
       links: [
         { href: '/login', label: t('chrome.payBill') },
+        { href: '/storage/size-guide', label: t('chrome.sizeGuide') },
         ...LEGAL_PAGES.filter((p) => !COMPANY.has(p.href)).map((p) => ({
           href: p.href,
           label: t(NAV_KEYS[p.href]),

@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { Phone } from 'lucide-react'
 import { phoneFor } from '@/components/marketing/call-link'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { formatMiles, formatRate } from '@/lib/format'
-import { facilityPath } from '@/lib/facility/public-facility'
-import type { HomeFacility } from '@/lib/marketing/home-facts'
+import { facilityPath, formatTimeOfDay } from '@/lib/facility/public-facility'
+import { officeToday, type HomeFacility } from '@/lib/marketing/home-facts'
 import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 
 // B-365's home-page card, extracted in B-366 so the locations page (D-146,
@@ -27,6 +29,8 @@ export function FacilityCard({
     translate(dict, key, vars)
   const phone = phoneFor(facility.phone)
   const { from } = facility
+  const today = officeToday(facility.officeHours, facility.timezone, new Date())
+  const amenities = facility.amenities.slice(0, 3)
   return (
     <li className="bg-card flex flex-col gap-2 rounded-xl border p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -47,6 +51,21 @@ export function FacilityCard({
           </p>
         )}
       </div>
+      {today && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <Badge tone={today.open ? 'success' : 'neutral'}>
+            {t(today.open ? 'card.open' : 'card.closed')}
+          </Badge>
+          <span className="text-muted-foreground">
+            {today.hours.closed
+              ? t('card.closedToday')
+              : t('card.hoursToday', {
+                  open: formatTimeOfDay(today.hours.open),
+                  close: formatTimeOfDay(today.hours.close),
+                })}
+          </span>
+        </p>
+      )}
       <p className="text-muted-foreground text-sm">
         {facility.addressLine1}, {facility.city}, {facility.state} {facility.postalCode}
       </p>
@@ -58,6 +77,15 @@ export function FacilityCard({
         <span className="sr-only">{t('chrome.callUsAt')}</span>
         {phone.display}
       </a>
+      {amenities.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {amenities.map((a) => (
+            <li key={a} className="bg-muted rounded-full px-2.5 py-0.5 text-xs">
+              {a}
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="mt-auto font-medium">
         {from === null ? (
           <>
@@ -82,6 +110,12 @@ export function FacilityCard({
           </>
         )}
       </p>
+      <Button asChild variant="outline" className="mt-1 min-h-11 self-start">
+        <Link href={facilityPath(facility)}>
+          {t('card.viewUnits')}
+          <span className="sr-only"> {t('card.viewUnitsSr', { name: facility.name })}</span>
+        </Link>
+      </Button>
     </li>
   )
 }

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Phone } from 'lucide-react'
 import { SITE } from '@/lib/site-config'
 import { publicFootprint } from '@/lib/facility/public-facility'
+import { NavLink } from '@/components/site/nav-link'
 import { LanguageToggle } from '@/components/site/language-toggle'
 import { dictionaryFor, translate, type Locale } from '@/lib/i18n'
 
@@ -75,12 +76,9 @@ export async function SiteHeader({ locale, minimal = false }: { locale: Locale; 
                 1.4.10 is about. */}
             {!minimal && (
               <>
-            <Link
-              href="/guides"
-              className="hover:bg-accent inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium"
-            >
-              {t('chrome.guides')}
-            </Link>
+            <NavLink href="/storage/locations">{t('chrome.locations')}</NavLink>
+            <NavLink href="/storage/size-guide">{t('chrome.sizes')}</NavLink>
+            <NavLink href="/guides">{t('chrome.guides')}</NavLink>
 
             <Link
               href="/login"
