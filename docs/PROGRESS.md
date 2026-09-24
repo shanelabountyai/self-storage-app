@@ -11759,7 +11759,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-385 — Staff restyle on the skipped screens (2026-09-23)
 
-**Commit:** `SHA_PENDING`.
+**Commit:** `14c8b70`.
 
 **What it built.** Units, `/admin/pos`, the tenant profile, the delinquency no-facility branch, the tenants list and all 19 reports pages (index, close, deliverability, funnel, plans-holds and the rest) move to the B-384 primitives: kit `h1` (`text-2xl font-bold tracking-tight`), `DataTable`/`DataTable.Head`/`DataTable.Row` for every hand-ruled table, `EmptyState` for the "No … here" lines, `Alert` for the POS sold-out and search-cap notices, `Card` for the POS tenant panel. Tenants list: a status `Badge` column, a count on every filter tab (`listTenants` now returns `counts`, computed from the same in-memory aggregate and the same predicate as the filter), and "Add a tenant" as the primary button. Delinquency: a three-figure strip (past due $, tenants, lock-out eligible) from the queue's own rows, one figure per lease.
 
