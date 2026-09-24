@@ -1,5 +1,7 @@
 # Next
 
+**B-389 is built** (2026-09-23), as primitives only (D-150): no `loading.tsx` survived e2e. The design-kit gap block B-385–B-389 is finished. Nothing queued: pick from `06-backlog.md`.
+
 **B-388 is built** (2026-09-23). **Next item: B-389** (`83azzzzi`), the last in the block: loading states. The search rail is apply-on-submit with no status region (D-149).
 
 **B-387 is built** (2026-09-23). **Next item: B-388** (`83azzzzh`), then B-389. Public facility card shows office hours, Open/Closed badge, amenities and a CTA; header has Locations and Sizes with `aria-current`; size guide in the footer. `/admin/pos/done` cash-receipt spec on mobile-chrome flaked once in a sweep and passed alone.

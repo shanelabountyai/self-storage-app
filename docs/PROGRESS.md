@@ -11795,3 +11795,15 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **Verification.** lint, typecheck, i18n and scan-coverage unit tests clean. e2e smoke + a11y filtered to search: 44 passed on both projects. Accessibility statement re-read: no claim about search filters, nothing went stale.
 
+## B-389 — Loading states (2026-09-23)
+
+**Commit:** see follow-up.
+
+**What it built.** `Skeleton`, `Spinner` and `RouteLoading` in `components/ui/loading.tsx` (reduced motion is already global in `globals.css`), plus a unit test that the fallback carries sr-only "Loading" text, hidden skeletons and no live region.
+
+**What it decided.** D-150: no route mounts a `loading.tsx`. Four were tried (checkout, search, `/admin`, `/portal`) and each broke e2e. A segment `loading.tsx` is a Suspense boundary that remounts on `router.refresh()`, losing focus and form state, and its `role="status"` contradicts two standing a11y specs.
+
+**What it left behind.** The backlog row asked for loading on the slow routes and one a11y-spec assertion; neither is done. The route to try is `<Suspense>` around a single slow query. No owner row.
+
+**Verification.** typecheck and the unit test clean. With the four files removed, the a11y, smoke and admin-pos specs passed on desktop-chrome; mobile-chrome was not run. The accessibility statement makes no loading claim, nothing went stale.
+
