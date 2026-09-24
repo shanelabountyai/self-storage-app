@@ -95,3 +95,5 @@ Ranked by user-visible impact. **O** = no item owns it. **D** = recorded decisio
 6. **Commission kit screens** for the facility page, the checkout Lease step and the state pages, or record "code is the design" for each.
 
 Rows written 2026-09-23: step 3 is B-384 (done); step 4 is B-385 and B-386; step 5 is B-387 and B-388; loading states (§2 #29) is B-389. **Still no row, deliberately:** step 1's owner calls (§4 #8/#9, §2 #17 fee copy) and step 6 (kit screens for the facility page, checkout Lease step and state pages), which need a design or a "code is the design" note first.
+
+**Closed 2026-09-23 (D-151):** step 1's owner calls and step 6 were decided as "keep the code"; no rows.
