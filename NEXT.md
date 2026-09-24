@@ -1,5 +1,7 @@
 # Next
 
+**Design-audit owner calls closed** (2026-09-23, D-151, `3118f0d`): links, header CTA, fee copy and the kit screens all stay as the code has them; no rows. Nothing queued, and the only open backlog rows are the blocked list. Next: new review block, or stop.
+
 **B-389 is built** (2026-09-23), as primitives only (D-150): no `loading.tsx` survived e2e. The design-kit gap block B-385–B-389 is finished. Nothing queued: pick from `06-backlog.md`.
 
 **B-388 is built** (2026-09-23). **Next item: B-389** (`83azzzzi`), the last in the block: loading states. The search rail is apply-on-submit with no status region (D-149).
