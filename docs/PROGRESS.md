@@ -11807,3 +11807,11 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **Verification.** typecheck and the unit test clean. With the four files removed, the a11y, smoke and admin-pos specs passed on desktop-chrome; mobile-chrome was not run. The accessibility statement makes no loading claim, nothing went stale.
 
+
+## Closure refresh (2026-09-23)
+
+**What it did.** Re-walked every `docs/DEMO.md` stop against a production build after the redesign (B-363 to B-389). Retook both `WRITEUP.md` screenshots, corrected its numbers (56 days, 950 commits, 390 backlog rows marked done, 4,729 unit tests across 291 files, 1,698 e2e tests in 27 spec files, 123 migrations, 151 decisions, eleven review rounds), and marked B-347 to B-349 fixed. Republished the exec brief with the new screenshots and numbers: https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf. Unit suite: 4,721 passed, 8 skipped.
+
+**What it decided.** The 21 September figures of 338 items and 124 migrations came from a different count, so the write-up now uses `✅` rows in the backlog and `ls -d` on the migrations directory. LinkedIn draft 27 still says "nine times" and "in the last round alone": the 31 refusals were round nine, so it should read "eleven times" and "in one round alone". It is not edited in the Ledger.
+
+**What it left behind.** A real defect, unowned: after a card payment at checkout, `payment-element.tsx` reloads the moment Stripe confirms and can land on *Payment* again because the webhook has not arrived yet; a second reload shows *Done*. DEMO.md documents the workaround. The keypad accept path (a real gate code) was not re-run; the deny path was.

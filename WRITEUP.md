@@ -5,7 +5,7 @@
 **Repo:** https://github.com/shanelabountyai/self-storage-app (private)
 **Live demo:** https://storage.labintelligence.co (shared password, demo data only, seeded with no logins). The full demo runs locally from [`docs/DEMO.md`](docs/DEMO.md)
 **Built with:** Claude Code + Next.js (App Router), TypeScript, Postgres + Prisma, Stripe, Tailwind CSS, Vercel
-**Status:** Shipped 2026-09-21 · Last synced: 2026-09-21
+**Status:** Shipped 2026-09-21 · Last synced: 2026-09-23
 **Exec brief (non-technical):** https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf
 
 ---
@@ -22,18 +22,19 @@ A self-storage operator is holding a customer's belongings, and state lien law l
 - **Pricing:** web and in-store rates, street-rate changes, and rate increases for existing tenants with notice letters and owner approval.
 - **Several facilities** with staff roles scoped to each site, a month-end close that freezes last month's figures, and mandatory two-factor sign-in for every staff account.
 - **Tenants get a portal in English and Spanish:** balance, autopay, payment, documents and messages.
+- **One design language across the public site, the tenant portal and the staff screens**, built from a design kit and checked against WCAG 2.1 AA with automated scans, plus layout checks at 320px, 200% zoom and forced text spacing.
 
 ![The last step of online checkout: "You are moved in", with the gate code, the next payment date and autopay on.](docs/images/move-in-done.jpg)
 
 ![An unconfigured facility's admin dashboard: an amber notice listing the missing late-fee ladder and delinquency timeline, and what each one costs.](docs/images/unconfigured-facility.jpg)
 
-*Both screens were captured on 2026-09-21. The serif typeface in them is a bug (B-348, see below), not a design choice.*
+*Both screens were captured on 2026-09-23 from a production build, after the visual redesign (B-363 to B-370).*
 
 ## How It's Built
 
-It is an npm-workspaces monorepo. `apps/web` holds the Next.js app, `packages/core` holds the domain rules, and `packages/db` holds the Prisma schema and seeds. The schema has 97 models across 124 migrations, using the entity names from the master PRD (Facility, Unit, UnitType, Tenant, Lease, Invoice, Payment, AccessCredential, Lead and supporting entities). The ledger is the source of truth. Invoices and payments are the app's own rows, Stripe only moves money, and an hourly job flags any lease where the ledger and the open invoices disagree. Side effects (emails, gate changes, tasks) go through an event outbox with one catalog of events and one dispatcher. Gate hardware sits behind an adapter, and the only implementation is a simulator with a software keypad.
+It is an npm-workspaces monorepo. `apps/web` holds the Next.js app, `packages/core` holds the domain rules, and `packages/db` holds the Prisma schema and seeds. The schema has 97 models across 123 migrations, using the entity names from the master PRD (Facility, Unit, UnitType, Tenant, Lease, Invoice, Payment, AccessCredential, Lead and supporting entities). The ledger is the source of truth. Invoices and payments are the app's own rows, Stripe only moves money, and an hourly job flags any lease where the ledger and the open invoices disagree. Side effects (emails, gate changes, tasks) go through an event outbox with one catalog of events and one dispatcher. Gate hardware sits behind an adapter, and the only implementation is a simulator with a software keypad.
 
-**Key design decisions** (the full log is [`docs/prds/07-decisions.md`](docs/prds/07-decisions.md): 150 entries, each settled once)
+**Key design decisions** (the full log is [`docs/prds/07-decisions.md`](docs/prds/07-decisions.md): 151 entries, each settled once)
 
 | Decision | Alternative considered | Why I chose it |
 |---|---|---|
@@ -74,7 +75,7 @@ Each of these cost a debugging pass. The lesson from each is written into the re
 - **The command for adding a migration offered to drop the cloud database.** `db:migrate` pointed at the Neon dev branch. Because that branch had none of the migrations, `migrate dev` offered to reset the schema, one keystroke from dropping it. Local development now authors migrations against local Postgres. The only script that writes to Neon uses `migrate deploy`, which cannot drop anything.
 - **Some tests failed only at night.** Marketing messages are refused during quiet hours, judged by the facility's local wall clock. Three suites passed between 8am and 9pm Central and failed outside that window, which looked exactly like a broken message sender. They now pin the clock with `vi.setSystemTime`.
 - **The append-only audit log blocked test cleanup permanently.** Its trigger refuses `TRUNCATE`, and it holds a RESTRICT foreign key to `facility`. No test suite could reclaim a facility it had audit-logged against, and the test schema quietly grew to 13,106 facilities. The remedy is a one-command schema rebuild (`db:reset-test`).
-- **Found in the final demo walk and not fixed (now B-347 to B-349):** the lease quotes a $20 late fee from a table the fee engine never reads. `--font-sans` refers to itself, so every page falls back to the browser's serif. A bare `/portal/pay` tells a one-unit tenant that their unit was not found.
+- **Found in the final demo walk, then fixed (B-347 to B-349):** the lease quoted a $20 late fee from a table the fee engine never reads, `--font-sans` referred to itself so every page fell back to the browser's serif, and a bare `/portal/pay` told a one-unit tenant that their unit was not found. The lease now reads the same ladder the fee engine does, and says so when no late fee is charged.
 
 ## What I'd Do Differently
 
@@ -84,11 +85,11 @@ Each of these cost a debugging pass. The lesson from each is written into the re
 
 ## By the Numbers
 
-- **Built in 54 calendar days** (2026-07-30 to 2026-09-21): 844 commits, 338 shipped backlog items, and one `docs/PROGRESS.md` entry per item recording what it built, what it decided and what it left behind.
-- **4,685 unit and database tests** (4,677 passed and 8 skipped on 2026-09-21) across 287 test files. **1,614 end-to-end tests** across 25 Playwright spec files, run at phone and desktop widths against a production build.
-- About 141,000 lines of application TypeScript and 86,000 lines of tests.
-- 97 data models, 124 migrations, and 150 recorded product decisions.
-- Nine review rounds by operator, UX and accessibility agents. The last round's findings became backlog items B-329 to B-346, and 31 findings were declined, each with its reason on record.
+- **Built in 56 calendar days** (2026-07-30 to 2026-09-23): 950 commits, 390 backlog rows marked done, and one `docs/PROGRESS.md` entry per item recording what it built, what it decided and what it left behind.
+- **4,729 unit and database tests** (4,721 passed and 8 skipped on 2026-09-23) across 291 test files. **1,698 end-to-end tests** across 27 Playwright spec files, run at phone and desktop widths against a production build.
+- About 143,000 lines of application TypeScript and 88,000 lines of tests.
+- 97 data models, 123 migrations, and 151 recorded product decisions.
+- Eleven review rounds by operator, UX and accessibility agents. Round nine's findings became backlog items B-329 to B-346 and 31 were declined; round eleven's became B-371 to B-382. Every refusal is on record with its reason.
 - **What is not real:** the facilities and tenants are seeded, cards run in Stripe test mode, the gate is simulated, and SMS was never switched on because carrier registration was never approved.
 
 ---

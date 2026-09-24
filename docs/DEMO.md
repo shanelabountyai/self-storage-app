@@ -3,7 +3,7 @@
 A 20–25 minute walkthrough of the platform: a renter moves in online, a tenant
 who is behind pays, and the operator's side shows what the system did about
 each. It runs **locally**, against the seeded demo data. Every command and
-every stop below was run on 2026-09-21 against a production build.
+every stop below was run on 2026-09-23 against a production build, after the visual redesign.
 
 The deployed site (`storage.labintelligence.co`) is behind a shared password
 and seeded **without** the demo logins, so it is not the demo path. See
@@ -84,7 +84,10 @@ can be signed in at the same time.
 > facilities with real prices and real availability, not 'call for rates'."
 
 **Click** *Demo — Austin South*. Point at office hours versus gate hours, the
-size filter, and the **online rate below the in-store rate**.
+"Narrow these down" filter, and the **online rate below the in-store rate**. (On the
+search page, the same size and feature filters live in a *Filters* disclosure and apply
+when you press *Apply filters*. Each facility card there shows an Open/Closed badge with
+today's office hours.)
 
 > "Every unit is month to month. The online price is the one you pay if you
 > rent here; the counter quotes the in-store price. That split is a real
@@ -92,11 +95,11 @@ size filter, and the **online rate below the in-store rate**.
 
 ### 2. Move in online, no phone call (5 min)
 
-**Click** *Rent now* on the 5×5 Locker. Walk the six steps:
+**Click** *Rent now* on the 5×5 Locker. Walk the six steps (a numbered stepper across the top):
 
 1. **Your details.** No password field. Enter any name, a new email ending
    `@demo.example.com`, and zip 78704. City and state fill in from the zip.
-2. **Your unit.** Point out *"We are holding this unit for you while you
+2. **Your unit.** Press *This is right — continue*. Point out *"We are holding this unit for you while you
    finish"*. The unit is locked so two people cannot buy the same one.
 3. **Protection.** Choose **$2,000 cover**.
    > "Every renter has to have cover, either our plan or their own insurance.
@@ -105,6 +108,9 @@ size filter, and the **online rate below the in-store rate**.
    name, and press *Sign and continue*.
 5. **Payment.** An itemised total: rent, a one-time admin fee, tax, and
    protection. Autopay is on by default and says so. Pay with 4242.
+   With the $2,000 cover the total is $99.93. If the page is still on
+   *Payment* a few seconds after paying, reload it once: the page reloads the
+   moment Stripe confirms, which can beat the webhook by a second.
 6. **Done.** *"You are moved in"*, **a gate code**, and the next payment date.
 
 > "Card details go straight to Stripe and never touch our servers. The move-in
@@ -124,7 +130,12 @@ size filter, and the **online rate below the in-store rate**.
 again"*), then *Statements* (month by month, what was owed and what was paid).
 
 **Click** *Pay $161 now*. Show the itemised breakdown and the line saying the
-gate turns back on. Pay with 4242 and land on the receipt.
+gate turns back on. Pay with 4242 and land on the receipt. If pressing *Pay $161*
+does nothing (Stripe's optional "save my information" box can shift the layout on
+the first click), press Enter in the ZIP field or click again.
+
+**Do this before running the cron below.** The scheduler also raises October's
+invoice, and a Dana who has not paid yet would then owe $334.29, not $161.
 
 **Then** make the "usually within a couple of minutes" happen now. Locally,
 nothing runs the hourly scheduler, so trigger it yourself:
@@ -135,7 +146,10 @@ curl -s -H "Authorization: Bearer $(grep -E '^CRON_SECRET=' .env.local | cut -d=
 ```
 
 The same tick also raises next month's invoices, so Dana's portal then shows
-October's rent as a normal, not-yet-due balance. That is the product working.
+October's rent ($173.29) as a normal balance. That is the product working. Her
+portal's gate-code card says *"isn't ready yet"*, because the seed never stored a
+code for her. To show the gate really came back, open her record in the admin
+(stop 4): *Gate access active … Access restored, balance paid*.
 
 **Optional:** sign in as `business@demo.example.com` to show *Acme Contracting*:
 one payer, two units, one balance, and one payment applied oldest-first across
@@ -191,7 +205,7 @@ kept, because a stranger working through numbers is a pattern worth seeing.
 
 ### 6. Close (1 min)
 
-> "About 340 backlog items over eight weeks, each with its tests, a written
+> "About 390 backlog items over eight weeks, each with its tests, a written
 > record of what it decided, and automated accessibility scans on the
 > customer-facing pages. Texas lien rules by default, configurable per state, and every legal
 > text marked as an unreviewed draft."
@@ -202,7 +216,7 @@ kept, because a stranger working through numbers is a pattern worth seeing.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Checkout stays on **Payment** after *Pay and complete move-in* | `stripe listen` is not running, or its secret differs from `STRIPE_WEBHOOK_SECRET` | Start it (setup step 3). Compare the secret it prints with `.env.local`, then restart the server if you changed it |
+| Checkout stays on **Payment** after *Pay and complete move-in* | Reload once (the move-in completes from the webhook a second after the page reloads). If it still stays: `stripe listen` is not running, or its secret differs from `STRIPE_WEBHOOK_SECRET` | Start it (setup step 3). Compare the secret it prints with `.env.local`, then restart the server if you changed it |
 | Staff sign-in refused with the right password | The TOTP code was already used in this 30-second window, or it expired | Wait for the next code |
 | Dana's portal still says the gate is off after paying | No scheduler runs locally | Run the `curl … /api/cron` command in stop 3 |
 | Dana owes $0 or the wrong amount before you start | A previous run or an e2e sweep paid her balance | `npm run db:migrate:e2e`, then `rm -rf apps/web/.next/cache/fetch-cache` |
@@ -238,11 +252,10 @@ server's console, and the tenant's communication history still records them.
   *E2E — Ledger corrections* and *Demo — E2E Sandbox*, which appear in the
   facility switcher and on the Austin city page. They cannot be deleted
   because the audit log is append-only by design.
-- **One known defect surfaced while writing this script.** The lease summary
-  quotes the late fee from the facility's fee schedule ($20 at Austin South),
-  while late fees are actually charged from the late-fee ladder, which the
-  demo facilities do not have. A renter here signs a lease naming a fee that
-  is never charged.
+- **One known defect.** After paying at checkout, the page reloads the moment
+  Stripe confirms and can still show *Payment* until you reload it again, because
+  the move-in completes from the webhook a second later. The unit and gate code
+  are correct once it does. It has no backlog row yet.
 
 ---
 
