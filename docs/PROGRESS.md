@@ -11773,7 +11773,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-387 — Public facility card and header (2026-09-23)
 
-**Commit:** `SHA_PENDING`.
+**Commit:** `9218f61`.
 
 **What it built.** `FacilityCard` (home, locations, city and size pages) now shows an Open now / Closed now `Badge` with today's office hours, up to three amenities, and a "View units" outline button. `HomeFacility` gained `officeHours`, `timezone` and `amenities`; `officeToday()` reads the schedule off the facility's own clock and has a unit test. The header gained Locations and Sizes links beside Guides, via a small client `NavLink` that sets `aria-current="page"` on its own route and below it. Size guide is in the footer Help column. `/storage/search` has a Home / Find storage breadcrumb `nav`.
 
