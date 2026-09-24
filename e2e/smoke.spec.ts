@@ -825,6 +825,22 @@ test('a size-filtered search prices each card by that size, not the facility’s
   await expect(first).toContainText(price)
 })
 
+// B-388. The rail sets and clears what the URL carries. Server-rendered GET
+// form: no live region on purpose (a submit is a navigation).
+test('the search filter rail sets, keeps and clears size and features', async ({ page }) => {
+  await page.goto('/storage/search?q=78704')
+  await page.getByText('Filters', { exact: true }).click()
+  await page.getByLabel('Medium (5×10 to 10×10)').check()
+  await page.getByLabel('Climate controlled').check()
+  await page.getByRole('button', { name: 'Apply filters' }).click()
+  await expect(page).toHaveURL(/q=78704/)
+  await expect(page).toHaveURL(/size=medium/)
+  await expect(page).toHaveURL(/features=climate/)
+  await expect(page.getByLabel('Medium (5×10 to 10×10)')).toBeChecked()
+  await page.getByRole('link', { name: 'Clear all' }).click()
+  await expect(page).toHaveURL(/\/storage\/search\?q=78704$/)
+})
+
 test('every size-guide card links to a search carrying its band, and the footer lists locations', async ({
   page,
 }) => {

@@ -11782,3 +11782,16 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** UnitCard "N left" and features: not touched, no derivable count on the card that is not already there (`card.onlyLeft*` exists on the facility page). No strikethrough price, since no promotion data exists. Breadcrumbs only on search; other pages are unchanged.
 
 **Verification.** typecheck, lint, `home-facts` unit test clean. e2e (a11y, a11y-own-spec-routes, smoke, i18n) 595 passed + 4 skipped + 1 failed = 600; the one failure was `/admin/pos/done` on mobile-chrome, staff-only and untouched here, which passed alone (4 passed) on rerun. Accessibility statement re-read: it makes no claim about the header links, breadcrumbs or cards, so nothing went stale.
+
+## B-388 — Search filter rail (2026-09-23)
+
+**Commit:** `SHA_PENDING`.
+
+**What it built.** `SearchFilterRail` on `/storage/search`: size radios (Any / small / medium / large), feature checkboxes, Apply and Clear all, as a plain GET form that carries `q`/`lat`/`lng` in hidden fields. A `<details>` at every width, open while a filter is set. EN and ES strings.
+
+**What it decided.** D-149: no `role="status"` count (a submit is a navigation; the a11y spec requires empty status regions on load); apply-on-submit rather than live; budget, promos, radius and List/Map declined for want of data or policy. Filters are still only carried and used to price by size band, not to rank or hide facilities.
+
+**What it left behind.** Nothing owned by another row. The existing `?size=medium&q=78704` scan route now renders the rail open, so 320px, 200% zoom, text spacing and axe cover it.
+
+**Verification.** lint, typecheck, i18n and scan-coverage unit tests clean. e2e smoke + a11y filtered to search: 44 passed on both projects. Accessibility statement re-read: no claim about search filters, nothing went stale.
+

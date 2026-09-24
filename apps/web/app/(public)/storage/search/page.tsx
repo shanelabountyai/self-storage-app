@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SearchFilterRail } from '@/components/site/search-filter-rail'
 import { FacilitySearchForm } from '@/components/site/facility-search-form'
 import { SITE } from '@/lib/site-config'
 import { formatMiles, formatRate } from '@/lib/format'
@@ -437,6 +438,8 @@ export default async function SearchPage({
       <div className="mt-6 max-w-3xl">
         <FacilitySearchForm defaultValue={q} labelKey="search.labelZipOrCity" carry={filters} />
       </div>
+
+      <SearchFilterRail dict={dict} query={{ q, lat, lng, size, features }} />
 
       {/* B-082 part 3. A guide's CTA arrives here holding a filter, and this is
           the only place it is visible before a facility page opens with a box

@@ -151,6 +151,12 @@ export const en = {
   'search.carryingBefore': 'Carrying your',
   'search.carryingAfter':
     'filter through — choose a location and we will apply it there.',
+  'search.filtersHeading': 'Filters',
+  'search.filtersSize': 'Unit size',
+  'search.filtersFeatures': 'Features',
+  'search.filtersAnySize': 'Any size',
+  'search.filtersApply': 'Apply filters',
+  'search.filtersClear': 'Clear all',
   'search.sizeGuideBefore': 'Not sure what size you need? Read the',
   'search.sizeGuideLink': 'size guide',
 

@@ -149,6 +149,12 @@ export const es: Dictionary = {
   'search.countOther': '{count} sucursales a menos de {miles} millas, la más cercana primero',
   'search.carryingBefore': 'Conservamos su filtro de',
   'search.carryingAfter': '— elija una sucursal y lo aplicaremos allí.',
+  'search.filtersHeading': 'Filtros',
+  'search.filtersSize': 'Tamaño de la unidad',
+  'search.filtersFeatures': 'Características',
+  'search.filtersAnySize': 'Cualquier tamaño',
+  'search.filtersApply': 'Aplicar filtros',
+  'search.filtersClear': 'Borrar todo',
   'search.sizeGuideBefore': '¿No sabe qué tamaño necesita? Lea la',
   'search.sizeGuideLink': 'guía de tamaños',
 
