@@ -11797,7 +11797,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 ## B-389 — Loading states (2026-09-23)
 
-**Commit:** see follow-up.
+**Commit:** `186b13b`.
 
 **What it built.** `Skeleton`, `Spinner` and `RouteLoading` in `components/ui/loading.tsx` (reduced motion is already global in `globals.css`), plus a unit test that the fallback carries sr-only "Loading" text, hidden skeletons and no live region.
 
