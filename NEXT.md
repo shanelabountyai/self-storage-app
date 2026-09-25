@@ -1,5 +1,7 @@
 # Next
 
+**B-393 is built** (2026-09-25, `a56e828`). **Next item: B-394**, then B-395 to B-410 in `06-backlog.md` order. `/portal`'s balance panel now reads past due / due / autopay will charge from `balanceState` in `lib/portal/dashboard.ts`; `e2e/portal-balance-states.spec.ts` owns its fixture (serial, fixed slug).
+
 **B-392 is built** (2026-09-25). **Next item: B-393**, then B-394 to B-410 in `06-backlog.md` order. B-392's e2e tests (T1/T2) need a Stripe key and were not written; B-410 owns the manual passes.
 
 **B-391 is built** (2026-09-25, `f943854`). **Next item: B-392** (`83azzzzl`): B-390's timeout leaves a live card form after a charge; read payment status from Stripe. Opus (money path). Then the rest of review block 12, B-393 to B-410, in `06-backlog.md` order.
