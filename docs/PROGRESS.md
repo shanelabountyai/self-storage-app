@@ -11853,7 +11853,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **What it left behind.** The e2e checks EN only; the ES strings are covered by the typed dictionary, not by a rendered assertion. Both new states are `layout: 'excepted'` (same lease card the route loop measures). B-410 owns re-checking them in the statement's list. The business-account card (`AccountCard`) already said "oldest due" versus "past due" (B-315) and is untouched.
 
-## B-394: the delinquency screen stops saying nobody owes anything on a quiet day (2026-09-25, `SHA`)
+## B-394: the delinquency screen stops saying nobody owes anything on a quiet day (2026-09-25, `a8067ec`)
 
 **What it built.** `/admin/delinquency`'s metric strip relabels its first two figures "Owed by tenants with a step today" and "Tenants with a step today", and adds "All past due": the facility's `agingForFacility` total, the same row `delinquencyReport` and the dashboard's "Money owed" read. The empty state is "No steps due today." with a link, "{N} tenants owe {$X}", to `/admin/tenants?filter=past_due&facility=…`. `agingForFacility` now also returns `owingTenants`, the distinct tenants whose lease balance is above zero, which is the rule the total sums by. `tests/reports-financial-db.test.ts` checks, on a facility with two owing tenants and no open task, that the direct figure equals the report row, is non-zero, and counts 2. `e2e/admin.spec.ts` checks the demo facility's "All past due" is not $0.00 and, when the queue is empty, that the link carries the filter.
 
