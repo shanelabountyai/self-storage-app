@@ -11837,7 +11837,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **Verification.** 178 unit and DB tests across the four touched suites, then the full unit suite: 4,735 passed, 8 skipped. typecheck and lint clean. No e2e was run; the excluded table is staff-only and not axe-scanned. Nothing customer-facing changed, so the accessibility statement was not re-read.
 
 
-## B-392: a charged renter is never shown a card form again (2026-09-25)
+## B-392: a charged renter is never shown a card form again (2026-09-25, `a1e1374`)
 
 **What it built.** `payment-element.tsx` no longer calls `router.refresh()` 20 times and then reloads. After `confirmPayment` succeeds, the form is replaced by `PaymentConfirming`: a heading that takes focus, a polite status region, and a poll of `checkPaymentAction` (a session lookup, `paymentAdvanced`) every 2s for 30s, then `router.refresh()` once when the step advances. At the timeout it offers "Check again" and the facility phone and says "you do not need to pay again". `preparePayment`'s `settling` also reads the PaymentIntent's status from Stripe (`stripeSaysSettling`, falling back to the local row on a failed read), and `PaymentStep` renders `PaymentConfirming` instead of the Element when settling, so a reload after a charge never mounts a live form and Back is withdrawn. A second Pay that gets `payment_intent_unexpected_state` (`alreadyPaidCode`, in `payment-codes.ts`) shows the confirming state with `pay.alreadyPaid`. If Stripe.js has not loaded after 10s the form becomes the shared `CardsUnavailable` block; pressing Pay before that writes `pay.cardFormLoading` to the status region. Copy in EN and ES.
 
