@@ -474,6 +474,24 @@ describeDb('financial reports', () => {
       }
     })
 
+    it('counts the tenants behind the figure the delinquency queue shows (B-394)', async () => {
+      // The queue's "All past due" and its empty state's "{N} tenants owe {$X}"
+      // read `agingForFacility` directly. This fixture has two leases, two
+      // tenants, both carrying a balance, and no step due today — the quiet
+      // day on which the queue used to say "Past due $0".
+      const [report, direct] = await Promise.all([
+        delinquencyReport(actor()),
+        agingForFacility(facilityId, 'queue'),
+      ])
+      const row = report.rows.find((one) => one.facilityId === facilityId)!
+      expect(direct.aging.totalCents).toBe(row.aging.totalCents)
+      expect(direct.aging.totalCents).toBeGreaterThan(0)
+      expect(direct.owingTenants).toBe(2)
+      expect(
+        await prisma.task.count({ where: { facilityId, status: 'open' } }),
+      ).toBe(0)
+    })
+
     it('shows a role without financial reporting nothing rather than a zero', async () => {
       // A zero is a claim. A manager who cannot see AR must not be told there
       // is none — the dashboard omits the tile instead.

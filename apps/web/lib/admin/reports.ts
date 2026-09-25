@@ -747,17 +747,21 @@ export async function agingForFacility(
   facilityName: string
   aging: ArAging
   split: ArAgingSplit
+  /// B-394. Distinct tenants behind `aging.totalCents` — the "{N} tenants owe"
+  /// beside the figure, counted by the rule the figure sums by (balance > 0).
+  owingTenants: number
 }> {
   const leases = await prisma.lease.findMany({
     where: { facilityId },
     select: {
       id: true,
+      tenantId: true,
       invoices: { select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true } },
     },
   })
   if (leases.length === 0) {
     const empty = arAgingSplit([])
-    return { facilityId, facilityName, aging: empty.total, split: empty }
+    return { facilityId, facilityName, aging: empty.total, split: empty, owingTenants: 0 }
   }
 
   const leaseIds = leases.map((lease) => lease.id)
@@ -782,7 +786,11 @@ export async function agingForFacility(
     })),
   )
 
-  return { facilityId, facilityName, aging: split.total, split }
+  const owingTenants = new Set(
+    leases.filter((lease) => (balanceByLease.get(lease.id) ?? 0) > 0).map((lease) => lease.tenantId),
+  ).size
+
+  return { facilityId, facilityName, aging: split.total, split, owingTenants }
 }
 
 export type FacilityAttachRate = {

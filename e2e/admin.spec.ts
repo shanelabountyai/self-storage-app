@@ -100,6 +100,26 @@ test.describe('signed in as the demo owner', () => {
     await assertNoAxeViolations(page, { state: 'the halted-leases section' })
   })
 
+  // B-394: the strip's first figure is today's queue only, so the facility's
+  // whole receivable sits beside it. Read-only; the demo facility always has
+  // past-due tenants, so a $0.00 here is the bug, not a quiet day.
+  test('the delinquency queue shows the facility-wide past-due total (B-394)', async ({ page }) => {
+    await page.goto('/admin/delinquency')
+    const allPastDue = page
+      .locator('dt', { hasText: /^All past due$/ })
+      .locator('xpath=following-sibling::dd')
+    await expect(allPastDue).toHaveText(/^\$\d/)
+    await expect(allPastDue).not.toHaveText('$0.00')
+
+    const quiet = page.getByText('No steps due today.')
+    if ((await quiet.count()) > 0) {
+      await expect(page.getByRole('link', { name: /tenants? owes? \$/ })).toHaveAttribute(
+        'href',
+        /\/admin\/tenants\?filter=past_due&facility=/,
+      )
+    }
+  })
+
   // 1.4.10 Reflow, which PRD 02 FR-16 applies to admin as well as the customer
   // site. B-094 fixed the shell — a fixed 192px side nav beside the content, a
   // header that could not wrap, an unbreakable JSON example, and two unwrapped

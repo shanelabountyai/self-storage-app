@@ -3,7 +3,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
-import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
+import { can, hasPermissionAnywhere } from '@/lib/rbac/authorize'
+import { agingForFacility } from '@/lib/admin/reports'
 import { delinquencyQueue } from '@/lib/admin/delinquency-queue'
 import { haltedLeases } from '@/lib/admin/plans-holds-report'
 import { moneyOwedRollup } from '@/lib/admin/rollups'
@@ -66,9 +67,16 @@ export default async function DelinquencyQueuePage({
     )
   }
 
-  const [groups, halted] = await Promise.all([
+  // B-394: the strip below sums only leases with a step due today, so on a
+  // quiet day it read "Past due $0" beside a dashboard "Money owed" in the
+  // thousands. The facility's whole receivable comes from `agingForFacility`,
+  // the row `delinquencyReport` and the dashboard tile read (D-25), and behind
+  // the same key they are (`reports:financial`) — absent, not zero, without it.
+  const canSeeAr = can(actor, 'reports:financial', selected.facility.id)
+  const [groups, halted, ar] = await Promise.all([
     delinquencyQueue(actor, selected.facility.id),
     haltedLeases([selected.facility.id]),
+    canSeeAr ? agingForFacility(selected.facility.id, selected.facility.name) : null,
   ])
   // Metric strip: one figure per lease, however many steps it has due.
   const byLease = new Map(groups.flatMap((g) => g.tasks).map((t) => [t.entityId, t.balanceCents]))
@@ -87,11 +95,12 @@ export default async function DelinquencyQueuePage({
         </p>
       </div>
 
-      <dl className="grid grid-cols-3 gap-3">
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          ['Past due', formatCents(pastDueCents)],
-          ['Tenants', String(byLease.size)],
+          ['Owed by tenants with a step today', formatCents(pastDueCents)],
+          ['Tenants with a step today', String(byLease.size)],
           ['Lock-out eligible', String(lockOutEligible)],
+          ...(ar ? [['All past due', formatCents(ar.aging.totalCents)]] : []),
         ].map(([label, value]) => (
           <Card key={label} className="p-3">
             <dt className="text-muted-foreground text-xs font-semibold uppercase">{label}</dt>
@@ -120,7 +129,21 @@ export default async function DelinquencyQueuePage({
           that would otherwise have carried the message and the focus. */}
       <AnnounceRegion>
       {groups.length === 0 ? (
-        <EmptyState>Nothing due right now.</EmptyState>
+        <EmptyState
+          action={
+            ar && ar.owingTenants > 0 ? (
+              <Link
+                href={`/admin/tenants?filter=past_due&facility=${selected.facility.id}`}
+                className="underline underline-offset-2"
+              >
+                {ar.owingTenants} {ar.owingTenants === 1 ? 'tenant owes' : 'tenants owe'}{' '}
+                {formatCents(ar.aging.totalCents)}
+              </Link>
+            ) : undefined
+          }
+        >
+          No steps due today.
+        </EmptyState>
       ) : (
         groups.map((group) => (
           <section key={group.type} aria-labelledby={`group-${group.type}`} className="flex flex-col gap-3">
