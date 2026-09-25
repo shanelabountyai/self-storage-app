@@ -11824,3 +11824,14 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it decided.** No new status endpoint: the page's own server render is the status read. FR-4.4 is unchanged, since finalising still happens only from the webhook.
 
 **What it left behind.** The backlog's delayed-webhook test was not written: no e2e drives real card entry in the Stripe iframe, so it needs a provider key (the D-63 position). Verified by typecheck only; the DEMO.md workaround note about a second reload is now stale and should be re-walked with a real test card. `portal-payment.tsx` untouched, as the row said.
+
+
+## B-391: the ECRI batch no longer raises tenants who must not be raised (2026-09-25, `f943854`)
+
+**What it built.** `ecriExclusion` in `packages/core/pricing/rate-increase.ts`, one pure predicate returning one reason per lease: `in_lien_process` (`pending_auction`), `delinquent`, `not_moved_in` (`pending`), `under_hold` (any in-force `LeaseHold`, so payment plans, SCRA, bankruptcy and the rest in one test), `move_out_notice` (`noticeGivenAt`), `promotion_running` (unbilled discounted periods, or the promotion's `minStayMonths` not yet elapsed). `ecriExclusionsFor` in `tenant-rate-increases.ts` is its only database read. The batch preview and schedule, the one-off schedule (refused with the reason in the message), notice send and the nightly apply all call it. An increase that becomes ineligible after scheduling is cancelled at notice send or apply with a system-actor `rate.increase_cancelled` audit row carrying the reason, and one normal-priority `rate_increase_cancelled_ineligible` task naming tenant, unit, increase and reason. `/admin/rate-increases` shows "Met the rule but will not be raised" under the eligible table: a per-reason count line and a captioned table with `<th scope>` columns.
+
+**What it decided.** Decreases never go through the predicate (lowering rent is not the letter this stops). Only leases that would otherwise have been listed appear as excluded, so the counts answer "why isn't this tenant on it". The reason code is the audit `reasonCode`; the label is the operator sentence. `approveRateIncrease` is not checked: the notice and apply steps are where the letter and the money happen.
+
+**What it left behind.** Nothing owned. A promotion counts as running while any scheduled period is unbilled, which assumes billing appends every applied period index.
+
+**Verification.** 178 unit and DB tests across the four touched suites, then the full unit suite: 4,735 passed, 8 skipped. typecheck and lint clean. No e2e was run; the excluded table is staff-only and not axe-scanned. Nothing customer-facing changed, so the accessibility statement was not re-read.
