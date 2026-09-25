@@ -1,8 +1,8 @@
 import { prisma } from '@storage/db'
 import { calculateMoveInCost } from '@storage/core/pricing'
 import { createChargeIntent } from '@/lib/payments/intents'
-import { paymentsEnabled } from '@/lib/payments/stripe'
-import { promoDiscountOn, type CheckoutSessionView } from '@/lib/checkout/session'
+import { paymentsEnabled, stripeClient } from '@/lib/payments/stripe'
+import { promoDiscountOn, sessionByToken, type CheckoutSessionView } from '@/lib/checkout/session'
 import { offerTermsText } from '@/lib/promotions/terms'
 import { dictionaryFor } from '@/lib/i18n'
 
@@ -113,6 +113,10 @@ export type PaymentSetup =
       /// whose card has just cleared is looking at the screen before that. A
       /// bank debit counts too: B-103's ACH sits in `processing` for days, and
       /// "nothing has been charged yet" is false the moment it is initiated.
+      ///
+      /// B-392: also true when STRIPE says the intent has left `requires_*`,
+      /// because the local row is written by the webhook and a lost webhook
+      /// leaves it `pending` while the card has in fact been charged.
       settling: boolean
     }
 
@@ -156,8 +160,30 @@ export async function preparePayment(session: CheckoutSessionView): Promise<Paym
     clientSecret: intent.clientSecret,
     paymentId: intent.paymentId,
     totalDueTodayCents: due.totalDueTodayCents,
-    settling: row?.status === 'succeeded' || row?.status === 'processing',
+    settling:
+      row?.status === 'succeeded' ||
+      row?.status === 'processing' ||
+      (await stripeSaysSettling(intent.paymentIntentId)),
   }
+}
+
+/// B-392. The intent's own status, read from Stripe. A failed read is `false`,
+/// not a throw: the local row is the fallback and a render must not 500 over it.
+async function stripeSaysSettling(paymentIntentId: string): Promise<boolean> {
+  try {
+    const intent = await stripeClient()?.paymentIntents.retrieve(paymentIntentId)
+    return intent?.status === 'succeeded' || intent?.status === 'processing'
+  } catch {
+    return false
+  }
+}
+
+/// B-392. What the confirming state polls. A session read and nothing else: no
+/// `preparePayment`, so no `Payment` row and no Stripe create call per poll.
+/// True once the webhook has moved the session off the payment step.
+export async function paymentAdvanced(token: string): Promise<boolean> {
+  const session = await sessionByToken(token)
+  return !session || session.step !== 'payment'
 }
 
 async function tenantIdFor(session: CheckoutSessionView): Promise<string | null> {

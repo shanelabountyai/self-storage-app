@@ -779,6 +779,13 @@ export const es: Dictionary = {
   'pay.declined': 'Ese pago fue rechazado. Pruebe con otra forma de pago.',
   'pay.takingPaymentStatus': 'Procesando el pago. Puede tardar unos segundos.',
   'pay.takingPayment': 'Procesando el pago…',
+  'pay.confirmingHeading': 'Confirmando su pago',
+  'pay.confirmingStatus': 'Estamos confirmando su pago. Suele tardar unos segundos. No necesita pagar de nuevo.',
+  'pay.confirmingSlow': 'Está tardando más de lo normal. Su pago fue enviado y no necesita pagar de nuevo.',
+  'pay.confirmingCall': 'Si no termina, llame al',
+  'pay.checkAgain': 'Comprobar de nuevo',
+  'pay.alreadyPaid': 'Este pago ya fue enviado. No necesita pagar de nuevo.',
+  'pay.cardFormLoading': 'El formulario de la tarjeta aún se está cargando. Espere un momento y vuelva a pulsar el botón.',
   'pay.payAndComplete': 'Pagar y terminar la mudanza',
 
   // --- Portal chrome (US-701, B-239) ------------------------------------

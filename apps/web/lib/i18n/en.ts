@@ -873,6 +873,13 @@ export const en = {
   'pay.declined': 'That payment was declined. Try another payment method.',
   'pay.takingPaymentStatus': 'Taking payment. This can take a few seconds.',
   'pay.takingPayment': 'Taking payment…',
+  'pay.confirmingHeading': 'Confirming your payment',
+  'pay.confirmingStatus': 'We are confirming your payment. This usually takes a few seconds. You do not need to pay again.',
+  'pay.confirmingSlow': 'This is taking longer than usual. Your payment was submitted and you do not need to pay again.',
+  'pay.confirmingCall': 'If this does not finish, call',
+  'pay.checkAgain': 'Check again',
+  'pay.alreadyPaid': 'This payment has already been submitted. You do not need to pay again.',
+  'pay.cardFormLoading': 'The card form is still loading. Wait a moment, then press the button again.',
   'pay.payAndComplete': 'Pay and complete move-in',
 
   // --- Portal chrome (US-701, B-239) ------------------------------------

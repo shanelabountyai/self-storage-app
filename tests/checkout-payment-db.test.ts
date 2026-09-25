@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { amountDueToday, preparePayment } from '../apps/web/lib/checkout/payment'
-import type { CheckoutSessionView } from '../apps/web/lib/checkout/session'
+import { amountDueToday, paymentAdvanced, preparePayment } from '../apps/web/lib/checkout/payment'
+import { startCheckout, type CheckoutSessionView } from '../apps/web/lib/checkout/session'
 import { calculateMoveInCost } from '../packages/core/pricing'
 
 // B-025 / PRD 01 US-501 step 5, FR-4.4.
@@ -86,6 +86,9 @@ describeDb('amount due today', () => {
     if (!hasDatabase) return
     await prisma.taxComponent.deleteMany({ where: { facilityId } })
     await prisma.feeSchedule.deleteMany({ where: { facilityId } })
+    await prisma.checkoutSession.deleteMany({ where: { facilityId } })
+    await prisma.unit.deleteMany({ where: { facilityId } })
+    await prisma.domainEvent.deleteMany({ where: { facilityId } })
     await prisma.unitType.deleteMany({ where: { facilityId } })
     await prisma.facility.deleteMany({ where: { id: facilityId } })
     await prisma.$disconnect()
@@ -183,6 +186,23 @@ describeDb('amount due today', () => {
         due.lines.find((line) => line.key === 'admin')?.amountCents ?? 0
       expect(feeOf(two)).toBe(feeOf(one))
     })
+  })
+
+  // B-392. The confirming state polls this; it must be a read and nothing more.
+  it('polls without writing a Payment row or asking Stripe for an intent', async () => {
+    await prisma.unit.create({
+      data: { facilityId, unitTypeId, number: `P-${suffix}`, status: 'available' },
+    })
+    const started = await startCheckout({ facilityId, unitTypeId, quotedRateCents: 12_900 })
+    if (!started.ok) throw new Error('expected a session')
+    await prisma.checkoutSession.update({
+      where: { id: started.sessionId },
+      data: { step: 'payment' },
+    })
+    const before = await prisma.payment.count({ where: { facilityId } })
+    for (let i = 0; i < 5; i++) expect(await paymentAdvanced(started.token)).toBe(false)
+    expect(await prisma.payment.count({ where: { facilityId } })).toBe(before)
+    expect(await paymentAdvanced('no-such-token')).toBe(true)
   })
 
 })

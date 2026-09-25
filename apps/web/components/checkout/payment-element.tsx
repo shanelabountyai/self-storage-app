@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { useLocale, useT } from '@/components/i18n/locale-provider'
+import { PaymentConfirming } from './payment-confirming'
+import { alreadyPaidCode } from '@/lib/checkout/payment-codes'
+import { CardsUnavailable } from './cards-unavailable'
 
 // PRD 01 US-501 step 5 / §4.6. The Stripe Payment Element.
 //
@@ -33,13 +35,21 @@ const appearance = {
   },
 } as const
 
-function PaymentForm({ returnUrl }: { returnUrl: string }) {
+/// B-392. How long the card form waits for Stripe.js before saying it cannot
+/// take a card, rather than showing a button that silently does nothing.
+const STRIPE_LOAD_MS = 10_000
+
+function PaymentForm({ returnUrl, token }: { returnUrl: string; token: string }) {
   const t = useT()
-  const router = useRouter()
   const stripe = useStripe()
   const elements = useElements()
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // B-392. Set once the intent is known to be paid or paying; the form is
+  // replaced for good, never re-shown.
+  const [confirming, setConfirming] = useState<string | false>(false)
+  const [loadStuck, setLoadStuck] = useState(false)
+  const [loadingNotice, setLoadingNotice] = useState('')
   const errorRef = useRef<HTMLParagraphElement>(null)
   // The guard that replaces `disabled` (see the button). A ref rather than the
   // state above because this one is about not charging a card twice, and a ref
@@ -53,10 +63,19 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
     if (error) errorRef.current?.focus()
   }, [error])
 
+  useEffect(() => {
+    if (stripe) return
+    const id = setTimeout(() => setLoadStuck(true), STRIPE_LOAD_MS)
+    return () => clearTimeout(id)
+  }, [stripe])
+
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     if (inFlight.current) return
-    if (!stripe || !elements) return
+    if (!stripe || !elements) {
+      setLoadingNotice(t('pay.cardFormLoading'))
+      return
+    }
 
     inFlight.current = true
     setSubmitting(true)
@@ -69,6 +88,12 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
       redirect: 'if_required',
     })
 
+    if (result.error && alreadyPaidCode(result.error.code)) {
+      // B-392: a second Pay against a paid intent. Stripe's message is a raw
+      // state error; the truth is "already submitted".
+      setConfirming(t('pay.alreadyPaid'))
+      return
+    }
     if (result.error) {
       // B-103: no longer necessarily a card. Stripe's own message is used
       // when there is one; the fallback stopped naming the method.
@@ -79,16 +104,14 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
       setSubmitting(false)
       return
     }
-    // B-390: success is confirmed by the webhook, which can land after this
-    // returns. Stay in the "taking payment" state and re-ask the server until
-    // it advances the step (this form then unmounts); reload once as a last
-    // resort so a lost webhook still shows the server's truth.
-    for (let i = 0; i < 20; i++) {
-      router.refresh()
-      await new Promise((r) => setTimeout(r, 1000))
-    }
-    window.location.reload()
+    // B-390/B-392: success is confirmed by the webhook, which can land after
+    // this returns. The form is replaced by the confirming state, which polls a
+    // status read; it never reloads onto a live card form.
+    setConfirming(t('pay.confirmingStatus'))
   }
+
+  if (confirming) return <PaymentConfirming token={token} lead={confirming} />
+  if (loadStuck && !stripe) return <CardsUnavailable t={t} />
 
   return (
     <form onSubmit={submit} className="mt-4">
@@ -110,7 +133,7 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
           re-read. Confirming a card can take several seconds, and silence for
           several seconds after paying reads as "it didn't work". */}
       <p role="status" className="text-muted-foreground mt-2 text-sm empty:mt-0">
-        {submitting ? t('pay.takingPaymentStatus') : ''}
+        {submitting ? t('pay.takingPaymentStatus') : loadingNotice}
       </p>
 
       <PaymentElement options={{ layout: 'tabs' }} />
@@ -149,9 +172,11 @@ function PaymentForm({ returnUrl }: { returnUrl: string }) {
 export function StripePayment({
   clientSecret,
   returnUrl,
+  token,
 }: {
   clientSecret: string
   returnUrl: string
+  token: string
 }) {
   // B-090 part 6. Stripe's Element renders its own field labels and decline
   // messages inside a cross-origin iframe we cannot reach, so the ONLY way it
@@ -162,7 +187,7 @@ export function StripePayment({
   if (!stripePromise) return null
   return (
     <Elements stripe={stripePromise} options={{ clientSecret, appearance, locale }}>
-      <PaymentForm returnUrl={returnUrl} />
+      <PaymentForm returnUrl={returnUrl} token={token} />
     </Elements>
   )
 }

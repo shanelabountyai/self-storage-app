@@ -22,6 +22,7 @@ import {
   emailOptionalFor,
 } from '@/lib/checkout/details'
 import { prisma } from '@storage/db'
+import { paymentAdvanced } from '@/lib/checkout/payment'
 import { formatRate } from '@/lib/format'
 import { labelForStep } from '@/components/checkout/stepper'
 import { isLocale, translateSegments, type Locale, type MessageKey } from '@/lib/i18n'
@@ -885,4 +886,10 @@ export async function relockAtSizeAction(
     status: 'success',
     message: t('act.sizeMoved', { note: result.changeNote }),
   }
+}
+
+/// B-392. The confirming state's poll: has the webhook advanced the session?
+/// Read-only; the client refreshes the page itself when this says yes.
+export async function checkPaymentAction(token: string): Promise<boolean> {
+  return paymentAdvanced(token)
 }

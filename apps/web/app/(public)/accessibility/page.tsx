@@ -2929,6 +2929,16 @@ function reviewedOn(locale: Locale): string {
 // English by D-123, and under `<html lang="es">` they now sit in an element
 // with `lang="en"` (SC 3.1.2), via `EnglishBody`. English pages carry no
 // attribute. `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-25, at B-392. The checkout payment step now swaps the card
+// form for a confirming section once the intent is paid or paying (heading
+// takes focus, polite status region, "Check again" and the phone after ~30s),
+// and says so in the status region when Stripe.js has not loaded. The
+// statement makes no claim about that state, and it is NOT axe-scanned: it only
+// renders with a Stripe key (D-63), so it is neither a `STATE_REACH` entry nor
+// a claim here. `a11y.true.errors` is about rejected typed input and is
+// unchanged. B-390's "no reload onto a live card form" was not a statement
+// claim either. `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

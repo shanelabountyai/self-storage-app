@@ -109,8 +109,9 @@ today's office hours.)
 5. **Payment.** An itemised total: rent, a one-time admin fee, tax, and
    protection. Autopay is on by default and says so. Pay with 4242.
    With the $2,000 cover the total is $99.93. If the page is still on
-   *Payment* a few seconds after paying, reload it once: the page reloads the
-   moment Stripe confirms, which can beat the webhook by a second.
+   *Payment* a few seconds after paying, it shows *Confirming your payment*
+   while it waits for the webhook, then moves on by itself. If the webhook
+   never lands it offers *Check again* and the phone number.
 6. **Done.** *"You are moved in"*, **a gate code**, and the next payment date.
 
 > "Card details go straight to Stripe and never touch our servers. The move-in
@@ -216,7 +217,7 @@ kept, because a stranger working through numbers is a pattern worth seeing.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Checkout stays on **Payment** after *Pay and complete move-in* | Reload once (the move-in completes from the webhook a second after the page reloads). If it still stays: `stripe listen` is not running, or its secret differs from `STRIPE_WEBHOOK_SECRET` | Start it (setup step 3). Compare the secret it prints with `.env.local`, then restart the server if you changed it |
+| Checkout stays on **Payment** after *Pay and complete move-in* | It shows *Confirming your payment* and moves on by itself; press *Check again* if it stalls. If it never moves: `stripe listen` is not running, or its secret differs from `STRIPE_WEBHOOK_SECRET` | Start it (setup step 3). Compare the secret it prints with `.env.local`, then restart the server if you changed it |
 | Staff sign-in refused with the right password | The TOTP code was already used in this 30-second window, or it expired | Wait for the next code |
 | Dana's portal still says the gate is off after paying | No scheduler runs locally | Run the `curl … /api/cron` command in stop 3 |
 | Dana owes $0 or the wrong amount before you start | A previous run or an e2e sweep paid her balance | `npm run db:migrate:e2e`, then `rm -rf apps/web/.next/cache/fetch-cache` |
@@ -252,10 +253,7 @@ server's console, and the tenant's communication history still records them.
   *E2E — Ledger corrections* and *Demo — E2E Sandbox*, which appear in the
   facility switcher and on the Austin city page. They cannot be deleted
   because the audit log is append-only by design.
-- **One known defect.** After paying at checkout, the page reloads the moment
-  Stripe confirms and can still show *Payment* until you reload it again, because
-  the move-in completes from the webhook a second later. The unit and gate code
-  are correct once it does. It has no backlog row yet.
+- **Delayed webhook.** Checkout shows *Confirming your payment* until the webhook advances it; with `stripe listen` stopped it stalls on *Check again* and the phone, by design (finalising is webhook-only, FR-4.4). B-392 was verified by typecheck and unit tests only; walk it once with a real test card.
 
 ---
 

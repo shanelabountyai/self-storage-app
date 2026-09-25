@@ -1,9 +1,10 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import { StripePayment } from './payment-element'
+import { PaymentConfirming } from './payment-confirming'
+import { CardsUnavailable } from './cards-unavailable'
 import { setAutopayAction } from '@/app/(public)/checkout/actions'
 import { takeCounterMoveInAction } from '@/app/(public)/checkout/counter-actions'
 import { formatRate } from '@/lib/format'
-import { SITE } from '@/lib/site-config'
 import type { AmountDue, PaymentSetup } from '@/lib/checkout/payment'
 import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 import { MessageSegments } from '@/components/message-segments'
@@ -214,21 +215,13 @@ export function PaymentStep({
         <h2 id="pay-heading" className="font-medium">
           {t('pay.cardDetails')}
         </h2>
-        {payment.available ? (
-          <StripePayment clientSecret={payment.clientSecret} returnUrl={returnUrl} />
+        {!payment.available ? (
+          <CardsUnavailable t={t} />
+        ) : payment.settling ? (
+          // B-392: the intent is already paid or paying. Never a live form.
+          <PaymentConfirming token={token} />
         ) : (
-          // The honest failure. A form that cannot submit is worse than a
-          // sentence that ends in a rented unit.
-          <p className="border-input mt-3 rounded-lg border p-4 text-pretty">
-            {t('pay.cardsUnavailable')}{' '}
-            <a
-              href={`tel:${SITE.phone.href}`}
-              className="font-medium underline underline-offset-4"
-            >
-              {t('facility.callPhone', { phone: SITE.phone.display })}
-            </a>{' '}
-            {t('pay.cardsUnavailableAfter')}
-          </p>
+          <StripePayment clientSecret={payment.clientSecret} returnUrl={returnUrl} token={token} />
         )}
       </section>
     </div>
