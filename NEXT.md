@@ -1,3 +1,9 @@
+# Next
+
+**B-391 is built** (2026-09-25, `f943854`). **Next item: B-392** (`83azzzzl`): B-390's timeout leaves a live card form after a charge; read payment status from Stripe. Opus (money path). Then the rest of review block 12, B-393 to B-410, in `06-backlog.md` order.
+
+**Review block 12 is written and committed** (2026-09-25, `6ddc468`): B-391 to B-410 at `83azzzzk`–`83azzzzzd`. Owner calls closed as D-152. **Next item: B-391** (ECRI batch skips delinquent, lien, held and not-yet-moved-in leases, P0), then B-392 (B-390's timeout leaves a live card form after a charge; read payment status from Stripe). Opus for both (money paths).
+
 **Closure refresh done** (2026-09-23): DEMO, WRITEUP and the brief re-walked and republished (PROGRESS, last entry). LinkedIn draft 27 in the Ledger now says "eleven times" and "in one round alone" (Version 33). Unowned defect: checkout can sit on *Payment* after a card payment until reloaded (`payment-element.tsx` reloads before the webhook lands); is now B-390 (`83azzzzj`).
 
 **Design-audit owner calls closed** (2026-09-23, D-151, `3118f0d`): links, header CTA, fee copy and the kit screens all stay as the code has them; no rows. Nothing queued, and the only open backlog rows are the blocked list. Next: new review block, or stop.
