@@ -8,12 +8,12 @@ import { can, hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { rateIncreaseApprovalRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { formatCents } from '@/lib/format'
-import { earliestEffectiveDate } from '@storage/core/pricing'
+import { earliestEffectiveDate, ECRI_EXCLUSIONS, ECRI_EXCLUSION_LABELS } from '@storage/core/pricing'
 import {
   activeLeaseOptions,
   ecriPolicyFor,
   pendingRateIncreases,
-  previewEligibleIncreases,
+  previewEligibleBatch,
   type LeaseOption,
 } from '@/lib/pricing/tenant-rate-increases'
 import { prisma } from '@storage/db'
@@ -138,9 +138,11 @@ export default async function RateIncreasesPage({
   // each of them reading it separately: the table below states the rule it
   // was computed under, and the two must be the same read.
   const policy = await ecriPolicyFor(facilityId)
-  const [review, eligible, facility, leases] = await Promise.all([
+  const [review, preview, facility, leases] = await Promise.all([
     pendingRateIncreases(actor, facilityId),
-    canRaise ? previewEligibleIncreases(actor, facilityId, policy) : Promise.resolve([]),
+    canRaise
+      ? previewEligibleBatch(actor, facilityId, policy)
+      : Promise.resolve({ rows: [], excluded: [] }),
     prisma.facility.findUniqueOrThrow({
       where: { id: facilityId },
       select: { rateIncreaseNoticeDays: true },
@@ -148,6 +150,8 @@ export default async function RateIncreasesPage({
     // B-177. Replaces the free-text "Lease ID" both money forms used to take.
     canRaise || canLower ? activeLeaseOptions(actor, facilityId) : Promise.resolve([]),
   ])
+
+  const { rows: eligible, excluded } = preview
 
   // A prefill only counts if it names a lease that is actually in the list —
   // otherwise the rate travelling beside it would render into the form beside
@@ -451,6 +455,41 @@ export default async function RateIncreasesPage({
               </tbody>
             </table>
           </ScrollRegion>
+        )}
+
+        {excluded.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {/* B-391. Met the rule and were left off, with the reason: without
+                this an operator asks why a long-standing tenant is missing. */}
+            <h3 className="text-sm font-medium">Met the rule but will not be raised ({excluded.length})</h3>
+            <p className="text-muted-foreground text-xs">
+              {ECRI_EXCLUSIONS.filter((reason) => excluded.some((row) => row.exclusion === reason))
+                .map((reason) => `${excluded.filter((row) => row.exclusion === reason).length} ${ECRI_EXCLUSION_LABELS[reason]}`)
+                .join('; ')}
+              .
+            </p>
+            <ScrollRegion aria-label="Leases left off the batch">
+              <table className="bg-card w-full min-w-xl border-collapse overflow-hidden rounded-xl border text-sm">
+                <caption className="sr-only">Leases that meet the rule but are excluded from a rate increase, with the reason</caption>
+                <thead>
+                  <tr className="bg-muted/50 border-input border-b text-left text-xs tracking-wide uppercase">
+                    <th scope="col" className="px-3 py-2 font-semibold">Tenant</th>
+                    <th scope="col" className="px-3 py-2 font-semibold">Unit</th>
+                    <th scope="col" className="px-3 py-2 font-semibold">Why not</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {excluded.map((row) => (
+                    <tr key={row.leaseId} className="border-input border-b">
+                      <th scope="row" className="px-3 py-2 text-left font-normal">{row.tenantName}</th>
+                      <td className="px-3 py-2">{row.unitNumber}</td>
+                      <td className="px-3 py-2">{ECRI_EXCLUSION_LABELS[row.exclusion]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollRegion>
+          </div>
         )}
 
         <AdminForm action={scheduleBatchAction} label="Schedule the whole eligible batch" className="flex flex-wrap items-end gap-3">

@@ -3,6 +3,9 @@ import {
   applyIsDue,
   DEFAULT_ECRI_POLICY,
   earliestEffectiveDate,
+  ecriExclusion,
+  ECRI_EXCLUSIONS,
+  type EcriExclusionInput,
   isCancellable,
   isEligibleForIncrease,
   decreaseProblem,
@@ -407,5 +410,41 @@ describe('direction-aware notice and apply', () => {
   it('reads the direction off the figures', () => {
     expect(isRateDecrease(DOWN)).toBe(true)
     expect(isRateDecrease(UP)).toBe(false)
+  })
+})
+
+// B-391. One predicate, one reason per exclusion.
+describe('ecriExclusion', () => {
+  const ELIGIBLE: EcriExclusionInput = {
+    status: 'active',
+    hasActiveHold: false,
+    noticeGivenAt: null,
+    promoPeriodsRemaining: 0,
+    minStayRunning: false,
+  }
+
+  it('lets an ordinary active lease through', () => {
+    expect(ecriExclusion(ELIGIBLE)).toBeNull()
+  })
+
+  it.each([
+    ['pending_auction', { status: 'pending_auction' }],
+    ['delinquent', { status: 'delinquent' }],
+    ['not_moved_in', { status: 'pending' }],
+    ['under_hold', { hasActiveHold: true }],
+    ['move_out_notice', { noticeGivenAt: new Date('2026-09-01') }],
+    ['promotion_running', { promoPeriodsRemaining: 1 }],
+    ['promotion_running', { minStayRunning: true }],
+  ] as const)('excludes for %s', (_name, patch) => {
+    expect(ecriExclusion({ ...ELIGIBLE, ...patch })).toBe(
+      _name === 'pending_auction' ? 'in_lien_process' : _name,
+    )
+  })
+
+  it('reports the worst reason first', () => {
+    expect(
+      ecriExclusion({ ...ELIGIBLE, status: 'pending_auction', hasActiveHold: true, promoPeriodsRemaining: 2 }),
+    ).toBe('in_lien_process')
+    expect(ECRI_EXCLUSIONS[0]).toBe('in_lien_process')
   })
 })

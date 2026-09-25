@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { type Prisma, prisma } from '@storage/db'
+import { type Prisma, prisma, type RateIncreaseStatus } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { emitEvent } from '@storage/core/events'
 import { businessDateFor } from '@storage/core/jobs'
@@ -11,6 +11,8 @@ import {
   DEAD_MESSAGE_STATUSES,
   decreaseProblem,
   earliestEffectiveDate,
+  ecriExclusion,
+  ECRI_EXCLUSION_LABELS,
   isCancellable,
   isEligibleForIncrease,
   LIVE_RATE_INCREASE_STATUSES,
@@ -24,11 +26,13 @@ import {
   utcDay,
   type CandidateLease,
   type DecreaseProblem,
+  type EcriExclusion,
   type EcriPolicy,
   type ScheduleProblem,
 } from '@storage/core/pricing'
 import { formatCents } from '@/lib/format'
 import { createTask } from '@/lib/admin/tasks'
+import { activeHoldsByLease } from '@/lib/admin/holds'
 import { can, checkMonetaryAuthority, nextApproverRole, requirePermission } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
@@ -119,6 +123,98 @@ export async function applyRateChange(
   return { previousRateCents: lease.monthlyRateCents, newRateCents: input.newRateCents }
 }
 
+/// B-391. Which of these leases must not be raised, and why. Leases that may
+/// be raised are absent. The one place the predicate meets the database, so the
+/// preview, both schedule paths, notice send and the nightly apply read the
+/// same facts.
+export async function ecriExclusionsFor(
+  leaseIds: readonly string[],
+  now: Date = new Date(),
+): Promise<Map<string, EcriExclusion>> {
+  const out = new Map<string, EcriExclusion>()
+  if (leaseIds.length === 0) return out
+  const [leases, holds] = await Promise.all([
+    prisma.lease.findMany({
+      where: { id: { in: [...leaseIds] } },
+      select: {
+        id: true,
+        status: true,
+        noticeGivenAt: true,
+        startDate: true,
+        promoRedemption: {
+          select: { schedule: true, appliedPeriods: true, promotion: { select: { minStayMonths: true } } },
+        },
+      },
+    }),
+    activeHoldsByLease(leaseIds, now),
+  ])
+  for (const lease of leases) {
+    const redemption = lease.promoRedemption
+    const scheduled = Array.isArray(redemption?.schedule) ? redemption.schedule.length : 0
+    const reason = ecriExclusion({
+      status: lease.status,
+      hasActiveHold: (holds.get(lease.id)?.length ?? 0) > 0,
+      noticeGivenAt: lease.noticeGivenAt,
+      promoPeriodsRemaining: Math.max(0, scheduled - (redemption?.appliedPeriods.length ?? 0)),
+      minStayRunning:
+        (redemption?.promotion.minStayMonths ?? 0) > 0 &&
+        wholeMonthsBetween(lease.startDate, now) < (redemption?.promotion.minStayMonths ?? 0),
+    })
+    if (reason) out.set(lease.id, reason)
+  }
+  return out
+}
+
+/// B-391. An increase scheduled while its lease was eligible and no longer is:
+/// cancelled through the same status write `cancelRateIncrease` makes, with the
+/// reason on the audit row and one task for staff to read. Decreases never come
+/// here — lowering rent is not the letter this exists to stop.
+async function cancelIneligibleIncrease(
+  row: { id: string; leaseId: string; facilityId: string; status: RateIncreaseStatus; newRateCents: number; effectiveDate: Date },
+  reason: EcriExclusion,
+  stage: 'notice' | 'apply',
+): Promise<void> {
+  const why = ECRI_EXCLUSION_LABELS[reason]
+  const cancelled = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.tenantRateIncrease.updateMany({
+      where: { id: row.id, status: row.status },
+      data: { status: 'cancelled', cancelledAt: new Date() },
+    })
+    if (claimed.count === 0) return false
+    await recordAudit(
+      {
+        actor: { type: 'system', label: 'rate-increase eligibility' },
+        facilityId: row.facilityId,
+        action: 'rate.increase_cancelled',
+        entityType: 'TenantRateIncrease',
+        entityId: row.id,
+        reasonCode: reason,
+        context: {
+          leaseId: row.leaseId,
+          newRateCents: row.newRateCents,
+          effectiveDate: row.effectiveDate.toISOString().slice(0, 10),
+          statusWhenCancelled: row.status,
+          cancelledAt: stage,
+        },
+      },
+      tx,
+    )
+    return true
+  })
+  if (!cancelled) return
+  const lease = await prisma.lease.findUnique({
+    where: { id: row.leaseId },
+    select: { tenant: { select: { firstName: true, lastName: true } }, unit: { select: { number: true } } },
+  })
+  await createTask({
+    facilityId: row.facilityId,
+    type: 'rate_increase_cancelled_ineligible',
+    entityType: 'Lease',
+    entityId: row.leaseId,
+    detail: `${lease?.tenant.firstName} ${lease?.tenant.lastName}, unit ${lease?.unit.number}: the increase to ${formatCents(row.newRateCents)} effective ${row.effectiveDate.toISOString().slice(0, 10)} was cancelled before ${stage === 'notice' ? 'its notice went out' : 'it applied'} because the tenant is ${why}.`,
+  })
+}
+
 export type ScheduleOneOffInput = {
   leaseId: string
   newRateCents: number
@@ -144,6 +240,10 @@ export async function scheduleRateIncrease(
   }
   if (!OCCUPYING_LEASE_STATUSES.includes(lease.status as never)) {
     return { ok: false, reason: 'That lease has ended — there is no rate to raise.' }
+  }
+  const excluded = (await ecriExclusionsFor([lease.id])).get(lease.id)
+  if (excluded) {
+    return { ok: false, reason: `This tenant is ${ECRI_EXCLUSION_LABELS[excluded]}, so their rate is not raised.` }
   }
 
   const facility = await prisma.facility.findUniqueOrThrow({
@@ -447,6 +547,21 @@ export async function previewEligibleIncreases(
   facilityId: string,
   policy?: EcriPolicy,
 ): Promise<BatchPreviewRow[]> {
+  return (await previewEligibleBatch(actor, facilityId, policy)).rows
+}
+
+export type ExcludedPreviewRow = BatchPreviewRow & { exclusion: EcriExclusion }
+
+/// B-391. What the rule would pick, and separately who it met the rule for but
+/// must not raise (past due, in the lien pipeline, under a hold, not moved in,
+/// leaving, or inside a promotion). `excluded` holds only leases that would
+/// otherwise have been listed, so its counts are the ones an operator asks
+/// "why isn't Ada on this?" about.
+export async function previewEligibleBatch(
+  actor: Actor,
+  facilityId: string,
+  policy?: EcriPolicy,
+): Promise<{ rows: BatchPreviewRow[]; excluded: ExcludedPreviewRow[] }> {
   requirePermission(actor, 'rates:tenant_increase', facilityId)
 
   const rule = policy ?? (await ecriPolicyFor(facilityId))
@@ -476,7 +591,7 @@ export async function previewEligibleIncreases(
       },
     },
   })
-  if (leases.length === 0) return []
+  if (leases.length === 0) return { rows: [], excluded: [] }
 
   const rates = await prisma.unitTypeRate.findMany({
     where: { facilityId, effectiveFrom: { lte: new Date() } },
@@ -544,10 +659,17 @@ export async function previewEligibleIncreases(
     // telling them their rent is going up by nothing.
     .filter((row) => row.newRateCents > row.inPlaceRateCents)
 
+  const exclusions = await ecriExclusionsFor(rows.map((row) => row.leaseId), now)
+  const raisable = rows.filter((row) => !exclusions.has(row.leaseId))
+  const excluded = rateVariance(rows.filter((row) => exclusions.has(row.leaseId))).map((row) => ({
+    ...row,
+    exclusion: exclusions.get(row.leaseId) as EcriExclusion,
+  }))
+
   // Ordered by the same core definition the rate-variance report uses — the
   // worklist and the report must not disagree about which lease is most
   // worth raising (§4.11's "one metrics definition layer").
-  return rateVariance(rows)
+  return { rows: rateVariance(raisable), excluded }
 }
 
 export type BatchResult = { ok: true; batchId: string; scheduled: number } | { ok: false; reason: string }
@@ -1028,6 +1150,13 @@ export async function sendDueRateIncreaseNotices(
   for (const row of due) {
     if (!noticeIsDue(row, businessDate)) continue
 
+    const excluded = (await ecriExclusionsFor([row.leaseId])).get(row.leaseId)
+    if (excluded && !isRateDecrease(row)) {
+      await cancelIneligibleIncrease(row, excluded, 'notice')
+      recordItem({ itemId: row.leaseId, ok: true, message: `rate-increase cancelled before notice — ${ECRI_EXCLUSION_LABELS[excluded]}` })
+      continue
+    }
+
     // Guarded update: two runs of the same business date (a catch-up tick,
     // a retry) must not send twice. `status: 'approved'` in the WHERE is the
     // claim — the second run matches zero rows. The emit rides inside the
@@ -1237,6 +1366,13 @@ export async function applyDueRateIncreases(
           ? `${noun} cancelled — the lease was transferred and the increase did not move with it`
           : `${noun} cancelled — the lease has ended`,
       })
+      continue
+    }
+    const excluded = decrease ? undefined : (await ecriExclusionsFor([row.leaseId])).get(row.leaseId)
+    if (excluded) {
+      await cancelIneligibleIncrease(row, excluded, 'apply')
+      result.skipped += 1
+      recordItem({ itemId: row.leaseId, ok: true, message: `rate increase cancelled — ${ECRI_EXCLUSION_LABELS[excluded]}` })
       continue
     }
     // The rate moved under an already-approved increase. Refused rather than

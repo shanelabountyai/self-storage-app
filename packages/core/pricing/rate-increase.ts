@@ -316,3 +316,53 @@ export function noticeDeliveryVerdict(statuses: readonly string[]): NoticeDelive
   if (statuses.every((status) => DEAD_MESSAGE_STATUSES.includes(status))) return 'undeliverable'
   return 'reached'
 }
+
+/// PRD 02 US-11 AC "who is never raised" (B-391). Why a lease is not a
+/// candidate for a rate INCREASE, whatever its tenure and gap to street say.
+///
+/// Ordered by how bad the letter would land: a tenant in the lien pipeline,
+/// then one behind on rent, then everything softer. Only the first match is
+/// reported, so every consumer names one reason per lease.
+export const ECRI_EXCLUSIONS = [
+  'in_lien_process',
+  'delinquent',
+  'not_moved_in',
+  'under_hold',
+  'move_out_notice',
+  'promotion_running',
+] as const
+
+export type EcriExclusion = (typeof ECRI_EXCLUSIONS)[number]
+
+export const ECRI_EXCLUSION_LABELS: Record<EcriExclusion, string> = {
+  in_lien_process: 'in the lien process',
+  delinquent: 'past due',
+  not_moved_in: 'not moved in yet',
+  under_hold: 'under a hold (payment plan, SCRA, bankruptcy, dispute or similar)',
+  move_out_notice: 'leaving — move-out notice given',
+  promotion_running: 'still inside a move-in promotion or its minimum stay',
+}
+
+export type EcriExclusionInput = {
+  status: string
+  /// Any unlifted, in-force `LeaseHold`. Every hold type excludes: a plan is a
+  /// hold, and so are SCRA, bankruptcy, deceased, litigation and dispute.
+  hasActiveHold: boolean
+  noticeGivenAt: Date | null
+  /// Discounted periods not yet billed, and whether the minimum stay is still
+  /// running. Both false for a lease with no redemption.
+  promoPeriodsRemaining: number
+  minStayRunning: boolean
+}
+
+/// One predicate, called by the batch preview and schedule, the one-off
+/// schedule, notice send and the nightly apply, so the five cannot disagree.
+export function ecriExclusion(lease: EcriExclusionInput): EcriExclusion | null {
+  if (lease.status === 'pending_auction') return 'in_lien_process'
+  if (lease.status === 'delinquent') return 'delinquent'
+  if (lease.status === 'pending') return 'not_moved_in'
+  if (lease.hasActiveHold) return 'under_hold'
+  if (lease.noticeGivenAt) return 'move_out_notice'
+  if (lease.promoPeriodsRemaining > 0 || lease.minStayRunning) return 'promotion_running'
+  return null
+}

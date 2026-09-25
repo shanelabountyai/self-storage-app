@@ -11,6 +11,7 @@ import {
   approveRateIncrease,
   cancelRateIncrease,
   pendingRateIncreases,
+  previewEligibleBatch,
   previewEligibleIncreases,
   renoticeHeldIncreases,
   renoticeRateIncrease,
@@ -207,6 +208,10 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
     // database trigger that rejects DELETE outright (B-002). Every audit
     // assertion below is scoped to its own `entityId` for that reason.
     await prisma.tenantRateIncrease.deleteMany({ where: { facilityId } })
+    await prisma.task.deleteMany({ where: { facilityId } })
+    await prisma.leaseHold.deleteMany({ where: { lease: { facilityId } } })
+    await prisma.promoRedemption.deleteMany({ where: { facilityId } })
+    await prisma.promotion.deleteMany({ where: { name: { contains: suffix } } })
     await prisma.leaseRateChange.deleteMany({ where: { lease: { facilityId } } })
     await prisma.lease.deleteMany({ where: { facilityId } })
     await prisma.unit.deleteMany({ where: { facilityId } })
@@ -433,6 +438,116 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
       const rows = await prisma.tenantRateIncrease.findMany({ where: { facilityId } })
       expect(rows).toHaveLength(2)
       expect(new Set(rows.map((row) => row.batchId)).size).toBe(1)
+    })
+  })
+
+
+  // B-391. Who is never raised, wherever the increase is scheduled or applied.
+  describe('exclusions (US-11 "who is never raised")', () => {
+    const setStatus = (leaseId: string, status: 'delinquent' | 'pending' | 'pending_auction') =>
+      prisma.lease.update({ where: { id: leaseId }, data: { status } })
+
+    it('lists each excluded lease under its reason, and the counts match the rows', async () => {
+      const ok = await makeLease()
+      const late = await makeLease()
+      const lien = await makeLease()
+      const plan = await makeLease()
+      const leaving = await makeLease()
+      const promo = await makeLease()
+      await setStatus(late.leaseId, 'delinquent')
+      await setStatus(lien.leaseId, 'pending_auction')
+      await prisma.leaseHold.create({
+        data: { leaseId: plan.leaseId, type: 'payment_plan', effectiveFrom: daysFromNow(-1), reason: 'agreed plan' },
+      })
+      await prisma.lease.update({ where: { id: leaving.leaseId }, data: { noticeGivenAt: new Date() } })
+      const promotion = await prisma.promotion.create({
+        data: { name: `Promo ${suffix}`, type: 'percent_off', value: 50, durationPeriods: 2, status: 'active' },
+      })
+      await prisma.promoRedemption.create({
+        data: {
+          promotionId: promotion.id,
+          facilityId,
+          leaseId: promo.leaseId,
+          schedule: [{ periodIndex: 0, amountCents: 500 }, { periodIndex: 1, amountCents: 500 }],
+          totalCents: 1_000,
+          appliedPeriods: [0],
+        },
+      })
+
+      const { rows, excluded } = await previewEligibleBatch(manager(), facilityId)
+      expect(rows.map((row) => row.leaseId)).toEqual([ok.leaseId])
+      expect(Object.fromEntries(excluded.map((row) => [row.leaseId, row.exclusion]))).toEqual({
+        [late.leaseId]: 'delinquent',
+        [lien.leaseId]: 'in_lien_process',
+        [plan.leaseId]: 'under_hold',
+        [leaving.leaseId]: 'move_out_notice',
+        [promo.leaseId]: 'promotion_running',
+      })
+    })
+
+    it('a lift releases the lease; the batch never schedules an excluded one', async () => {
+      const held = await makeLease()
+      const free = await makeLease()
+      const hold = await prisma.leaseHold.create({
+        data: { leaseId: held.leaseId, type: 'military_scra', effectiveFrom: daysFromNow(-1), reason: 'orders' },
+      })
+      expect(await scheduleEligibleBatch(manager(), facilityId, daysFromNow(45))).toMatchObject({ ok: true, scheduled: 1 })
+      expect((await prisma.tenantRateIncrease.findMany({ where: { facilityId } })).map((r) => r.leaseId)).toEqual([free.leaseId])
+      await prisma.leaseHold.update({ where: { id: hold.id }, data: { liftedAt: new Date() } })
+      expect((await previewEligibleBatch(manager(), facilityId)).rows.map((r) => r.leaseId)).toEqual([held.leaseId])
+    })
+
+    it('refuses a one-off on a pending_auction lease and says why', async () => {
+      const { leaseId } = await makeLease()
+      await setStatus(leaseId, 'pending_auction')
+      const result = await scheduleRateIncrease(manager(), facilityId, {
+        leaseId,
+        newRateCents: 14_900,
+        effectiveDate: daysFromNow(45),
+      })
+      expect(result).toMatchObject({ ok: false, reason: expect.stringContaining('lien process') })
+    })
+
+    it('cancels at notice send a lease that got a payment plan after scheduling, and notices the rest', async () => {
+      const a = await makeLease()
+      const b = await makeLease()
+      await scheduleEligibleBatch(manager(), facilityId, daysFromNow(45))
+      const batch = await prisma.tenantRateIncrease.findMany({ where: { facilityId } })
+      await Promise.all(batch.map((row) => approveRateIncrease(regional(), row.id, 'annual review')))
+      await prisma.leaseHold.create({
+        data: { leaseId: a.leaseId, type: 'payment_plan', effectiveFrom: daysFromNow(-1), reason: 'plan' },
+      })
+
+      const result = await sendDueRateIncreaseNotices(facilityId, daysFromNow(15), () => {})
+      expect(result.sent).toBe(1)
+
+      const rowA = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId: a.leaseId } })
+      const rowB = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId: b.leaseId } })
+      expect(rowA.status).toBe('cancelled')
+      expect(rowA.noticeEventId).toBeNull()
+      expect(rowB.status).toBe('notice_sent')
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'rate.increase_cancelled', entityId: rowA.id },
+      })
+      expect(audit.reasonCode).toBe('under_hold')
+      const tasks = await prisma.task.findMany({ where: { facilityId, type: 'rate_increase_cancelled_ineligible' } })
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0]).toMatchObject({ entityId: a.leaseId, priority: 'normal' })
+      expect(tasks[0].detail).toContain('Ada Renter')
+    })
+
+    it('cancels at apply a noticed increase whose tenant has since gone past due', async () => {
+      const { leaseId } = await makeLease()
+      await scheduleEligibleBatch(manager(), facilityId, daysFromNow(45))
+      const row = await prisma.tenantRateIncrease.findFirstOrThrow({ where: { leaseId } })
+      await approveRateIncrease(regional(), row.id, 'annual review')
+      await sendDueRateIncreaseNotices(facilityId, daysFromNow(15), () => {})
+      await setStatus(leaseId, 'delinquent')
+
+      const result = await applyDueRateIncreases(facilityId, daysFromNow(45), () => {})
+      expect(result.applied).toBe(0)
+      expect((await prisma.tenantRateIncrease.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('cancelled')
+      expect((await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })).monthlyRateCents).toBe(12_900)
     })
   })
 

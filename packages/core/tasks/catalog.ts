@@ -220,6 +220,18 @@ export const TASK_TYPES = [
     },
   },
   {
+    // PRD 02 US-11 (B-391). A scheduled increase was cancelled because its
+    // tenant became ineligible (past due, in the lien pipeline, under a hold,
+    // leaving, or inside a promotion) before the notice went out or the rate
+    // applied. Nothing is held and nobody was told anything, so this is a
+    // read-and-acknowledge task: the detail names the tenant, the reason and
+    // the increase, and staff decide whether to schedule it again later.
+    type: "rate_increase_cancelled_ineligible",
+    label: "A scheduled rate increase was cancelled — the tenant is no longer eligible",
+    requiredProofFields: ["note"],
+    sensitive: false,
+  },
+  {
     // PRD 03 US-6 AC1. A gate command at a facility running the ManualAdapter:
     // there is no controller to talk to, so somebody walks to the keypad.
     //
