@@ -4,7 +4,7 @@ import { effectiveByGroup } from '@storage/core/facility-settings'
 import type { TaxRate } from '@storage/core/pricing'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { mintQuoteToken } from '@/lib/pricing/quote-token'
-import { matchesSize, type SizeBand } from './unit-filters'
+import { FEATURE_FILTERS, matchesSize, type FeatureKey, type SizeBand } from './unit-filters'
 
 // PRD 01 FR-2.1 / US-201. The public, unauthenticated read behind facility and
 // search pages. Two rules shape it:
@@ -236,7 +236,15 @@ async function availableRatedTypes(facilityIds: string[], asOf: Date) {
     }),
     prisma.unitType.findMany({
       where: { facilityId: { in: facilityIds } },
-      select: { id: true, widthFt: true, lengthFt: true },
+      select: {
+        id: true,
+        widthFt: true,
+        lengthFt: true,
+        climateControlled: true,
+        driveUp: true,
+        powerAvailable: true,
+        floor: true,
+      },
     }),
   ])
 
@@ -260,6 +268,10 @@ async function availableRatedTypes(facilityIds: string[], asOf: Date) {
         widthFt: size.widthFt,
         lengthFt: size.lengthFt,
         sqFt: size.widthFt * size.lengthFt,
+        climateControlled: size.climateControlled,
+        driveUp: size.driveUp,
+        powerAvailable: size.powerAvailable,
+        floor: size.floor,
         available: row._count._all,
       },
     ]
@@ -268,17 +280,20 @@ async function availableRatedTypes(facilityIds: string[], asOf: Date) {
 
 /// `size` (B-376) narrows the read to one band, so a search that carries a size
 /// prices each facility by the cheapest unit IN that band rather than by its
-/// cheapest unit of any size.
+/// cheapest unit of any size. `features` (B-395) narrows it the same way: every
+/// one must match, as on the facility page's `applyFilters`.
 export async function lowestAvailableWebRateByFacility(
   facilityIds: string[],
   asOf: Date = new Date(),
   size?: SizeBand,
+  features: FeatureKey[] = [],
 ): Promise<Map<string, FacilityFromRate>> {
   if (facilityIds.length === 0) return new Map()
 
   const lowest = new Map<string, FacilityFromRate>()
   for (const row of await availableRatedTypes(facilityIds, asOf)) {
     if (size && !matchesSize(row, size)) continue
+    if (!features.every((key) => FEATURE_FILTERS[key].matches(row))) continue
     const current = lowest.get(row.facilityId)
     if (current === undefined) {
       lowest.set(row.facilityId, {

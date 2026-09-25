@@ -3,7 +3,7 @@ import {
   lowestAvailableWebRateByFacility,
   type FacilityFromRate,
 } from '@/lib/inventory/public-inventory'
-import type { SizeBand } from '@/lib/inventory/unit-filters'
+import type { FeatureKey, SizeBand } from '@/lib/inventory/unit-filters'
 import { distanceMiles, geocodeQuery, type GeoPoint } from './geocode'
 
 // PRD 01 US-101 / FR-1.1. Radius search over facility coordinates, ranked by
@@ -65,9 +65,15 @@ export type SearchOutcome =
   | { status: 'empty' }
 
 /// `size` (B-376): price each facility by its cheapest available unit in this band.
-type SearchInput = { q?: string; point?: GeoPoint; size?: SizeBand }
+/// `features` (B-395): the same, and a facility with no matching unit free is
+/// dropped — PRD 01 §6.3, a search filter either filters or is not offered.
+type SearchFilters = { size?: SizeBand; features?: FeatureKey[] }
+type SearchInput = { q?: string; point?: GeoPoint } & SearchFilters
 
-async function rankFacilities(point: GeoPoint, size?: SizeBand): Promise<FacilityResult[]> {
+export async function rankFacilities(
+  point: GeoPoint,
+  { size, features = [] }: SearchFilters = {},
+): Promise<FacilityResult[]> {
   const facilities = await prisma.facility.findMany({
     // Only active sites are advertised, matching the public inventory feed.
     // Facilities without coordinates cannot be ranked and are excluded rather
@@ -91,7 +97,7 @@ async function rankFacilities(point: GeoPoint, size?: SizeBand): Promise<Facilit
 
   const ids = facilities.map((f) => f.id)
   const [fromRates, photos] = await Promise.all([
-    lowestAvailableWebRateByFacility(ids, new Date(), size),
+    lowestAvailableWebRateByFacility(ids, new Date(), size, features),
     // One row per facility rather than the whole gallery: `distinct` on a
     // sorted read is Postgres's DISTINCT ON, so this stays a single query
     // however many facilities rank. Only the url is selected — the thumbnail is
@@ -119,6 +125,8 @@ async function rankFacilities(point: GeoPoint, size?: SizeBand): Promise<Facilit
         photo: photoByFacility.get(facility.id) ?? null,
       }
     })
+    // Size alone keeps a facility and says it has none in that size (B-376).
+    .filter((facility) => features.length === 0 || facility.from !== null)
     .sort((a, b) => a.distanceMiles - b.distanceMiles)
 }
 
@@ -126,7 +134,7 @@ export async function searchFacilities(input: SearchInput): Promise<SearchOutcom
   // "Use my location" hands over a point directly, so it skips geocoding
   // entirely (US-101: geolocation is offered, never required).
   if (input.point) {
-    const ranked = await rankFacilities(input.point, input.size)
+    const ranked = await rankFacilities(input.point, input)
     return partition(ranked, 'Your location', '', input.point)
   }
 
@@ -136,7 +144,7 @@ export async function searchFacilities(input: SearchInput): Promise<SearchOutcom
   const geocoded = geocodeQuery(query)
   if (!geocoded) return { status: 'not_found', query }
 
-  const ranked = await rankFacilities(geocoded, input.size)
+  const ranked = await rankFacilities(geocoded, input)
   return partition(ranked, geocoded.label, query, geocoded)
 }
 

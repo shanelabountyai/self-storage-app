@@ -12,7 +12,7 @@ import {
 } from '@/lib/geo/facility-search'
 import { parseGeoPoint } from '@/lib/geo/geocode'
 import { ResultsMap, type MapFacility } from '@/components/site/results-map'
-import { FEATURE_FILTERS, parseFilters, SIZE_BANDS } from '@/lib/inventory/unit-filters'
+import { parseFilters, SIZE_BANDS } from '@/lib/inventory/unit-filters'
 import {
   dictionaryFor,
   plural,
@@ -31,12 +31,10 @@ export async function generateMetadata() {
   return {
   title: translate(dict, 'search.title'),
   // One canonical for every result view. This page takes `?q=`, `?lat=&lng=`
-  // and now `?size=`/`?features=` (B-082 part 3), each of which is a distinct
-  // URL a crawler can reach and none of which is a distinct page worth
-  // indexing — `?size=medium` renders the same results as no parameter at all,
-  // because the filter is carried onward rather than applied here. Without
-  // this, the guides' CTAs would have manufactured a duplicate of the search
-  // page per size band.
+  // and `?size=`/`?features=` (B-082 part 3), each of which is a distinct URL a
+  // crawler can reach and none of which is a distinct page worth indexing — a
+  // filtered view is the same list narrowed. Without this, the guides' CTAs
+  // would have manufactured a duplicate of the search page per filter.
   alternates: { canonical: '/storage/search' },
   }
 }
@@ -57,29 +55,6 @@ function carriedFilters(query: { size?: string; features?: string | string[] }):
   if (query.size) params.set('size', query.size)
   for (const feature of [query.features ?? []].flat()) params.append('features', feature)
   return params.toString()
-}
-
-/// The carried filters in words, for the line that tells a renter they are
-/// still holding one.
-///
-/// A filter that travels invisibly is a filter the renter cannot undo and did
-/// not know they had — they clicked "climate-controlled units near you" on a
-/// guide, landed on a search box, and nothing on the page mentions climate
-/// again until a facility opens with a checkbox already ticked.
-///
-/// `parseFilters` does the recognising, so this file still holds no second
-/// opinion about what a valid filter is: an unrecognised value produces no
-/// label here and is carried onward regardless, where the facility page ignores
-/// it exactly as it would have.
-function carriedFilterLabels(
-  query: { size?: string; features?: string | string[] },
-  dict: Dictionary,
-): string[] {
-  const { size, features } = parseFilters(query)
-  return [
-    ...(size ? [translate(dict, SIZE_BANDS[size].labelKey)] : []),
-    ...features.map((feature) => translate(dict, FEATURE_FILTERS[feature].labelKey)),
-  ]
 }
 
 // B-107. Both are public by necessity — they ship to the browser — so the key
@@ -276,11 +251,13 @@ function Results({
   filters,
   dict,
   sizeLabel,
+  featuresApplied,
 }: {
   outcome: SearchOutcome
   filters: string
   dict: Dictionary
   sizeLabel?: string
+  featuresApplied: boolean
 }) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
@@ -302,6 +279,22 @@ function Results({
   }
 
   if (outcome.status === 'none_nearby') {
+    // B-395: every facility was dropped for lacking the features, which is not
+    // "we have none listed". The rail above is open, with Clear all in it.
+    if (outcome.results.length === 0 && featuresApplied) {
+      return (
+        <Dead
+          dict={dict}
+          heading={t('search.noneNearbyHeading', {
+            miles: SEARCH_RADIUS_MILES,
+            label: outcome.label,
+          })}
+        >
+          <p>{t('search.noneMatchingBody')}</p>
+        </Dead>
+      )
+    }
+
     if (outcome.results.length === 0) {
       return (
         <Dead dict={dict} heading={t('search.noneListedHeading')}>
@@ -372,9 +365,9 @@ export default async function SearchPage({
     q?: string
     lat?: string
     lng?: string
-    /// B-082 part 3. Set by a guide's CTA and carried onward, never applied
-    /// here — this page ranks facilities, and a size band says nothing about
-    /// which one is closest.
+    /// B-082 part 3 sets these from a guide's CTA; B-388's rail sets them
+    /// here. Size prices the cards (B-376); features also drop facilities
+    /// with no matching unit free (B-395). Both are carried onward.
     size?: string
     features?: string | string[]
   }>
@@ -382,17 +375,15 @@ export default async function SearchPage({
   const { q, lat, lng, size, features } = await searchParams
   const dict = dictionaryFor(await getLocale())
   const filters = carriedFilters({ size, features })
-  const filterLabels = carriedFilterLabels({ size, features }, dict)
 
   // Coordinates come from "Use my location", parsed defensively — anything
   // out of range falls back to the text query rather than ranking every
   // facility against NaN. Shared with B-366's locations page.
   const point = parseGeoPoint({ lat, lng })
 
-  // B-376: a size carried in the URL prices each card by that band. An
-  // unrecognised value parses to undefined and prices as before.
-  const { size: sizeBand } = parseFilters({ size })
-  const outcome = await searchFacilities({ q, point, size: sizeBand })
+  // B-376/B-395: unrecognised values parse away and filter nothing.
+  const { size: sizeBand, features: featureKeys } = parseFilters({ size, features })
+  const outcome = await searchFacilities({ q, point, size: sizeBand, features: featureKeys })
 
   // The map plots whatever the list showed, including the out-of-radius
   // suggestions — a renter told "nothing within 25 miles, here are three
@@ -441,26 +432,12 @@ export default async function SearchPage({
 
       <SearchFilterRail dict={dict} query={{ q, lat, lng, size, features }} />
 
-      {/* B-082 part 3. A guide's CTA arrives here holding a filter, and this is
-          the only place it is visible before a facility page opens with a box
-          already ticked. Named in words rather than as a chip, and it says what
-          will happen to it — a renter who did not want it can clear it by
-          searching from the header instead. */}
-      {filterLabels.length > 0 && (
-        <p className="text-muted-foreground mt-4 max-w-3xl text-sm text-pretty">
-          {translate(dict, 'search.carryingBefore')}{' '}
-          <strong className="text-foreground font-medium">
-            {filterLabels.join(` ${translate(dict, 'common.and')} `)}
-          </strong>{' '}
-          {translate(dict, 'search.carryingAfter')}
-        </p>
-      )}
-
       <Results
         outcome={outcome}
         filters={filters}
         dict={dict}
         sizeLabel={sizeBand ? translate(dict, SIZE_BANDS[sizeBand].labelKey) : undefined}
+        featuresApplied={featureKeys.length > 0}
       />
 
       {/* B-376: the directory is otherwise reachable only from the home page. */}

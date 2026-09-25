@@ -148,9 +148,8 @@ export const en = {
   'search.resultsHeading': 'Search results',
   'search.countOne': '{count} facility within {miles} miles, nearest first',
   'search.countOther': '{count} facilities within {miles} miles, nearest first',
-  'search.carryingBefore': 'Carrying your',
-  'search.carryingAfter':
-    'filter through — choose a location and we will apply it there.',
+  'search.noneMatchingBody':
+    'None of our facilities within reach has a unit with those features free. Clear a filter to see what is available.',
   'search.filtersHeading': 'Filters',
   'search.filtersSize': 'Unit size',
   'search.filtersFeatures': 'Features',

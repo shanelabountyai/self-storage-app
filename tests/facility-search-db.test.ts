@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { searchFacilities, SEARCH_RADIUS_MILES } from '../apps/web/lib/geo/facility-search'
+import {
+  rankFacilities,
+  searchFacilities,
+  SEARCH_RADIUS_MILES,
+} from '../apps/web/lib/geo/facility-search'
 import {
   lowestAvailableWebRateByFacility,
   lowestAvailableWebRateBySize,
@@ -57,7 +61,10 @@ async function addPricedType(
   name: string,
   webRateCents: number,
   availableCount: number,
-  size: { widthFt: number; lengthFt: number } = { widthFt: 10, lengthFt: 10 },
+  size: { widthFt: number; lengthFt: number; climateControlled?: boolean } = {
+    widthFt: 10,
+    lengthFt: 10,
+  },
 ) {
   const unitType = await prisma.unitType.create({
     data: { facilityId, name: `${name} ${suffix}`, ...size },
@@ -107,6 +114,17 @@ beforeAll(async () => {
   // B-365: a second 10×20 elsewhere, cheaper than 'near's, so the per-size read
   // has to take the minimum and sum the counts across facilities.
   await addPricedType(ids.hidden, 'ten-b', 11_900, 3, { widthFt: 10, lengthFt: 20 })
+
+  // B-395: one site with a climate unit dearer than its plain one, one without.
+  await makeFacility('cool')
+  await addPricedType(ids.cool, 'plain', 5_900, 1, { widthFt: 5, lengthFt: 5 })
+  await addPricedType(ids.cool, 'climate', 13_900, 2, {
+    widthFt: 10,
+    lengthFt: 10,
+    climateControlled: true,
+  })
+  await makeFacility('warm')
+  await addPricedType(ids.warm, 'plain-w', 6_900, 1, { widthFt: 5, lengthFt: 5 })
 })
 
 afterAll(async () => {
@@ -268,5 +286,25 @@ describeDb('units from $X/mo', () => {
 
   it('returns an empty map for no facilities without touching the database', async () => {
     expect(await lowestAvailableWebRateByFacility([])).toEqual(new Map())
+  })
+})
+
+describeDb('feature filters (B-395)', () => {
+  it('drops a facility with no matching unit free and prices the rest from a matching one', async () => {
+    const all = idsIn(await rankFacilities(AUSTIN))
+    expect(all).toContain(ids.cool)
+    expect(all).toContain(ids.warm)
+
+    const filtered = await rankFacilities(AUSTIN, { features: ['climate'] })
+    expect(idsIn(filtered)).not.toContain(ids.warm)
+    const cool = filtered.find((r) => r.id === ids.cool)!
+    // The $59 plain unit is cheaper but is not what the renter asked for.
+    expect(cool.from).toMatchObject({ webRateCents: 13_900, widthFt: 10, lengthFt: 10 })
+    expect(cool.from!.availableSizes).toBe(1)
+  })
+
+  it('keeps a size-only miss on the list, as B-376 shipped it', async () => {
+    const filtered = await rankFacilities(AUSTIN, { size: 'large' })
+    expect(filtered.find((r) => r.id === ids.warm)?.from).toBeNull()
   })
 })

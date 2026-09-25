@@ -427,7 +427,8 @@ test("a guide's CTA carries its filter through search onto a facility page", asy
   // The CTA cannot know where the reader is, so it lands on the search with no
   // query — and the filter it brought must be visible rather than travelling
   // invisibly to a facility page that opens with a box mysteriously ticked.
-  await expect(page.getByRole('main')).toContainText('Carrying your Climate controlled filter')
+  // B-395: the rail shows it, open and ticked.
+  await expect(page.getByLabel('Climate controlled')).toBeChecked()
 
   await page.getByLabel('Zip code or city').fill('78704')
   await page.getByRole('button', { name: 'Find storage' }).click()
@@ -839,6 +840,21 @@ test('the search filter rail sets, keeps and clears size and features', async ({
   await expect(page.getByLabel('Medium (5×10 to 10×10)')).toBeChecked()
   await page.getByRole('link', { name: 'Clear all' }).click()
   await expect(page).toHaveURL(/\/storage\/search\?q=78704$/)
+})
+
+// B-395. A feature filters the list, not just the URL. No demo unit has power,
+// so the one Austin site drops and the page says why rather than "none listed".
+test('a feature filter changes the results, and the status regions stay quiet', async ({ page }) => {
+  await page.goto('/storage/search?q=78704')
+  const cards = page.getByRole('main').getByRole('link', { name: /Demo — Austin South/ })
+  await expect(cards).toHaveCount(1)
+  for (const region of await page.getByRole('status').all()) await expect(region).toBeEmpty()
+
+  await page.goto('/storage/search?q=78704&features=power')
+  await expect(cards).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: /Nothing within 25 miles of/ })).toBeVisible()
+  await expect(page.getByRole('main')).toContainText('Clear a filter')
+  for (const region of await page.getByRole('status').all()) await expect(region).toBeEmpty()
 })
 
 test('every size-guide card links to a search carrying its band, and the footer lists locations', async ({

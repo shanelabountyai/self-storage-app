@@ -11860,3 +11860,11 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it decided.** "All past due" and the empty-state link show only with `reports:financial` at that facility, and are absent, not zero, without it (the same rule as the dashboard tile, B-055). The strip is 2 columns on mobile, 4 from `sm`.
 
 **What it left behind.** The figure is the aging total, which is what the row asked for: its 0–10 day bucket takes balances at 0 days past due, so "All past due" can include a bill due today and not yet late. Unowned. The e2e ran on desktop-chrome only.
+
+## B-395: the search rail's Features filter actually filters (2026-09-25, `PENDING`)
+
+**What it built.** `rankFacilities` (now exported) takes `{ size, features }`; `lowestAvailableWebRateByFacility` gains a `features` argument and skips any rated type that does not match every feature, the same `FEATURE_FILTERS[key].matches` the facility page's `applyFilters` uses (its parameter type narrowed to `FeatureFields`, so search's lighter rows qualify). With a feature applied, a facility with no matching unit free is dropped and each card is priced from its cheapest matching unit. `/storage/search` parses `features` and passes it through; the "Carrying your … filter" line and its `search.carryingBefore/After` keys are deleted (the open rail shows the filter). A search the features empty entirely renders the `none_nearby` heading ("Nothing within 25 miles of …") with a new `search.noneMatchingBody` ("Clear a filter …") instead of "We have no facilities listed yet", in EN and ES. `tests/facility-search-db.test.ts` adds two Austin fixtures (one with a dearer climate unit, one without) and asserts the drop and the price; `e2e/smoke.spec.ts` asserts `features=power` removes Demo — Austin South with every status region empty, and the guide-CTA test now checks the ticked rail box.
+
+**What it decided.** Size alone still keeps a facility and says it has none in that size (B-376); only features drop. Size plus features drops on the combination.
+
+**What it left behind.** The new zero-match state is not a `SCANNED_STATES` row or axe-scanned. Verification: typecheck, lint, 17 search DB tests, 29 i18n tests; e2e smoke search specs 32 passed and the new spec 4 passed (setup, desktop-chrome, mobile-chrome).

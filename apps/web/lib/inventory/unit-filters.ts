@@ -19,12 +19,15 @@ export const SIZE_BANDS = {
 
 export type SizeBand = keyof typeof SIZE_BANDS
 
+/// B-395: the fields a feature reads, so search can match its own lighter rows.
+export type FeatureFields = Pick<PublicUnitType, 'climateControlled' | 'driveUp' | 'powerAvailable' | 'floor'>
+
 export const FEATURE_FILTERS = {
-  climate: { labelKey: 'filter.feature.climate', matches: (u: PublicUnitType) => u.climateControlled },
-  driveUp: { labelKey: 'filter.feature.driveUp', matches: (u: PublicUnitType) => u.driveUp },
-  power: { labelKey: 'filter.feature.power', matches: (u: PublicUnitType) => u.powerAvailable },
-  groundFloor: { labelKey: 'filter.feature.groundFloor', matches: (u: PublicUnitType) => u.floor <= 1 },
-} as const satisfies Record<string, { labelKey: MessageKey; matches: (u: PublicUnitType) => boolean }>
+  climate: { labelKey: 'filter.feature.climate', matches: (u: FeatureFields) => u.climateControlled },
+  driveUp: { labelKey: 'filter.feature.driveUp', matches: (u: FeatureFields) => u.driveUp },
+  power: { labelKey: 'filter.feature.power', matches: (u: FeatureFields) => u.powerAvailable },
+  groundFloor: { labelKey: 'filter.feature.groundFloor', matches: (u: FeatureFields) => u.floor <= 1 },
+} as const satisfies Record<string, { labelKey: MessageKey; matches: (u: FeatureFields) => boolean }>
 
 export type FeatureKey = keyof typeof FEATURE_FILTERS
 

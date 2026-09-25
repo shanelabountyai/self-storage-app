@@ -2947,6 +2947,13 @@ function reviewedOn(locale: Locale): string {
 // scheduled") render in the scanned-states list, and both are axe-scanned by
 // `e2e/portal-balance-states.spec.ts`; the statement text makes no other
 // claim about the panel. `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-25, at B-395. `/storage/search`'s Features filter now drops
+// facilities with no matching unit free, and a search the filter empties shows
+// the existing "Nothing within 25 miles" heading with a clear-a-filter line.
+// The rail's markup is unchanged (D-149) and the "Carrying your … filter" line
+// is gone. The new empty state is not a `SCANNED_STATES` row and the statement
+// makes no claim about it. `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
