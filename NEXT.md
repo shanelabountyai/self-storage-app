@@ -1,5 +1,7 @@
 # Next
 
+**B-395 is built** (2026-09-25, `66c7e82`). **Next item: B-396**, then B-397 to B-410 in `06-backlog.md` order. Search features now drop facilities with no matching unit free and price from the matching unit; size alone still keeps them (B-376).
+
 **B-394 is built** (2026-09-25, `a8067ec`). **Next item: B-395**, then B-396 to B-410 in `06-backlog.md` order. `/admin/delinquency` shows "All past due" (`agingForFacility`, behind `reports:financial`) beside today's queue; the empty state links `/admin/tenants?filter=past_due`.
 
 **B-393 is built** (2026-09-25, `a56e828`). **Next item: B-394**, then B-395 to B-410 in `06-backlog.md` order. `/portal`'s balance panel now reads past due / due / autopay will charge from `balanceState` in `lib/portal/dashboard.ts`; `e2e/portal-balance-states.spec.ts` owns its fixture (serial, fixed slug).

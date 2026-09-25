@@ -11861,7 +11861,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **What it left behind.** The figure is the aging total, which is what the row asked for: its 0–10 day bucket takes balances at 0 days past due, so "All past due" can include a bill due today and not yet late. Unowned. The e2e ran on desktop-chrome only.
 
-## B-395: the search rail's Features filter actually filters (2026-09-25, `PENDING`)
+## B-395: the search rail's Features filter actually filters (2026-09-25, `66c7e82`)
 
 **What it built.** `rankFacilities` (now exported) takes `{ size, features }`; `lowestAvailableWebRateByFacility` gains a `features` argument and skips any rated type that does not match every feature, the same `FEATURE_FILTERS[key].matches` the facility page's `applyFilters` uses (its parameter type narrowed to `FeatureFields`, so search's lighter rows qualify). With a feature applied, a facility with no matching unit free is dropped and each card is priced from its cheapest matching unit. `/storage/search` parses `features` and passes it through; the "Carrying your … filter" line and its `search.carryingBefore/After` keys are deleted (the open rail shows the filter). A search the features empty entirely renders the `none_nearby` heading ("Nothing within 25 miles of …") with a new `search.noneMatchingBody` ("Clear a filter …") instead of "We have no facilities listed yet", in EN and ES. `tests/facility-search-db.test.ts` adds two Austin fixtures (one with a dearer climate unit, one without) and asserts the drop and the price; `e2e/smoke.spec.ts` asserts `features=power` removes Demo — Austin South with every status region empty, and the guide-CTA test now checks the ticked rail box.
 
