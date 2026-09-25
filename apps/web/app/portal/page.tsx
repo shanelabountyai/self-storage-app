@@ -100,6 +100,17 @@ function LeaseCard({
   // disclosure use.
   const nextPaymentCents = lease.recurring.totalCents
   const dueDate = formatDueDate(lease.nextDueDate, tag)
+  const state = lease.balanceState
+  const balancePanel = owesMoney && !lease.accessSuspended
+  // B-393. The panel already says the balance, and when the bill it names is
+  // the next one, the date and amount too. Saying them again below is what made
+  // one $95 bill read as $190.
+  const showBalanceFigure = !balancePanel
+  const showNextPayment = !(
+    balancePanel &&
+    (state.kind === 'due' || state.kind === 'autopay') &&
+    state.dueDate.getTime() === lease.nextDueDate.getTime()
+  )
   const telHref = `tel:${lease.facilityPhone.replace(/[^0-9+]/g, '')}`
 
   // B-244. The heading FIRST, and the section named by it.
@@ -212,12 +223,51 @@ function LeaseCard({
           </p>
         </div>
       )}
-      {owesMoney && !lease.accessSuspended && (
+      {/* B-393 / US-702. Which bill this is, in words (1.4.1): late, due, or
+          autopay's to collect. Autopay demotes Pay to a text link that still
+          names its amount (2.4.4). */}
+      {balancePanel && (
         <div className="border-input rounded-md border p-3 text-sm text-pretty">
-          <p>
-            {t('dash.balanceBefore')} <strong>{formatRate(lease.balanceCents)}</strong>.
-          </p>
-          <PayNowButton lease={lease} dict={dict} />
+          {state.kind === 'past_due' ? (
+            <p>
+              {t('dash.pastDueSince', {
+                amount: formatRate(state.pastDueCents),
+                date: formatDueDate(state.since, tag),
+              })}
+              {state.pastDueCents < lease.balanceCents &&
+                ` ${t('dash.totalBalance', { amount: formatRate(lease.balanceCents) })}`}
+            </p>
+          ) : state.kind === 'due' ? (
+            <p>
+              {t('dash.dueOn', {
+                amount: formatRate(lease.balanceCents),
+                date: formatDueDate(state.dueDate, tag),
+              })}
+            </p>
+          ) : state.kind === 'autopay' ? (
+            <p>
+              {t('dash.autopayWillCharge', {
+                amount: formatRate(lease.balanceCents),
+                date: formatDueDate(state.dueDate, tag),
+              })}
+            </p>
+          ) : (
+            <p>
+              {t('dash.balanceBefore')} <strong>{formatRate(lease.balanceCents)}</strong>.
+            </p>
+          )}
+          {state.kind === 'autopay' ? (
+            <p className="mt-2">
+              <Link
+                href={`/portal/pay?lease=${lease.leaseId}`}
+                className="underline underline-offset-4"
+              >
+                {t('dash.payEarly', { amount: formatRate(lease.balanceCents) })}
+              </Link>
+            </p>
+          ) : (
+            <PayNowButton lease={lease} dict={dict} />
+          )}
           <p className="mt-2">
             {t('dash.orCall')}{' '}
             <a href={telHref} className="underline underline-offset-4">
@@ -373,6 +423,7 @@ function LeaseCard({
           the kit's convention, applied to the two figures this card states as
           plain facts rather than inline sentence prose. */}
       <dl className="grid grid-cols-2 gap-4 text-sm">
+        {showBalanceFigure && (
         <div>
           <dt className="text-muted-foreground">{t('dash.currentBalance')}</dt>
           {/* A negative ledger sum is a credit, not a debt of minus-something:
@@ -385,6 +436,8 @@ function LeaseCard({
               : formatRate(lease.balanceCents)}
           </dd>
         </div>
+        )}
+        {showNextPayment && (
         <div>
           <dt className="text-muted-foreground">{t('dash.nextPayment')}</dt>
           <dd className="font-mono font-medium tabular-nums">
@@ -398,6 +451,7 @@ function LeaseCard({
             </span>
           </dd>
         </div>
+        )}
         <div>
           <dt className="text-muted-foreground">{t('dash.autopay')}</dt>
           <dd className="font-medium">

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import {
+  balanceState,
   nextBillingDate,
   nextChargeForLease,
   owingLeases,
@@ -31,6 +32,67 @@ describe('nextBillingDate', () => {
   it('rolls a December billing day into January of the next year', () => {
     const from = new Date(Date.UTC(2026, 11, 20))
     expect(nextBillingDate(1, from)).toEqual(new Date(Date.UTC(2027, 0, 1)))
+  })
+})
+
+// B-393. Late is `daysPastDue > 0`; the due date itself is not late.
+describe('balanceState', () => {
+  const asOf = new Date(Date.UTC(2026, 8, 25)) // Sep 25
+  const inv = (month: number, day: number, totalCents = 9500, amountPaidCents = 0) => ({
+    dueDate: new Date(Date.UTC(2026, month, day)),
+    totalCents,
+    amountPaidCents,
+    status: 'open',
+  })
+  const oct1 = new Date(Date.UTC(2026, 9, 1))
+
+  it('says nothing is owed at zero or in credit', () => {
+    expect(balanceState({ balanceCents: 0, invoices: [inv(9, 1)], autopayWillCharge: false, asOf })).toEqual({ kind: 'none' })
+    expect(balanceState({ balanceCents: -500, invoices: [], autopayWillCharge: true, asOf })).toEqual({ kind: 'none' })
+  })
+
+  it('an issued invoice not yet due is due, not late', () => {
+    expect(balanceState({ balanceCents: 9500, invoices: [inv(9, 1)], autopayWillCharge: false, asOf })).toEqual({
+      kind: 'due',
+      dueDate: oct1,
+    })
+  })
+
+  it('due today is still not late', () => {
+    expect(
+      balanceState({ balanceCents: 9500, invoices: [inv(8, 25)], autopayWillCharge: false, asOf }).kind,
+    ).toBe('due')
+  })
+
+  it('autopay takes it only when autopay will charge and the invoices cover the whole balance', () => {
+    expect(balanceState({ balanceCents: 9500, invoices: [inv(9, 1)], autopayWillCharge: true, asOf })).toEqual({
+      kind: 'autopay',
+      dueDate: oct1,
+    })
+    // $10 on the ledger that no invoice carries: autopay would not collect it.
+    expect(
+      balanceState({ balanceCents: 10500, invoices: [inv(9, 1)], autopayWillCharge: true, asOf }).kind,
+    ).toBe('due')
+  })
+
+  it('past due counts only what fell due before today, even with autopay on', () => {
+    const state = balanceState({
+      balanceCents: 19000,
+      invoices: [inv(8, 1), inv(9, 1)],
+      autopayWillCharge: true,
+      asOf,
+    })
+    expect(state).toEqual({ kind: 'past_due', pastDueCents: 9500, since: new Date(Date.UTC(2026, 8, 1)) })
+  })
+
+  it('ignores void and paid invoices, and names a balance no invoice explains as owed', () => {
+    const voided = { ...inv(8, 1), status: 'void' }
+    expect(
+      balanceState({ balanceCents: 9500, invoices: [voided, inv(9, 1)], autopayWillCharge: false, asOf }).kind,
+    ).toBe('due')
+    expect(balanceState({ balanceCents: 2500, invoices: [inv(8, 1, 9500, 9500)], autopayWillCharge: false, asOf })).toEqual({
+      kind: 'owed',
+    })
   })
 })
 

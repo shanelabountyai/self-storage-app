@@ -485,6 +485,24 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       'the English state above with longer strings inside the same single column; the tightest translated layout — the facility page — is measured in Spanish above',
   },
+  // B-393. The two balance panels a tenant who is not late sees. The demo
+  // tenant is past due, so the route loop only ever scanned the late one.
+  {
+    route: '/portal',
+    state: 'balance due, not late',
+    spec: 'e2e/portal-balance-states.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the same lease card the /portal route loop measures at every width, with one sentence and one button where the past-due state has two sentences and a button',
+  },
+  {
+    route: '/portal',
+    state: 'autopay scheduled',
+    spec: 'e2e/portal-balance-states.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the same lease card the /portal route loop measures at every width, with a text link where the other states have a button',
+  },
   {
     route: '/portal/pay',
     state: 'choose a unit',

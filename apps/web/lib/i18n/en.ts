@@ -931,6 +931,11 @@ export const en = {
   'dash.settlingAfter':
     "is on its way from your bank. Bank payments take about four business days to clear. Your balance updates when it arrives, and you won't be charged a late fee while it's in transit.",
   'dash.balanceBefore': 'You have a balance of',
+  'dash.pastDueSince': '{amount} past due since {date}.',
+  'dash.totalBalance': 'Your total balance is {amount}.',
+  'dash.dueOn': '{amount} due {date}.',
+  'dash.autopayWillCharge': 'Autopay will charge {amount} on {date}.',
+  'dash.payEarly': 'Pay {amount} early',
   'dash.transferBefore': 'You asked to move to',
   'dash.transferOn': 'on',
   'dash.transferHolding': "We're holding it until",

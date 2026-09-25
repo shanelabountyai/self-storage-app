@@ -5,6 +5,8 @@ import { codeForLease } from '@/lib/access/provision'
 import { paymentPlanForLease } from '@/lib/admin/payment-plans'
 import { payableLeaseWhere, portalAccountsFor } from '@/lib/billing/accounts'
 import { SITE } from '@/lib/site-config'
+import { daysPastDue, outstandingCents, type UnpaidInvoice } from '@storage/core/metrics'
+import { effectsByLease } from '@/lib/admin/holds'
 
 // PRD 01 §4.7 US-702 / §6.5. "What do I owe, when is it due, what's my gate
 // code" — read-only, from the same sources the rest of the app already
@@ -30,6 +32,57 @@ export function nextBillingDate(billingDay: number, from: Date): Date {
   return from.getUTCDate() <= billingDay ? thisMonth : new Date(Date.UTC(year, month + 1, billingDay))
 }
 
+/// B-393 / PRD 01 US-702 "a bill that is not late does not look late". The
+/// balance panel rendered one way whenever anything was owed, so an invoice
+/// issued ahead of its due date read "You have a balance of $95. Pay $95 now"
+/// above "Next payment $95 on Oct 1", which is one bill that looks like $190.
+///
+/// Late means `daysPastDue > 0`, the one definition staff screens use (US-39),
+/// so the portal and the tenants list cannot disagree about who is late.
+///
+///   * `past_due`: the oldest unpaid invoice's due date has gone. `pastDueCents`
+///     is only what fell due before today, so arrears plus next month's bill
+///     are not all called late.
+///   * `autopay`: nothing is late and autopay will collect all of it. Needs
+///     `autopayWillCharge` (on, a saved card, no `halt_autopay` hold) and the
+///     invoices to cover the whole balance, because autopay charges invoices
+///     and nothing else.
+///   * `due`: nothing is late and the tenant pays it themselves.
+///   * `owed`: a balance no unpaid invoice explains, so there is no due date to
+///     name. The old copy, which claims nothing about lateness.
+export type BalanceState =
+  | { kind: 'none' }
+  | { kind: 'past_due'; pastDueCents: number; since: Date }
+  | { kind: 'due'; dueDate: Date }
+  | { kind: 'autopay'; dueDate: Date }
+  | { kind: 'owed' }
+
+export function balanceState(input: {
+  balanceCents: number
+  invoices: readonly UnpaidInvoice[]
+  autopayWillCharge: boolean
+  asOf: Date
+}): BalanceState {
+  if (input.balanceCents <= 0) return { kind: 'none' }
+  const unpaid = input.invoices.filter((invoice) => outstandingCents(invoice) > 0)
+  if (unpaid.length === 0) return { kind: 'owed' }
+  const oldest = unpaid.reduce((a, b) => (b.dueDate < a.dueDate ? b : a)).dueDate
+
+  if (daysPastDue(unpaid, input.asOf) > 0) {
+    const today = Date.UTC(input.asOf.getUTCFullYear(), input.asOf.getUTCMonth(), input.asOf.getUTCDate())
+    const fellDue = unpaid
+      .filter((invoice) => invoice.dueDate.getTime() < today)
+      .reduce((sum, invoice) => sum + outstandingCents(invoice), 0)
+    return { kind: 'past_due', pastDueCents: Math.min(fellDue, input.balanceCents), since: oldest }
+  }
+
+  const invoicedCents = unpaid.reduce((sum, invoice) => sum + outstandingCents(invoice), 0)
+  if (input.autopayWillCharge && invoicedCents >= input.balanceCents) {
+    return { kind: 'autopay', dueDate: oldest }
+  }
+  return { kind: 'due', dueDate: oldest }
+}
+
 export type PortalLeaseSummary = {
   leaseId: string
   facilityName: string
@@ -47,6 +100,8 @@ export type PortalLeaseSummary = {
   /// about to be charged.
   recurring: RecurringCharge
   balanceCents: number
+  /// B-393. Which of the balance panel's copies applies. See `balanceState`.
+  balanceState: BalanceState
   nextDueDate: Date
   autopayEnabled: boolean
   /// Autopay is on for this unit but there is no card to charge — the state
@@ -187,11 +242,22 @@ export async function portalDashboardForTenant(
     })
     for (const row of totals) facilityBalances.set(row.facilityId, row._sum.amountCents ?? 0)
   }
+  // B-393. The same skip `runAutopay` applies, so "Autopay will charge" is
+  // never said about a lease a bankruptcy or SCRA hold has stopped charging.
+  const autopayHalted = await effectsByLease(
+    leases.map((lease) => lease.id),
+    'halt_autopay',
+    now,
+  )
 
   return Promise.all(
     leases.map(async (lease) => {
-      const [balance, grant, gateCode, settling, transferHold, plan] = await Promise.all([
+      const [balance, invoices, grant, gateCode, settling, transferHold, plan] = await Promise.all([
         prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }),
+        prisma.invoice.findMany({
+          where: { leaseId: lease.id, status: { in: ['open', 'partially_paid'] } },
+          select: { dueDate: true, totalCents: true, amountPaidCents: true, status: true },
+        }),
         prisma.accessGrant.findUnique({
           where: { facilityId_tenantId: { facilityId: lease.facilityId, tenantId } },
           select: { state: true },
@@ -236,6 +302,15 @@ export async function portalDashboardForTenant(
           taxRates: lease.facility.taxComponents,
         }),
         balanceCents: balance._sum.amountCents ?? 0,
+        balanceState: balanceState({
+          balanceCents: balance._sum.amountCents ?? 0,
+          invoices,
+          autopayWillCharge:
+            lease.autopayEnabled &&
+            Boolean(tenant.stripeDefaultPaymentMethodId) &&
+            !autopayHalted.has(lease.id),
+          asOf: now,
+        }),
         nextDueDate: nextBillingDate(lease.billingDay, now),
         autopayEnabled: lease.autopayEnabled,
         autopayNeedsCard: lease.autopayEnabled && !tenant.stripeDefaultPaymentMethodId,

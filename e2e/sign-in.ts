@@ -155,6 +155,11 @@ export async function signInAsPlanTenant(page: Page): Promise<void> {
   )
 }
 
+/// B-393. A spec's own disposable tenant, for a state no demo tenant is in.
+export async function signInAsTenant(page: Page, email: string, password: string): Promise<void> {
+  await signInWithPassword(page, { email, password, audience: 'tenant' }, '/portal')
+}
+
 /// B-371. Alex, the POS tenant: active lease, so the portal shows a real
 /// (maskable) gate code. Reads only; the POS specs own his balance.
 export async function signInAsPosTenant(page: Page): Promise<void> {

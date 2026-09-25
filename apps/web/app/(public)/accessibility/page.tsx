@@ -2939,6 +2939,14 @@ function reviewedOn(locale: Locale): string {
 // a claim here. `a11y.true.errors` is about rejected typed input and is
 // unchanged. B-390's "no reload onto a live card form" was not a statement
 // claim either. `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-25, at B-393. The `/portal` balance panel now says which
+// bill it is in words: past due since a date, due on a date, or autopay will
+// charge on a date, with Pay demoted to a "Pay $X early" link under autopay.
+// Two new `SCANNED_STATES` rows ("balance due, not late", "autopay
+// scheduled") render in the scanned-states list, and both are axe-scanned by
+// `e2e/portal-balance-states.spec.ts`; the statement text makes no other
+// claim about the panel. `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

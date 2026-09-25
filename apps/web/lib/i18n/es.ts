@@ -838,6 +838,11 @@ export const es: Dictionary = {
   'dash.settlingAfter':
     'viene en camino desde su banco. Los pagos bancarios tardan unos cuatro días hábiles en acreditarse. Su saldo se actualiza cuando llegue, y no le cobraremos cargo por atraso mientras esté en tránsito.',
   'dash.balanceBefore': 'Tiene un saldo de',
+  'dash.pastDueSince': '{amount} vencido desde el {date}.',
+  'dash.totalBalance': 'Su saldo total es de {amount}.',
+  'dash.dueOn': '{amount} vence el {date}.',
+  'dash.autopayWillCharge': 'El pago automático cobrará {amount} el {date}.',
+  'dash.payEarly': 'Pagar {amount} por adelantado',
   'dash.transferBefore': 'Pidió cambiarse a la',
   'dash.transferOn': 'el',
   'dash.transferHolding': 'Se la apartamos hasta el',
