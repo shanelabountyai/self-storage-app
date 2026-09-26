@@ -101,7 +101,14 @@ export type TenantSearchResult = {
   /// file" and "this column failed to load" look identical when blank.
   email: string | null;
   phone: string | null;
-  units: { facilityName: string; unitNumber: string }[];
+  units: {
+    facilityName: string;
+    unitNumber: string;
+    /// B-398. Total owed on the unit, and the past-due part of it (B-188) — the
+    /// POS row words them apart, as B-375 did for the tenants list.
+    balanceCents: number;
+    arrearsCents: number;
+  }[];
 };
 
 /// Name, phone, email, or unit number, partial match. Scoped to a lease the
@@ -174,12 +181,34 @@ export async function searchTenants(
       leases: {
         where: { status: { in: [...OCCUPYING_LEASE_STATUSES] } },
         select: {
+          id: true,
           facility: { select: { name: true } },
           unit: { select: { number: true } },
         },
       },
     },
   });
+
+  const now = new Date();
+  const figures = new Map(
+    await Promise.all(
+      tenants.flatMap((tenant) =>
+        tenant.leases.map(async (lease) => {
+          const [balance, arrears] = await Promise.all([
+            prisma.ledgerEntry.aggregate({
+              where: { leaseId: lease.id },
+              _sum: { amountCents: true },
+            }),
+            arrearsForLease(lease.id, now),
+          ]);
+          return [
+            lease.id,
+            { balanceCents: balance._sum.amountCents ?? 0, arrearsCents: arrears.outstandingCents },
+          ] as const;
+        }),
+      ),
+    ),
+  );
 
   return tenants.map((tenant) => ({
     tenantId: tenant.id,
@@ -189,6 +218,7 @@ export async function searchTenants(
     units: tenant.leases.map((lease) => ({
       facilityName: lease.facility.name,
       unitNumber: lease.unit.number,
+      ...figures.get(lease.id)!,
     })),
   }));
 }

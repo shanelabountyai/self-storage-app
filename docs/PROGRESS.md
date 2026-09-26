@@ -11884,3 +11884,11 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it decided.** Only the ladder's first step is shown (the PRD asks for the first step and its grace days). No timeline means no gate row, absent rather than a made-up day. No protection plans means no range note. **Provisioning finding (recorded, not changed):** `requestDownstream` → `provisionAccessForLease` runs at payment and nothing reads the lease's start date, so a future-dated renter's gate code is issued and active immediately. The sentence says exactly that. If the owner wants the code held until move-in, that is a new item, not a copy change.
 
 **What it left behind.** Late-fee text is composed from i18n keys per basis, not from `describeLateFee` (English-only). Only step 1 is described; a second step is not mentioned. Protection coverage/exclusions, rate-change notice and the refund clause stay owner questions. Verification: typecheck, lint, i18n unit, `public-inventory-db` (new test: two facilities with different config publish different terms), smoke "pay today" and the facility-page axe scan on desktop and mobile.
+
+## B-398: "Take payment" offers card and cash, and POS search rows show the balance (2026-09-26, `SHA`)
+
+**What it built.** The tenant profile's per-lease link is now "Take card payment" plus "Cash or check", the latter to `/admin/pos?tenant=&lease=`. The card page's "not configured" fallback links to POS with the same parameters (tenant only for an account subject). `searchTenants` returns per-unit `balanceCents` and `arrearsCents`; each POS result row reads "A-12 · $161 past due", or "not yet due" when only current rent is owed.
+
+**What it decided.** Wording follows B-375: past due wins over not-yet-due. The `/admin/tenants/former` "Take payment" link is untouched (it already lands on POS with `lease`). Two existing specs match `Take card payment` now.
+
+**What it left behind.** `searchTenants` now runs two small queries per occupying lease (capped by the 25-tenant limit). Coverage is one read-only e2e on Dana Delinquent (B-120 discipline 1). Staff-only; accessibility statement makes no claim. Verification: typecheck, lint clean; admin-pos and admin-tenants e2e on desktop-chrome passed.

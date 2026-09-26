@@ -201,7 +201,10 @@ export default async function CounterCardPage({
         ) : (
           <p className="border-input rounded-lg border p-4 text-sm text-pretty">
             Card payments are not configured right now.{' '}
-            <Link href="/admin/pos" className="font-medium underline underline-offset-2">
+            <Link
+              href={`/admin/pos?tenant=${lease.tenantId}${lease.accountId ? '' : `&lease=${lease.leaseId}`}`}
+              className="font-medium underline underline-offset-2"
+            >
               Take cash or a check on the POS screen
             </Link>{' '}
             instead.

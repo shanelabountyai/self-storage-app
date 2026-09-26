@@ -146,7 +146,15 @@ export default async function PosPage({
                   {result.name}
                 </Link>{' '}
                 <span className="text-muted-foreground">
-                  {result.units.map((u) => u.unitNumber).join(', ') || 'no active unit'}
+                  {result.units
+                    .map((u) =>
+                      u.arrearsCents > 0
+                        ? `${u.unitNumber} · ${formatCents(u.arrearsCents)} past due`
+                        : u.balanceCents > 0
+                          ? `${u.unitNumber} · ${formatCents(u.balanceCents)} not yet due`
+                          : u.unitNumber,
+                    )
+                    .join(', ') || 'no active unit'}
                 </span>
               </li>
             ))}

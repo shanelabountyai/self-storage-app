@@ -273,7 +273,7 @@ test.describe('card at the counter', () => {
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
     await page.waitForURL(/\/admin\/tenants\/[^/?]+$/)
 
-    await page.getByRole('link', { name: /^Take payment/ }).first().click()
+    await page.getByRole('link', { name: /^Take card payment/ }).first().click()
     await page.waitForURL(/\/admin\/pos\/card\?lease=/)
     await expect(page.getByRole('heading', { level: 1, name: 'Take a card payment' })).toBeVisible()
     // The facility comes from the LEASE, not the admin facility switcher — the
@@ -286,10 +286,26 @@ test.describe('card at the counter', () => {
     await page.goto('/admin/tenants?q=dana@demo.example.com')
     await page.getByRole('link', { name: 'Dana Delinquent' }).click()
     await page.waitForURL(/\/admin\/tenants\/[^/?]+$/)
-    await page.getByRole('link', { name: /^Take payment/ }).first().click()
+    await page.getByRole('link', { name: /^Take card payment/ }).first().click()
     await page.waitForURL(/\/admin\/pos\/card\?lease=/)
     await expect(page.getByRole('main')).toBeVisible()
 
     await assertNoAxeViolations(page)
+  })
+
+  // B-398. Read-only: Dana is the past-due demo tenant, and this only navigates.
+  test('a tenant profile offers cash or check, landing on POS with the unit chosen; search rows show the balance', async ({
+    page,
+  }) => {
+    await page.goto('/admin/pos?q=dana@demo.example.com')
+    await expect(page.getByRole('link', { name: /Dana Delinquent/ }).locator('..')).toContainText(/\$[\d,.]+ past due/)
+
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await page.waitForURL(/\/admin\/tenants\/[^/?]+$/)
+    await page.getByRole('link', { name: /^Cash or check/ }).first().click()
+    await page.waitForURL((url) => url.pathname === '/admin/pos' && !!url.searchParams.get('tenant') && !!url.searchParams.get('lease'))
+    await expect(page.getByText('Dana Delinquent').first()).toBeVisible()
+    await expect(page.getByLabel('Cash tendered ($)')).toBeVisible()
   })
 })

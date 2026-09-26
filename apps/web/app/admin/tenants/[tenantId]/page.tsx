@@ -2249,13 +2249,22 @@ function LeaseActions({
               POS screen's own facility switcher is not necessarily on the one
               this unit is at. */}
           {lease.balanceCents > 0 && (
-            <Link
-              href={`/admin/pos/card?lease=${lease.leaseId}`}
-              className={linkClassName}
-            >
-              Take payment
-              <span className="sr-only"> for unit {lease.unitNumber}</span>
-            </Link>
+            <>
+              <Link
+                href={`/admin/pos/card?lease=${lease.leaseId}`}
+                className={linkClassName}
+              >
+                Take card payment
+                <span className="sr-only"> for unit {lease.unitNumber}</span>
+              </Link>
+              <Link
+                href={`/admin/pos?tenant=${tenantId}&lease=${lease.leaseId}`}
+                className={linkClassName}
+              >
+                Cash or check
+                <span className="sr-only"> for unit {lease.unitNumber}</span>
+              </Link>
+            </>
           )}
           <Link
             href={`/admin/tenants/${tenantId}/move-out?lease=${lease.leaseId}`}
