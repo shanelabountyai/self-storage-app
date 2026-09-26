@@ -11929,3 +11929,13 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** A today filter on the tenants list, which would let the move tiles land on a list, stays unbuilt and unowned (the row ruled it out). Staff-only screen, so the public accessibility statement is unaffected.
 
 **Verification.** typecheck, lint (6 pre-existing warnings). e2e `admin.spec.ts` "the dashboard" against a production build, desktop-chrome + mobile-chrome: 16 passed.
+
+## B-403: the walk-in move-in list is ordered by size and labelled (2026-09-26, `0c6c6f7`)
+
+**What it built.** `/admin/pos`'s walk-in list now runs smallest square footage first, sold-out sizes last, each row as "10×10 · Climate · Medium" with "Full — 0 available" replacing "0 available". Ordering and label live in `lib/admin/walk-in-sizes.ts` (`orderWalkInSizes`, `walkInSizeLabel`), covered by `tests/walk-in-sizes.test.ts` (three sizes, one sold out).
+
+**What it decided.** Sold-out rows stay listed (no Start button, as before) rather than hidden: staff need to see a size exists and is full. The counter move-in running on the customer `/checkout` IS deliberate: `startWalkInMoveInAction` calls `startCheckout` and redirects with the token, and the page copy says "the same move-in the website uses", quoted at the in-store rate. No owner call raised.
+
+**What it left behind.** Nothing. Staff-only screen, so the public accessibility statement was not touched.
+
+**Verification.** typecheck, unit test, `e2e/admin-pos.spec.ts` on desktop-chrome against a production build: 19 passed. mobile-chrome not run.
