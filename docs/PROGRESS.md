@@ -11885,7 +11885,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **What it left behind.** Late-fee text is composed from i18n keys per basis, not from `describeLateFee` (English-only). Only step 1 is described; a second step is not mentioned. Protection coverage/exclusions, rate-change notice and the refund clause stay owner questions. Verification: typecheck, lint, i18n unit, `public-inventory-db` (new test: two facilities with different config publish different terms), smoke "pay today" and the facility-page axe scan on desktop and mobile.
 
-## B-398: "Take payment" offers card and cash, and POS search rows show the balance (2026-09-26, `SHA`)
+## B-398: "Take payment" offers card and cash, and POS search rows show the balance (2026-09-26, `36ef1a7`)
 
 **What it built.** The tenant profile's per-lease link is now "Take card payment" plus "Cash or check", the latter to `/admin/pos?tenant=&lease=`. The card page's "not configured" fallback links to POS with the same parameters (tenant only for an account subject). `searchTenants` returns per-unit `balanceCents` and `arrearsCents`; each POS result row reads "A-12 · $161 past due", or "not yet due" when only current rent is owed.
 

@@ -1,5 +1,7 @@
 # Next
 
+**B-398 is built** (2026-09-26, `36ef1a7`). **Next item: B-399**, then B-400 to B-410 in `06-backlog.md` order. POS search rows carry per-unit balance; tenant profile has card and cash links.
+
 **B-397 is built** (2026-09-26). **Next item: B-398**, then B-399 to B-410 in `06-backlog.md` order. The facility page's price expander now has a late/leave block from `pricing.terms`. Finding: a future-dated move-in's gate code is issued at payment, not held to the start date (recorded in PROGRESS).
 
 **B-396 is built** (2026-09-25, `0ed234f`). **Next item: B-397**, then B-398 to B-410 in `06-backlog.md` order. The facility page has a price headline and `#units` anchor; the phone sticky bar is "See sizes" only; promo and filter forms are `<details>`, so specs must click the `summary` before filling them.
