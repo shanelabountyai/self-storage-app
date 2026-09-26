@@ -221,7 +221,6 @@ export const es: Dictionary = {
   'facility.ceiling': ' · {height} pies de altura',
   'facility.rentNow': 'Rentar ahora',
   'facility.reserveForFree': 'Reservar gratis',
-  'facility.reserveFree': 'Reservar gratis',
   'facility.trustLine':
     'Mes a mes, sin compromiso a largo plazo · Reservar es gratis y no pide tarjeta',
   'facility.allRented': 'Todo rentado en este momento — ',
@@ -267,6 +266,9 @@ export const es: Dictionary = {
   'facility.monthToMonth': 'Mes a mes · sin compromiso a largo plazo',
   'facility.availableUnits': 'Unidades disponibles',
   'facility.from': 'Desde {price}',
+  'facility.headlineOne': 'Desde {price}/mes · {count} tamaño disponible',
+  'facility.headlineOther': 'Desde {price}/mes · {count} tamaños disponibles',
+  'facility.seeSizes': 'Ver tamaños',
   'facility.atThisFacility': 'En esta sucursal',
   'facility.whereWeAre': 'Dónde estamos',
   'facility.openDirections': 'Abrir cómo llegar en su aplicación de mapas',

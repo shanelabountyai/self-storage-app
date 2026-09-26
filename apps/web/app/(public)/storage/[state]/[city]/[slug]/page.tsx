@@ -564,9 +564,7 @@ function FilterForm({
     translate(dict, key, vars)
   return (
     <form method="GET" className="border-input rounded-lg border p-4">
-      <h3 className="text-base font-medium">{t('facility.narrowThese')}</h3>
-
-      <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap">
         <div className="flex flex-col gap-1 text-sm">
           <label htmlFor="size">{t('facility.size')}</label>
           <select
@@ -875,12 +873,11 @@ export default async function FacilityPage({
   // a size the renter has just filtered out. Null (no bar) when nothing here is
   // rentable right now; a fabricated price on an empty facility is worse than
   // no bar at all.
-  const cheapestAvailable = (visible ?? [])
-    .filter((unitType) => unitType.availableCount > 0)
-    .reduce<PublicUnitType | null>(
-      (min, unitType) => (min === null || unitType.webRateCents < min.webRateCents ? unitType : min),
-      null,
-    )
+  const availableSizes = (visible ?? []).filter((unitType) => unitType.availableCount > 0)
+  const cheapestAvailable = availableSizes.reduce<PublicUnitType | null>(
+    (min, unitType) => (min === null || unitType.webRateCents < min.webRateCents ? unitType : min),
+    null,
+  )
 
   // PRD 04 FR-AN-2. Server-side, so it survives an ad blocker and a declined
   // consent — this is the top of the funnel and the denominator of every
@@ -1059,6 +1056,20 @@ export default async function FacilityPage({
 
       <ContactBlock facility={facility} phone={phone} dict={dict} />
 
+      {/* B-396. The first price used to sit five blocks down, under two hours
+          tables and two forms. Same inventory as the sticky bar below. After the contact block, not
+          before the photos: US-103 keeps Call inside the first phone viewport. */}
+      {cheapestAvailable && (
+        <p className="mt-4 text-base font-medium">
+          {plural(dict, availableSizes.length, 'facility.headlineOne', 'facility.headlineOther', {
+            price: formatRate(cheapestAvailable.webRateCents),
+          })}{' '}
+          <a href="#units" className="underline underline-offset-4">
+            {t('facility.seeSizes')}
+          </a>
+        </p>
+      )}
+
       {/* §6.6: the commitment terms belong next to the decision, not buried in
           the lease. */}
       <p className="text-muted-foreground mt-4 text-sm">
@@ -1093,13 +1104,16 @@ export default async function FacilityPage({
       </section>
 
       <section aria-labelledby="units" className="mt-10">
-        <h2 id="units" className="text-xl font-medium">
+        <h2 id="units" tabIndex={-1} className="text-xl font-medium">
           {t('facility.availableUnits')}
         </h2>
         {unitTypes !== null && unitTypes.length > 0 && (
-          <div className="mt-4">
+          <details className="mt-4" open={hasActiveFilters(filters)}>
+            <summary className="min-h-11 cursor-pointer py-2 text-base font-medium">
+              {t('facility.narrowThese')}
+            </summary>
             <FilterForm filters={filters} resultCount={visible?.length ?? 0} dict={dict} />
-          </div>
+          </details>
         )}
 
         {/* PRD 04 US-11 AC3 (B-122). Below the filters and above the cards, so
@@ -1108,14 +1122,17 @@ export default async function FacilityPage({
             replaces the whole query string, so without them applying a code
             would silently clear the choices the renter had already made. */}
         {unitTypes !== null && unitTypes.length > 0 && (
-          <div className="mt-4">
+          <details className="mt-4" open={typedCode !== null}>
+            <summary className="min-h-11 cursor-pointer py-2 text-base font-medium">
+              {t('promo.haveACode')}
+            </summary>
             <PromoCodeEntry
               outcome={codeOutcome}
               value={typedCode ?? ''}
               carry={carriedQuery(query)}
               dict={dict}
             />
-          </div>
+          </details>
         )}
 
         <div className="mt-4">
@@ -1158,27 +1175,12 @@ export default async function FacilityPage({
               {t('facility.from', { price: formatRate(cheapestAvailable.webRateCents) })}
               <span className="text-muted-foreground font-normal">{t('card.perMonth')}</span>
             </p>
-            <div className="flex gap-2">
-              <form method="POST" action={`${facilityPath(facility)}/rent`}>
-                <input type="hidden" name="unitTypeId" value={cheapestAvailable.unitTypeId} />
-                {/* B-122. The sticky bar starts the same checkout as a card, so
-                    it has to carry the same code — a renter who applied one and
-                    then used this button instead would silently lose it. */}
-                {typedCode && <input type="hidden" name="promo" value={typedCode} />}
-                <button
-                  type="submit"
-                  className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
-                >
-                  {t('facility.rentNow')}
-                </button>
-              </form>
-              <Link
-                href={`${facilityPath(facility)}/reserve?unitType=${cheapestAvailable.unitTypeId}`}
-                className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
-              >
-                {t('facility.reserveFree')}
-              </Link>
-            </div>
+            <a
+              href="#units"
+              className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+            >
+              {t('facility.seeSizes')}
+            </a>
           </div>
         </div>
       )}

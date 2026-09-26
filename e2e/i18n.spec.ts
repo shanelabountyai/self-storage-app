@@ -535,6 +535,7 @@ test('the Spanish promo box refuses AND confirms in Spanish (B-266)', async ({
   // same code at Austin is a real `not_for_this_facility` — a distinct rule with
   // its own sentence, which is what the seven keys exist for.
   await page.goto('/storage/tx/austin/demo-austin-south')
+  await page.locator('summary', { hasText: '¿Tiene un código de promoción?' }).click()
   await page.getByLabel('¿Tiene un código de promoción?').fill(DEMO_PROMO_CODE)
   await page.getByRole('button', { name: 'Aplicar código' }).click()
 

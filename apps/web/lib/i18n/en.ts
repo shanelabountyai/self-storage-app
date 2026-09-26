@@ -222,7 +222,6 @@ export const en = {
   'facility.ceiling': ' · {height} ft ceiling',
   'facility.rentNow': 'Rent now',
   'facility.reserveForFree': 'Reserve for free',
-  'facility.reserveFree': 'Reserve free',
   'facility.trustLine':
     'Month-to-month, no long-term commitment · Reserving is free and needs no card',
   'facility.allRented': 'All rented right now — ',
@@ -264,6 +263,9 @@ export const en = {
   'facility.monthToMonth': 'Month-to-month · no long-term commitment',
   'facility.availableUnits': 'Available units',
   'facility.from': 'From {price}',
+  'facility.headlineOne': 'From {price}/mo · {count} size available',
+  'facility.headlineOther': 'From {price}/mo · {count} sizes available',
+  'facility.seeSizes': 'See sizes',
   'facility.atThisFacility': 'At this facility',
   'facility.whereWeAre': 'Where we are',
   'facility.openDirections': 'Open directions in your map app',

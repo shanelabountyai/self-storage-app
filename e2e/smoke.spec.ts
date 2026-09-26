@@ -578,32 +578,37 @@ test('a facility with no photos renders no hero and no empty gallery frame (B-11
   await expect(page.getByRole('img')).toHaveCount(0)
 })
 
-test('the sticky Rent now bar names the cheapest of three sizes, below sm only (B-118)', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile-chrome', 'the bar is sm:hidden — asserted absent on desktop below')
-  // Austin, read-only — no checkout POST here, so no unit is consumed. That
-  // matters on this facility specifically: 5x5 Locker has only 6 units, and
-  // this file's many "Rent now" tests already contend for Austin's small
-  // pools under full parallel load (see the sandbox-facility test below for
-  // the real click-through, which needs room this facility does not have).
+test('the phone sticky bar names the cheapest size and jumps to the sizes (B-396)', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chrome', 'the bar is sm:hidden')
+  // Austin, read-only. 5x5 Locker is the cheapest of the three seeded types
+  // (web 5_900), and the bar must not start a checkout on it any more.
+  await page.setViewportSize({ width: 375, height: 667 })
   await page.goto('/storage/tx/austin/demo-austin-south')
 
-  // 5x5 Locker is the cheapest of the three seeded types (web 5_900 vs 12_900
-  // and 22_900) — the bar has to pick the true minimum, not the first row.
-  const bar = page.getByText('From $59', { exact: false }).locator('..')
-  await expect(bar.getByRole('button', { name: 'Rent now' })).toBeVisible()
-  await expect(bar.getByRole('link', { name: 'Reserve free' })).toBeVisible()
+  await expect(page.getByText('From $59/mo · 3 sizes available')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Rent now' }).first()).toBeVisible() // the cards' own
+  const bar = page.locator('div.sticky').filter({ hasText: 'From $59' })
+  await expect(bar.getByRole('button')).toHaveCount(0)
+  await expect(bar.getByRole('link', { name: 'Reserve free' })).toHaveCount(0)
+
+  // Activating "See sizes" moves focus to the units heading (SC 2.4.3), and
+  // the bar never sits on top of it (SC 2.4.7).
+  await page.getByRole('link', { name: 'See sizes' }).first().click()
+  const heading = page.getByRole('heading', { name: 'Available units' })
+  await expect(heading).toBeFocused()
+  const covered = await heading.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    return hit !== null && !el.contains(hit) && hit !== el
+  })
+  expect(covered).toBe(false)
 })
 
-test('the sticky Rent now bar actually starts a checkout (B-118)', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile-chrome', 'the bar is sm:hidden')
-  // The e2e sandbox facility, not Austin: this test really POSTs and holds a
-  // unit, and the sandbox is the one facility sized (250 units of one type)
-  // for exactly that under full parallel load — see global-setup.ts.
-  await page.goto('/storage/tx/houston/demo-e2e')
-
-  const bar = page.getByText('From $129', { exact: false }).locator('..')
-  await bar.getByRole('button', { name: 'Rent now' }).click()
-  await expect(page).toHaveURL(/\/checkout\?token=/)
+test('the promo and filter forms are closed until used (B-396)', async ({ page }) => {
+  await page.goto('/storage/tx/austin/demo-austin-south')
+  await expect(page.locator('details').filter({ hasText: 'Have a promo code?' }).first()).not.toHaveAttribute('open', '')
+  await page.goto('/storage/tx/austin/demo-austin-south?promo=NOSUCHCODE')
+  await expect(page.locator('details[open]').filter({ hasText: 'Have a promo code?' })).toHaveCount(1)
 })
 
 // ── B-122: promo codes ───────────────────────────────────────────────────────
@@ -621,6 +626,7 @@ test('a promo code applies from the facility page and shows its terms (B-122)', 
   // would make the code pointless.
   await expect(page.getByText('Half off your first month')).toHaveCount(0)
 
+  await page.locator('summary', { hasText: 'Have a promo code?' }).click()
   await page.getByLabel('Have a promo code?').fill(DEMO_PROMO_CODE)
   await page.getByRole('button', { name: 'Apply code' }).click()
 
@@ -646,6 +652,7 @@ test('a promo code applies from the facility page and shows its terms (B-122)', 
 // checkout session, which the sandbox facility exists for.
 test('the promo\'d facility-page total equals what checkout charges (B-226)', async ({ page }) => {
   await page.goto('/storage/tx/houston/demo-e2e')
+  await page.locator('summary', { hasText: 'Have a promo code?' }).click()
   await page.getByLabel('Have a promo code?').fill(DEMO_PROMO_CODE)
   await page.getByRole('button', { name: 'Apply code' }).click()
   await expect(page.getByRole('status').filter({ hasText: /Code applied/ })).toBeVisible()
@@ -694,6 +701,7 @@ test('a refused code says WHICH rule refused it, not just that it failed (B-122)
   // not valid" is a support call and a 3.3.3 failure.
   await page.goto('/storage/tx/austin/demo-austin-south')
 
+  await page.locator('summary', { hasText: 'Have a promo code?' }).click()
   await page.getByLabel('Have a promo code?').fill(DEMO_PROMO_CODE)
   await page.getByRole('button', { name: 'Apply code' }).click()
 
@@ -707,6 +715,7 @@ test('a refused code says WHICH rule refused it, not just that it failed (B-122)
 test('an unknown code is named as unknown, and nothing is discounted (B-122)', async ({ page }) => {
   await page.goto('/storage/tx/houston/demo-e2e')
 
+  await page.locator('summary', { hasText: 'Have a promo code?' }).click()
   await page.getByLabel('Have a promo code?').fill('NOT-A-REAL-CODE')
   await page.getByRole('button', { name: 'Apply code' }).click()
 
@@ -762,7 +771,7 @@ test('the sticky bar is absent above sm — each unit card already carries its o
   // text-content locator like `getByText` still counts it (unlike `getByRole`,
   // which does respect the accessibility tree). `toHaveCount(0)` here would
   // pass even if `sm:hidden` silently stopped applying.
-  await expect(page.getByText('From $59', { exact: false })).toBeHidden()
+  await expect(page.locator('div.sticky').filter({ hasText: 'From $59' })).toBeHidden()
 })
 
 test('filters narrow the list and survive into the URL', async ({ page }) => {
@@ -779,6 +788,7 @@ test('filters narrow the list and survive into the URL', async ({ page }) => {
   // `role="status"` here. Neither is a defect in the page — a page may have
   // two live regions and two buttons whose labels share a word — so both
   // locators are narrowed rather than the page changed.
+  await page.locator('summary', { hasText: 'Narrow these down' }).click()
   await page.getByLabel('Size', { exact: true }).selectOption('small')
   // 3.2.2: selecting must not navigate on its own.
   await expect(page).not.toHaveURL(/size=small/)
