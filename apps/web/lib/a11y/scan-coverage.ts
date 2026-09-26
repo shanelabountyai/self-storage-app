@@ -790,6 +790,25 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       "All three of these need a priced preview to go stale between render and submit (B-173) — a timing state, not a layout one, and the underlying pages are in the route loops.",
   },
+  // B-399. A move-out posted with no cause. `parseMoveOutCause` refuses before
+  // anything is written, so both are safe against B-120's rule for shared demo
+  // state.
+  {
+    route: '/admin/tenants/[tenantId]/move-out',
+    state: 'cause refusal',
+    spec: 'e2e/admin-move-out.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'A refusal summary added to a page the route loops already measure; it adds one alert and no new layout.',
+  },
+  {
+    route: '/portal/move-out',
+    state: 'cause refusal',
+    spec: 'e2e/portal-move-out.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'A refusal summary added to a page the route loops already measure; it adds one alert and no new layout.',
+  },
   // B-187. Reachable only for a lapsed checkout session whose size has since
   // sold out — no route can be visited to reach it, the same reason the
   // waitlist-opened and stale-preview states above are states rather than

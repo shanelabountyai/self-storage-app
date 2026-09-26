@@ -559,3 +559,15 @@ describe('attach rate', () => {
     expect(rolled.byStaff.staff_2.moveIns).toBe(40)
   })
 })
+
+describe('B-399 move-out cause split', () => {
+  it('sums to the move-out count, showing null causes as not recorded', () => {
+    const counts = moveCounts([], 4, ['bought_home', 'system_transfer', null, 'bought_home'])
+    expect(counts.byMoveOutCause.bought_home).toBe(2)
+    expect(counts.byMoveOutCause.not_recorded).toBe(1)
+    expect(Object.values(counts.byMoveOutCause).reduce((a, b) => a + b, 0)).toBe(counts.moveOuts)
+
+    const rolled = sumMoveCounts([counts, moveCounts([], 1, ['other'])])
+    expect(Object.values(rolled.byMoveOutCause).reduce((a, b) => a + b, 0)).toBe(rolled.moveOuts)
+  })
+})

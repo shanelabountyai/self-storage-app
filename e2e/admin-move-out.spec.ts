@@ -100,6 +100,24 @@ test.describe('signed in as the demo owner', () => {
     await assertNoAxeViolations(page)
   })
 
+  // B-399. Same shape as the stale-date refusal: nothing is written, so it holds
+  // on a re-run against the shared demo database.
+  // a11y-state: /admin/tenants/[tenantId]/move-out | cause refusal
+  test('a move-out with no cause is refused rather than committed', async ({ page }) => {
+    await page.goto('/admin/tenants?q=dana@demo.example.com')
+    await page.getByRole('link', { name: 'Dana Delinquent' }).click()
+    await page.getByRole('link', { name: 'Move out' }).first().click()
+
+    await page.getByLabel('Why did the tenant leave?').selectOption('')
+    await page.getByRole('button', { name: /^Complete move-out on / }).click()
+
+    const alert = page.getByRole('alert').filter({ hasText: 'Choose why the tenant left' })
+    await expect(alert).toBeFocused()
+    await expect(page).toHaveURL(/\/move-out\?lease=/)
+
+    await assertNoAxeViolations(page)
+  })
+
   // B-194. The date field announced as "Notice given on Off-platform notice —
   // at the counter, by phone, by mail. Leave blank if nobody has confirmed
   // one." — the whole hint paragraph was nested INSIDE the <label>, so the

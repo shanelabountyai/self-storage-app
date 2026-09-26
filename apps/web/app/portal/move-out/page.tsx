@@ -8,7 +8,8 @@ import {
   tenantMoveOutLeases,
 } from "@/lib/portal/move-out";
 import { formatRate } from "@/lib/format";
-import { AdminForm, Field } from "@/components/admin/form";
+import { AdminForm, Field, FieldSet } from "@/components/admin/form";
+import { CHOSEN_MOVE_OUT_CAUSES } from "@storage/core/metrics";
 import { CallLink, phoneFor } from "@/components/marketing/call-link";
 import { cancelMoveOutAction, requestMoveOutAction } from "./actions";
 import { dictionaryFor, plural, translate, type MessageKey } from '@/lib/i18n'
@@ -290,6 +291,23 @@ export default async function PortalMoveOutPage({
             {t('mo.update')}
           </button>
         </div>
+
+      <FieldSet name="cause" legend={t('mo.cause.legend')}>
+        {CHOSEN_MOVE_OUT_CAUSES.map((cause) => (
+          <Field
+            key={cause}
+            name="cause"
+            as="radio"
+            value={cause}
+            label={t(`mo.cause.${cause}` as MessageKey)}
+          />
+        ))}
+      </FieldSet>
+      <Field
+        name="causeNote"
+        label={t('mo.cause.note')}
+        maxLength={200}
+      />
 
       {previewProblem && (
         /* B-295: no `role="alert"` — the GET-submit case, as on

@@ -332,6 +332,27 @@ describeDb('portal move-out request', () => {
     })
   })
 
+  describe('B-399 cause', () => {
+    it('records the tenant’s cause on request and clears it on cancel', async () => {
+      const { leaseId } = await makeLease(tenantId)
+      const minDate = (await tenantMoveOutLeases(tenantId)).find((l) => l.leaseId === leaseId)!
+        .minMoveOutDate
+      await requestMoveOut(tenantId, leaseId, minDate, { cause: 'price_or_rate_increase', note: 'Rent went up' })
+      const asked = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })
+      expect(asked.moveOutCause).toBe('price_or_rate_increase')
+      expect(asked.moveOutCauseNote).toBe('Rent went up')
+
+      await cancelMoveOutRequest(tenantId, leaseId)
+      const cancelled = await prisma.lease.findUniqueOrThrow({ where: { id: leaseId } })
+      expect(cancelled.moveOutCause).toBeNull()
+      expect(cancelled.moveOutCauseNote).toBeNull()
+
+      await prisma.task.deleteMany({ where: { entityId: leaseId } })
+      await prisma.domainEvent.deleteMany({ where: { entityId: leaseId } })
+      await prisma.lease.delete({ where: { id: leaseId } })
+    })
+  })
+
   describe('cancelMoveOutRequest', () => {
     it('clears the request and withdraws the task', async () => {
       const { leaseId } = await makeLease(tenantId)

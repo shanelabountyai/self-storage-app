@@ -4,6 +4,7 @@ import { previewMoveOut, recaptureDescription } from "@/lib/admin/move-out";
 import { formatCents, formatDay } from "@/lib/format";
 import { AdminForm, Field } from "@/components/admin/form";
 import { REASON_CODES, REASON_CODE_LABELS } from "@storage/core/audit";
+import { CHOSEN_MOVE_OUT_CAUSES, MOVE_OUT_CAUSE_LABELS } from "@storage/core/metrics";
 import { completeMoveOutAction, setNoticeGivenOnMoveOutAction } from "./actions";
 import { ChargeFeeForm } from "@/components/admin/charge-fee-form";
 import { chargeableFees } from "@/lib/billing/charges";
@@ -333,6 +334,32 @@ export default async function MoveOutPage({
             Abandoned — dated to last occupancy evidence
           </option>
         </Field>
+
+        {/* B-399. Why they left, apart from how the lease ended. Required for
+            a tenant move-out; an abandonment records its own system cause and
+            never asks. Opens on the tenant's own answer when they requested
+            the move-out in the portal. */}
+        <Field
+          name="cause"
+          label="Why did the tenant leave?"
+          as="select"
+          defaultValue={preview.moveOutCause ?? ""}
+          hint="Required, except for an abandonment."
+          className={FIELD_CLASS}
+        >
+          <option value="">Choose a reason…</option>
+          {CHOSEN_MOVE_OUT_CAUSES.map((cause) => (
+            <option key={cause} value={cause}>
+              {MOVE_OUT_CAUSE_LABELS[cause]}
+            </option>
+          ))}
+        </Field>
+        <Field
+          name="causeNote"
+          label="Note (optional, up to 200 characters)"
+          maxLength={200}
+          defaultValue={preview.moveOutCauseNote ?? ""}
+        />
 
         {/* B-168. Reducing the recapture is its own lever, separate from the
             write-off below, and that separation IS the fix: `writeOff` is all

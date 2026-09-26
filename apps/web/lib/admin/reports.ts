@@ -611,13 +611,16 @@ export async function movesForFacility(
   })
   const from = businessDateFor(periodStart, timezone)
   const to = businessDateFor(periodEnd, timezone)
-  const [moveIns, moveOutCount, reservations] = await Promise.all([
+  const [moveIns, moveOuts, reservations] = await Promise.all([
     prisma.lease.findMany({
       where: { facilityId, startDate: { gte: from, lt: to } },
       select: { id: true, acquisitionSource: true, acquisitionChannel: true },
     }),
-    prisma.lease.count({
+    // B-399. Rows, not a count, so the cause split and the total come from the
+    // same set and cannot disagree.
+    prisma.lease.findMany({
       where: { facilityId, moveOutDate: { gte: from, lt: to }, status: 'ended' },
+      select: { moveOutCause: true },
     }),
     // Serves every source (B-140): an aggregate count of holds created in the
     // period, not a per-tenant message — a transfer hold belongs in this
@@ -650,7 +653,8 @@ export async function movesForFacility(
         source: normalizeSource(lease.acquisitionSource),
         channel: normalizeChannel(lease.acquisitionChannel),
       })),
-      moveOutCount,
+      moveOuts.length,
+      moveOuts.map((lease) => lease.moveOutCause),
     ),
     conversion: reservationConversion(
       reservations.map((reservation) => ({

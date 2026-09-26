@@ -16,6 +16,7 @@ import {
   previewMoveOut,
   recaptureDescription,
   NOTICE_PROBLEM_COPY,
+  parseMoveOutCause,
   parseNoticeGivenAt,
   recordNoticeGiven,
 } from "../apps/web/lib/admin/move-out";
@@ -633,6 +634,39 @@ describeDb("move-out", () => {
       _sum: { amountCents: true },
     });
     expect(balance._sum.amountCents, "abandonment forgave the debt").toBe(500);
+  });
+
+  it("B-399: records the cause a person chose, and the system cause for an abandonment", async () => {
+    const chosen = await makeLease(unitAId, 0);
+    await completeMoveOut(actorOf(managerId, 20), {
+      leaseId: chosen.id,
+      moveOutDate: d("2026-09-30"),
+      reason: "tenant_request",
+      cause: "bought_home",
+      causeNote: "Closing on the 1st",
+    });
+    const a = await prisma.lease.findUniqueOrThrow({ where: { id: chosen.id } });
+    expect(a.moveOutCause).toBe("bought_home");
+    expect(a.moveOutCauseNote).toBe("Closing on the 1st");
+
+    const abandoned = await makeLease(unitBId, 0);
+    await completeMoveOut(actorOf(managerId, 20), {
+      leaseId: abandoned.id,
+      moveOutDate: d("2026-09-30"),
+      reason: "abandonment",
+      cause: "moved_away", // a person's answer is ignored for a system ending
+    });
+    const b = await prisma.lease.findUniqueOrThrow({ where: { id: abandoned.id } });
+    expect(b.moveOutCause).toBe("system_abandonment");
+  });
+
+  it("B-399: a form post without a chosen cause is refused, naming which problem", () => {
+    expect(parseMoveOutCause(null, null)).toEqual({ error: "cause_required" });
+    expect(parseMoveOutCause("", null)).toEqual({ error: "cause_required" });
+    // A system cause is not something a form may claim.
+    expect(parseMoveOutCause("system_transfer", null)).toEqual({ error: "cause_required" });
+    expect(parseMoveOutCause("other", "x".repeat(201))).toEqual({ error: "note_too_long" });
+    expect(parseMoveOutCause("other", "  ")).toEqual({ cause: "other", note: null });
   });
 
   it("lists a former tenant who left owing, and not one who did not", async () => {

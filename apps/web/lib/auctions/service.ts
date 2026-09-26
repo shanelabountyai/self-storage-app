@@ -996,7 +996,12 @@ export async function recordSaleOutcome(
     // somebody has opened the door.
     await tx.lease.update({
       where: { id: view.leaseId },
-      data: { status: 'ended', endDate: input.soldAt, moveOutDate: input.soldAt },
+      data: {
+        status: 'ended',
+        endDate: input.soldAt,
+        moveOutDate: input.soldAt,
+        moveOutCause: 'system_lien_sale',
+      },
     })
     await tx.unit.update({ where: { id: view.unitId }, data: { operationalStatus: 'maintenance' } })
     // B-151. The lock comes off with the lease, whatever the balance did.

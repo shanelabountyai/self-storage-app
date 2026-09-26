@@ -13,7 +13,7 @@ import {
 } from '@/lib/admin/reports'
 import { ArAgingSplitTable } from '@/components/admin/ar-aging-split-table'
 import { formatCents } from '@/lib/format'
-import { UNASSIGNED_STAFF, type AttachRateBucket } from '@storage/core/metrics'
+import { MOVE_OUT_CAUSE_LABELS, UNASSIGNED_STAFF, type AttachRateBucket } from '@storage/core/metrics'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Reports' }
@@ -70,12 +70,14 @@ function MoveSplit({
   counts,
   labels,
   total,
+  noun = 'Move-ins',
 }: {
   heading: string
   hint: string
   counts: Record<string, number>
   labels: Record<string, string>
   total: number
+  noun?: 'Move-ins' | 'Move-outs'
 }) {
   const rows = Object.entries(counts).filter(([, count]) => count > 0)
 
@@ -84,7 +86,7 @@ function MoveSplit({
       <h3 className="text-sm font-medium">{heading}</h3>
       <p className="text-muted-foreground text-sm text-pretty">{hint}</p>
       {rows.length === 0 ? (
-        <EmptyState>No move-ins in this period.</EmptyState>
+        <EmptyState>No {noun.toLowerCase()} in this period.</EmptyState>
       ) : (
         <ScrollRegion aria-label={heading}>
           <DataTable className="min-w-md">
@@ -92,10 +94,10 @@ function MoveSplit({
           <DataTable.Head>
             <tr>
               <th scope="col" className="px-3 py-2 font-semibold">
-                {heading.replace('Move-ins by ', '').replace(/^./, (c) => c.toUpperCase())}
+                {heading.replace(/^Move-(ins|outs) by /, '').replace(/^./, (c) => c.toUpperCase())}
               </th>
               <th scope="col" className="px-3 py-2 text-right font-semibold">
-                Move-ins
+                {noun}
               </th>
               <th scope="col" className="px-3 py-2 text-right font-semibold">
                 Share
@@ -558,6 +560,14 @@ export default async function ReportsPage({
             counts={moves.total.moves.bySource}
             labels={SOURCE_LABELS}
             total={moves.total.moves.moveIns}
+          />
+          <MoveSplit
+            heading="Move-outs by cause"
+            hint="Why the tenant left, as the office or the tenant recorded it. “Not recorded” is every move-out from before the question was asked, never a guess."
+            counts={moves.total.moves.byMoveOutCause}
+            labels={MOVE_OUT_CAUSE_LABELS}
+            total={moves.total.moves.moveOuts}
+            noun="Move-outs"
           />
         </div>
       </section>

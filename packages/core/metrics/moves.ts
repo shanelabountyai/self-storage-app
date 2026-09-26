@@ -51,6 +51,50 @@ export function normalizeChannel(channel: string | null | undefined): MoveChanne
   return (MOVE_CHANNELS as readonly string[]).includes(channel) ? (channel as MoveChannel) : 'unknown'
 }
 
+/// B-399. Why a tenant left. The first seven are chosen by a person; the
+/// `system_*` values are recorded by the code when a process ends the lease.
+/// `not_recorded` is a null column (every move-out before B-399), kept visible
+/// rather than guessed, for the same reason `unknown` is above.
+export const MOVE_OUT_CAUSES = [
+  'price_or_rate_increase',
+  'moved_away',
+  'no_longer_needed',
+  'bought_home',
+  'switched_facility',
+  'service_issue',
+  'other',
+  'system_transfer',
+  'system_abandonment',
+  'system_lien_sale',
+  'not_recorded',
+] as const
+export type MoveOutCauseKey = (typeof MOVE_OUT_CAUSES)[number]
+
+/// The causes a person picks, in the order the forms list them.
+export const CHOSEN_MOVE_OUT_CAUSES = MOVE_OUT_CAUSES.slice(0, 7) as readonly MoveOutCauseKey[]
+
+export function normalizeMoveOutCause(cause: string | null | undefined): MoveOutCauseKey {
+  if (!cause) return 'not_recorded'
+  return (MOVE_OUT_CAUSES as readonly string[]).includes(cause)
+    ? (cause as MoveOutCauseKey)
+    : 'not_recorded'
+}
+
+// B-399. `not_recorded` is every move-out before the cause was captured.
+export const MOVE_OUT_CAUSE_LABELS: Record<string, string> = {
+  price_or_rate_increase: 'Price or rate increase',
+  moved_away: 'Moved away',
+  no_longer_needed: 'No longer needed',
+  bought_home: 'Bought a home',
+  switched_facility: 'Switched facility',
+  service_issue: 'Service issue',
+  other: 'Other',
+  system_transfer: 'Transferred units (system)',
+  system_abandonment: 'Abandoned (system)',
+  system_lien_sale: 'Lien sale (system)',
+  not_recorded: 'Not recorded',
+}
+
 export type MoveEvent = { source: MoveSource; channel: MoveChannel }
 
 export type MoveCounts = {
@@ -64,6 +108,16 @@ export type MoveCounts = {
   /// `moveIns` — that is what makes the two axes comparable rather than two
   /// unrelated numbers on one screen.
   byChannel: Record<MoveChannel, number>
+  /// B-399. Move-outs split by cause. Sums to `moveOuts` when the caller passes
+  /// the causes (the report does); zero everywhere when it passes only a count.
+  byMoveOutCause: Record<MoveOutCauseKey, number>
+}
+
+function emptyByMoveOutCause(): Record<MoveOutCauseKey, number> {
+  return Object.fromEntries(MOVE_OUT_CAUSES.map((cause) => [cause, 0])) as Record<
+    MoveOutCauseKey,
+    number
+  >
 }
 
 function emptyBySource(): Record<MoveSource, number> {
@@ -83,9 +137,12 @@ function emptyByChannel(): Record<MoveChannel, number> {
 export function moveCounts(
   moveIns: readonly MoveEvent[],
   moveOutCount: number,
+  moveOutCauses: readonly (string | null)[] = [],
 ): MoveCounts {
   const bySource = emptyBySource()
   const byChannel = emptyByChannel()
+  const byMoveOutCause = emptyByMoveOutCause()
+  for (const cause of moveOutCauses) byMoveOutCause[normalizeMoveOutCause(cause)] += 1
   for (const move of moveIns) {
     bySource[move.source] += 1
     byChannel[move.channel] += 1
@@ -97,19 +154,22 @@ export function moveCounts(
     net: moveIns.length - moveOutCount,
     bySource,
     byChannel,
+    byMoveOutCause,
   }
 }
 
 export function sumMoveCounts(counts: readonly MoveCounts[]): MoveCounts {
   const bySource = emptyBySource()
   const byChannel = emptyByChannel()
+  const byMoveOutCause = emptyByMoveOutCause()
   for (const count of counts) {
+    for (const cause of MOVE_OUT_CAUSES) byMoveOutCause[cause] += count.byMoveOutCause[cause]
     for (const source of MOVE_SOURCES) bySource[source] += count.bySource[source]
     for (const channel of MOVE_CHANNELS) byChannel[channel] += count.byChannel[channel]
   }
   const moveIns = counts.reduce((total, c) => total + c.moveIns, 0)
   const moveOuts = counts.reduce((total, c) => total + c.moveOuts, 0)
-  return { moveIns, moveOuts, net: moveIns - moveOuts, bySource, byChannel }
+  return { moveIns, moveOuts, net: moveIns - moveOuts, bySource, byChannel, byMoveOutCause }
 }
 
 export type ReservationOutcome = {

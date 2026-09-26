@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { checkFreshAuth } from '@/lib/auth/reauth'
+import { parseMoveOutCause } from '@/lib/admin/move-out'
 import {
   cancelMoveOutRequest,
   PORTAL_MOVE_OUT_PROBLEM_KEYS,
@@ -63,9 +64,20 @@ export async function requestMoveOutAction(_prev: FormState, formData: FormData)
   )
   if (stale) return stale
 
+  // B-399. Before the re-auth redirect, like the stale-date check: nobody is
+  // sent through a password prompt to be told a field was empty.
+  const cause = parseMoveOutCause(formData.get('cause'), formData.get('causeNote'))
+  if ('error' in cause) {
+    return fieldError(
+      cause.error === 'cause_required'
+        ? { cause: translate(dict, 'mo.problem.cause_required') }
+        : { causeNote: translate(dict, 'mo.problem.note_too_long') },
+    )
+  }
+
   await requireFresh(`/portal/move-out?lease=${leaseId}`)
 
-  const result = await requestMoveOut(actor.tenantId, leaseId, new Date(`${moveOutDate}T00:00:00.000Z`))
+  const result = await requestMoveOut(actor.tenantId, leaseId, new Date(`${moveOutDate}T00:00:00.000Z`), cause)
   if (!result.ok) {
     return fieldError({
       date: translate(dict, REQUEST_PROBLEM_KEYS[result.reason] ?? 'mo.problem.generic', {

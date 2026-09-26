@@ -81,6 +81,23 @@ enum OperationalUnitStatus {
   unrentable
 }
 
+/// PRD 02 US-14 (B-399). WHY a lease ended, a separate fact from `MoveOutReason`
+/// (how it ended). The first seven are what a person chose; the `system_*`
+/// values are recorded by the code when the lease is ended by a process, and are
+/// never asked for. Null on a lease is "not recorded" — never back-filled.
+enum MoveOutCause {
+  price_or_rate_increase
+  moved_away
+  no_longer_needed
+  bought_home
+  switched_facility
+  service_issue
+  other
+  system_transfer
+  system_abandonment
+  system_lien_sale
+}
+
 /// US-14. How a lease ended, which changes what is owed and what evidence
 /// backs the date — an abandonment is dated to the last occupancy evidence,
 /// not to a tenant's word, and forgives nothing.
@@ -1465,6 +1482,10 @@ model Lease {
   paidThroughDate        DateTime?        @db.Date
   moveOutDate            DateTime?        @db.Date
   moveOutReason          MoveOutReason?
+  /// B-399. Why the tenant left; see `MoveOutCause`. The note is free text
+  /// (≤200), used chiefly with `other`.
+  moveOutCause           MoveOutCause?
+  moveOutCauseNote       String?          @db.VarChar(200)
   protectionPlanName     String?
   protectionCents        Int              @default(0)
   /// Set when the tenant waives protection, with the attestation text shown.

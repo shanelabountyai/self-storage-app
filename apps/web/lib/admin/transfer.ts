@@ -535,6 +535,7 @@ export async function completeTransfer(
         endDate: input.transferDate,
         moveOutDate: input.transferDate,
         moveOutReason: 'transfer',
+        moveOutCause: 'system_transfer',
       },
     })
 

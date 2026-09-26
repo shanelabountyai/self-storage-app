@@ -114,6 +114,22 @@ test.describe('signed in as the demo tenant', () => {
     await expect(refusal).toBeFocused()
   })
 
+  // B-399. A request with no cause is refused before anything is written, so
+  // this is safe against the shared demo database.
+  // a11y-state: /portal/move-out | cause refusal
+  test('a request without a cause is refused and names the group', async ({ page }) => {
+    await page.goto('/portal/move-out')
+    await page.getByRole('button', { name: /^Request a move-out on / }).click()
+
+    const alert = page.getByRole('main').getByRole('alert')
+    await expect(alert).toContainText('Choose why you are leaving.')
+    await expect(alert).toBeFocused()
+    await expect(page.getByRole('group', { name: /Why are you leaving/ })).toBeVisible()
+    await expect(page).toHaveURL(/\/move-out(\?|$)/)
+
+    await assertNoAxeViolations(page)
+  })
+
   // B-184 (T1). B-173's `stalePreview` guard, reachable the ordinary way — this
   // page has an explicit "Update" button beside the picker (a native GET
   // submit of the same form), so typing a new date and pressing "Request a

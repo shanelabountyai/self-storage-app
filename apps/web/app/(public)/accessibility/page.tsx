@@ -2954,6 +2954,14 @@ function reviewedOn(locale: Locale): string {
 // The rail's markup is unchanged (D-149) and the "Carrying your … filter" line
 // is gone. The new empty state is not a `SCANNED_STATES` row and the statement
 // makes no claim about it. `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-26, at B-399. `/portal/move-out` gains a required "why are you
+// leaving" radio group: a `<fieldset>`/`<legend>` with the required state in the
+// legend (SC 1.3.1, 3.3.2), and a refusal that names the group in the error
+// summary and takes focus (SC 3.3.1), in both locales. Two `cause refusal` rows
+// are added to `SCANNED_STATES` (portal and admin), each axe-scanned. Manual
+// screen-reader passes over it are still owed under B-254 and the statement
+// claims none. No visible line changes; `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

@@ -7,6 +7,7 @@ import { emitEvent } from "@storage/core/events";
 import { settleMoveOut, type MoveOutSettlement } from "@storage/core/move-out";
 import { billingPeriodFor } from "@storage/core/billing";
 import { createTask, cancelOpenTask } from "@/lib/admin/tasks";
+import type { MoveOutCause } from "@storage/db";
 import { recaptureForLease } from "@/lib/promotions/billing";
 import type { Recapture } from "@storage/core/promotions";
 import { translate, type Dictionary, type MessageKey } from '@/lib/i18n'
@@ -295,6 +296,8 @@ export async function requestMoveOut(
   tenantId: string,
   leaseId: string,
   moveOutDate: Date,
+  /// B-399. Why they are leaving; the form action refuses a post without one.
+  cause?: { cause: MoveOutCause; note: string | null },
 ): Promise<RequestMoveOutResult> {
   const lease = await prisma.lease.findFirst({
     where: {
@@ -329,6 +332,8 @@ export async function requestMoveOut(
       data: {
         moveOutDate,
         moveOutReason: "tenant_request",
+        moveOutCause: cause?.cause,
+        moveOutCauseNote: cause?.note,
         noticeGivenAt: new Date(),
       },
     });
@@ -386,7 +391,13 @@ export async function cancelMoveOutRequest(
   await prisma.$transaction(async (tx) => {
     await tx.lease.update({
       where: { id: leaseId },
-      data: { moveOutDate: null, moveOutReason: null, noticeGivenAt: null },
+      data: {
+        moveOutDate: null,
+        moveOutReason: null,
+        moveOutCause: null,
+        moveOutCauseNote: null,
+        noticeGivenAt: null,
+      },
     });
     await cancelOpenTask("move_out_request_review", leaseId, tx);
   });

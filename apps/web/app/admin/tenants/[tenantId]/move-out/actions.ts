@@ -2,11 +2,12 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import type { MoveOutReason } from '@storage/db'
+import type { MoveOutCause, MoveOutReason } from '@storage/db'
 import { requireStaffActor } from '@/lib/rbac/session'
 import {
   NOTICE_PROBLEM_COPY,
   completeMoveOut,
+  parseMoveOutCause,
   parseNoticeGivenAt,
   recordNoticeGiven,
 } from '@/lib/admin/move-out'
@@ -46,6 +47,22 @@ export async function completeMoveOutAction(_prev: FormState, formData: FormData
     recaptureChargeCents = parsed.value
   }
 
+  // B-399. Required unless the lease is ending as an abandonment, which records
+  // its own system cause. Refused before anything posts.
+  const reason = String(formData.get('reason') ?? 'tenant_request') as MoveOutReason
+  let cause: { cause: MoveOutCause; note: string | null } | undefined
+  if (reason !== 'abandonment') {
+    const parsed = parseMoveOutCause(formData.get('cause'), formData.get('causeNote'))
+    if ('error' in parsed) {
+      return fieldError(
+        parsed.error === 'cause_required'
+          ? { cause: 'Choose why the tenant left.' }
+          : { causeNote: 'Keep the note to 200 characters or fewer.' },
+      )
+    }
+    cause = parsed
+  }
+
   const result = await completeMoveOut(actor, {
     leaseId: String(formData.get('leaseId') ?? ''),
     recaptureChargeCents,
@@ -53,7 +70,9 @@ export async function completeMoveOutAction(_prev: FormState, formData: FormData
     // Parsed as a UTC calendar date, matching how `Lease.moveOutDate` is
     // stored (@db.Date) — a move-out is a day, not an instant.
     moveOutDate: new Date(`${String(formData.get('date') ?? '')}T00:00:00.000Z`),
-    reason: String(formData.get('reason') ?? 'tenant_request') as MoveOutReason,
+    reason,
+    cause: cause?.cause,
+    causeNote: cause?.note,
     writeOff: formData.get('writeOff') === 'yes',
     reasonCode: String(formData.get('reasonCode') ?? ''),
   })

@@ -1,5 +1,6 @@
 import { prisma } from "@storage/db";
-import type { MoveOutReason } from "@storage/db";
+import type { MoveOutCause, MoveOutReason } from "@storage/db";
+import { CHOSEN_MOVE_OUT_CAUSES } from "@storage/core/metrics";
 import { recordAudit } from "@storage/core/audit";
 import { emitEvent } from "@storage/core/events";
 import {
@@ -63,6 +64,10 @@ export type MoveOutPreview = {
   /// defaults to, and what the screen tells staff the tenant already agreed
   /// to rather than presenting as a blank form.
   requestedMoveOutDate: Date | null;
+  /// B-399. What the tenant said when they requested it in the portal, so the
+  /// form opens with their answer rather than asking again.
+  moveOutCause: MoveOutCause | null;
+  moveOutCauseNote: string | null;
 };
 
 const NO_RECAPTURE: Recapture = {
@@ -153,6 +158,8 @@ async function loadLeaseForMoveOut(actor: Actor, leaseId: string) {
       paidThroughDate: true,
       noticeGivenAt: true,
       moveOutDate: true,
+      moveOutCause: true,
+      moveOutCauseNote: true,
       facility: {
         select: {
           name: true,
@@ -251,13 +258,39 @@ export async function previewMoveOut(
     recapture,
     ruledRecaptureCents: ruled.amountCents,
     requestedMoveOutDate: lease.status === "ended" ? null : lease.moveOutDate,
+    moveOutCause: lease.moveOutCause,
+    moveOutCauseNote: lease.moveOutCauseNote,
   };
+}
+
+export const MOVE_OUT_NOTE_MAX = 200;
+
+/// B-399. The one place "a cause is required" is decided, for both forms (the
+/// admin move-out and the portal request). Kept out of `completeMoveOut` and
+/// `requestMoveOut` so those stay callable by system paths that already know
+/// the cause; a person's form post is what has to name one.
+export function parseMoveOutCause(
+  rawCause: FormDataEntryValue | null,
+  rawNote: FormDataEntryValue | null,
+):
+  | { cause: MoveOutCause; note: string | null }
+  | { error: "cause_required" | "note_too_long" } {
+  const cause = String(rawCause ?? "");
+  if (!(CHOSEN_MOVE_OUT_CAUSES as readonly string[]).includes(cause))
+    return { error: "cause_required" };
+  const note = String(rawNote ?? "").trim();
+  if (note.length > MOVE_OUT_NOTE_MAX) return { error: "note_too_long" };
+  return { cause: cause as MoveOutCause, note: note || null };
 }
 
 export type CompleteMoveOutInput = {
   leaseId: string;
   moveOutDate: Date;
   reason: MoveOutReason;
+  /// B-399. Why they left. Omitted keeps whatever the tenant recorded in the
+  /// portal; an abandonment always records the system cause and ignores this.
+  cause?: MoveOutCause;
+  causeNote?: string | null;
   /// Forgive the residual debt. Only honoured when it is at or below the
   /// facility's threshold, or the actor is a manager with a reason.
   writeOff?: boolean;
@@ -503,6 +536,11 @@ export async function completeMoveOut(
         endDate: input.moveOutDate,
         moveOutDate: input.moveOutDate,
         moveOutReason: input.reason,
+        ...(input.reason === "abandonment"
+          ? { moveOutCause: "system_abandonment", moveOutCauseNote: null }
+          : input.cause
+            ? { moveOutCause: input.cause, moveOutCauseNote: input.causeNote ?? null }
+            : {}),
       },
     });
 

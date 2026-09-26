@@ -53,7 +53,8 @@ beforeEach(() => {
 describe('the counter card screens for an account', () => {
   it('say "payer", and name whose card is on file', async () => {
     const html = await card({ account: 'acct1' })
-    expect(html).not.toMatch(/tenant/i)
+    // Visible words only: B-398's cash link carries `?tenant=` in its href.
+    expect(html.replace(/href="[^"]*"/g, '')).not.toMatch(/tenant/i)
     expect(html).toContain('Card the payer is holding')
     expect(html).toContain('The payer has asked us to charge $125.00 to this card')
     expect(html).toMatch(/Pat Payer&#x27;s <span[^>]*>visa<\/span> ending 4242/)
