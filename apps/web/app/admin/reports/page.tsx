@@ -135,7 +135,11 @@ function AttachSplit({
   buckets,
   labels,
   rowHeading,
+  enrolledHeading = 'Enrolled',
+  rateHeading = 'Attach rate',
 }: {
+  enrolledHeading?: string
+  rateHeading?: string
   heading: string
   hint: string
   buckets: Record<string, AttachRateBucket>
@@ -163,10 +167,10 @@ function AttachSplit({
                 Move-ins
               </th>
               <th scope="col" className="px-3 py-2 text-right font-semibold">
-                Enrolled
+                {enrolledHeading}
               </th>
               <th scope="col" className="px-3 py-2 text-right font-semibold">
-                Attach rate
+                {rateHeading}
               </th>
             </tr>
           </DataTable.Head>
@@ -602,6 +606,39 @@ export default async function ReportsPage({
             buckets={attach.total.byStaff}
             labels={{ ...attach.staffNames, [UNASSIGNED_STAFF]: 'Web / self-service' }}
             rowHeading="Staff"
+          />
+        </div>
+      </section>
+
+      {/* B-404 (PRD 02 US-39): autopay penetration, on B-155's pattern and
+          over the same move-ins. It is a share of NEW move-ins, not of the
+          book, so it says whether the counter is asking at move-in. */}
+      <section aria-labelledby="autopay-heading" className="flex flex-col gap-3">
+        <h2 id="autopay-heading" className="font-medium">
+          Autopay share
+        </h2>
+        <p className="text-muted-foreground text-sm text-pretty">
+          {attach.autopayTotal.overall.enrolled} of {attach.autopayTotal.overall.moveIns} new
+          move-ins ({percent(attach.autopayTotal.overall.rate)}) are on autopay for {label}.
+        </p>
+        <div className="grid gap-6 sm:grid-cols-2">
+          <AttachSplit
+            heading="Autopay share by channel"
+            hint="How the deal was taken — same vocabulary as the move-ins-by-source split above."
+            buckets={attach.autopayTotal.byChannel}
+            labels={SOURCE_LABELS}
+            rowHeading="Channel"
+            enrolledHeading="On autopay"
+            rateHeading="Autopay share"
+          />
+          <AttachSplit
+            heading="Autopay share by staff"
+            hint="The staff member who took the move-in's first payment. “Web / self-service” is every move-in nobody was behind the counter for."
+            buckets={attach.autopayTotal.byStaff}
+            labels={{ ...attach.staffNames, [UNASSIGNED_STAFF]: 'Web / self-service' }}
+            rowHeading="Staff"
+            enrolledHeading="On autopay"
+            rateHeading="Autopay share"
           />
         </div>
       </section>

@@ -801,11 +801,15 @@ export type FacilityAttachRate = {
   facilityId: string
   facilityName: string
   attach: AttachRateResult
+  /// B-404. The same ratio with `enrolled` = `autopayEnabled`, over the same
+  /// move-ins, so the two sections cannot disagree about the denominator.
+  autopay: AttachRateResult
 }
 
 export type AttachRateReport = {
   rows: FacilityAttachRate[]
   total: AttachRateResult
+  autopayTotal: AttachRateResult
   /// Display name for every staffId that appears in any row's `byStaff`,
   /// keyed the same way. `UNASSIGNED_STAFF` is not a real id and is not a key
   /// here — the caller labels that bucket itself.
@@ -835,6 +839,7 @@ export async function attachRateReport(
   )
 
   const total = sumAttachRate(rows.map((row) => row.attach))
+  const autopayTotal = sumAttachRate(rows.map((row) => row.autopay))
 
   // Names for the coaching table. `UNASSIGNED_STAFF` is excluded — it is not
   // a StaffUser row, and the report labels that bucket itself ("Web /
@@ -851,6 +856,7 @@ export async function attachRateReport(
   return {
     rows,
     total,
+    autopayTotal,
     staffNames: Object.fromEntries(staff.map((s) => [s.id, `${s.firstName} ${s.lastName}`])),
   }
 }
@@ -881,10 +887,12 @@ export async function attachRateForFacility(
         lt: businessDateFor(periodEnd, timezone),
       },
     },
-    select: { id: true, protectionPlanName: true, acquisitionSource: true },
+    select: { id: true, protectionPlanName: true, autopayEnabled: true, acquisitionSource: true },
   })
 
-  if (leases.length === 0) return { facilityId, facilityName, attach: attachRate([]) }
+  if (leases.length === 0) {
+    return { facilityId, facilityName, attach: attachRate([]), autopay: attachRate([]) }
+  }
 
   // "The staff member who completed the move-in" has no column of its own —
   // a move-in is finalized by `provisionLease` from a Stripe webhook (B-026),
@@ -912,15 +920,15 @@ export async function attachRateForFacility(
     }
   }
 
+  const events = leases.map((lease) => ({
+    channel: normalizeSource(lease.acquisitionSource),
+    staffId: earliestPaymentByLease.get(lease.id)?.receivedByStaffId ?? null,
+    lease,
+  }))
   return {
     facilityId,
     facilityName,
-    attach: attachRate(
-      leases.map((lease) => ({
-        enrolled: lease.protectionPlanName !== null,
-        channel: normalizeSource(lease.acquisitionSource),
-        staffId: earliestPaymentByLease.get(lease.id)?.receivedByStaffId ?? null,
-      })),
-    ),
+    attach: attachRate(events.map((e) => ({ ...e, enrolled: e.lease.protectionPlanName !== null }))),
+    autopay: attachRate(events.map((e) => ({ ...e, enrolled: e.lease.autopayEnabled }))),
   }
 }

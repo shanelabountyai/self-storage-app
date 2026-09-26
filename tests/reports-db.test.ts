@@ -307,6 +307,21 @@ describeDb('reports', () => {
       // summed, not averaged.
       expect(report.total.overall.moveIns).toBeGreaterThanOrEqual(row.attach.overall.moveIns)
     })
+
+    // B-404. Runs after the payment above, so the staffer attribution exists.
+    it('reports autopay share over the same move-ins, off then on', async () => {
+      const before = await attachRateReport(actorFor([facilityId]), d('2026-08-01'), d('2026-09-01'))
+      const rowBefore = before.rows.find((r) => r.facilityId === facilityId)!
+      expect(rowBefore.autopay.overall).toMatchObject({ moveIns: 1, enrolled: 0, rate: 0 })
+
+      await prisma.lease.update({ where: { id: leaseId }, data: { autopayEnabled: true } })
+
+      const after = await attachRateReport(actorFor([facilityId]), d('2026-08-01'), d('2026-09-01'))
+      const row = after.rows.find((r) => r.facilityId === facilityId)!
+      expect(row.autopay.overall).toMatchObject({ moveIns: 1, enrolled: 1, rate: 1 })
+      expect(row.autopay.byStaff[staffId]?.enrolled).toBe(1)
+      expect(after.autopayTotal.overall.enrolled).toBeGreaterThanOrEqual(1)
+    })
   })
 
   // B-298 / D-139. The gap B-297 recorded and left open, and the audit of the

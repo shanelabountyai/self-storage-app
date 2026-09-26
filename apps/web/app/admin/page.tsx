@@ -5,7 +5,7 @@ import { assertFacilityAccess } from '@/lib/rbac/authorize'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { formatCents } from '@/lib/format'
-import { delinquencyReport } from '@/lib/admin/reports'
+import { attachRateForFacility, delinquencyReport, reportRangeForMonth } from '@/lib/admin/reports'
 import { dashboardRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { FacilityReadinessBanner } from '@/components/admin/facility-readiness-banner'
@@ -179,6 +179,16 @@ export default async function AdminDashboardPage({
     delinquencyReport(actor),
   ])
 
+  // B-404. Share of this month's new move-ins on autopay; omitted without a
+  // report permission, like the money tile, rather than shown as a zero.
+  const canReport =
+    can(actor, 'reports:operational', facilityId) || can(actor, 'reports:financial', facilityId)
+  const month = canReport ? await reportRangeForMonth(actor, undefined) : null
+  const autopay = month
+    ? (await attachRateForFacility(facilityId, facility.name, month.start, month.end)).autopay
+        .overall
+    : null
+
   const occupancyPct = totalUnits === 0 ? 0 : Math.round((occupiedUnits / totalUnits) * 100)
   // Absent for a role without `reports:financial` — `delinquencyReport` scopes
   // to the financial facilities, so the tile is omitted rather than rendered as
@@ -233,6 +243,14 @@ export default async function AdminDashboardPage({
           hint={`${occupiedUnits}/${totalUnits} units`}
           href="/admin/units?status=occupied"
         />
+        {autopay && (
+          <Tile
+            label="Autopay share"
+            value={autopay.moveIns === 0 ? '—' : `${Math.round(autopay.rate * 100)}%`}
+            hint={`${autopay.enrolled}/${autopay.moveIns} move-ins this month`}
+            href="/admin/reports#autopay-heading"
+          />
+        )}
         <Tile
           label="Payments today"
           value={formatCents(paymentsToday._sum.amountCents ?? 0)}
