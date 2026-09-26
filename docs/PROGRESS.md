@@ -11893,7 +11893,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **What it left behind.** `searchTenants` now runs two small queries per occupying lease (capped by the 25-tenant limit). Coverage is one read-only e2e on Dana Delinquent (B-120 discipline 1). Staff-only; accessibility statement makes no claim. Verification: typecheck, lint clean; admin-pos and admin-tenants e2e on desktop-chrome passed.
 
-## B-399: the office and the tenant now record why a lease ended (2026-09-26, `SHA`)
+## B-399: the office and the tenant now record why a lease ended (2026-09-26, `954f6e2`)
 
 **What it built.** Two nullable columns on `lease`, `moveOutCause` (new `MoveOutCause` enum: the seven chosen causes plus `system_transfer`, `system_abandonment`, `system_lien_sale`) and `moveOutCauseNote` (≤200). `/admin/tenants/[id]/move-out` has a "Why did the tenant leave?" select and note; `/portal/move-out` has a required `<fieldset>` radio group and note, in EN and ES. `parseMoveOutCause` (`lib/admin/move-out.ts`) is the one place "a cause is required" is decided; both form actions call it before anything is written, and it refuses a `system_*` value from a form. `completeMoveOut` records `system_abandonment` for an abandonment and ignores a chosen cause; `transferLease` and the auction sale record `system_transfer` and `system_lien_sale` themselves. The portal request stores the tenant's answer, cancel clears it, and the admin form opens on it. Report 3 gains a "Move-outs by cause" table: `moveCounts` takes the causes, and the split sums to `moveOuts` because the report now reads rows rather than a count.
 

@@ -1,6 +1,6 @@
 # Next
 
-**B-399 is built** (2026-09-26, `SHA`). **Next item: B-400** (`83azzzzt`), then B-401 to B-410 in `06-backlog.md` order. `moveOutCause` and `moveOutCauseNote` are on `lease`; `moveCounts(moveIns, count, causes)` returns `byMoveOutCause`, which B-400's 30/60/90-day cause split can read. If `storage_test` gets slow (marketplace-db timing out), run `npm run db:reset-test`.
+**B-399 is built** (2026-09-26, `954f6e2`). **Next item: B-400** (`83azzzzt`), then B-401 to B-410 in `06-backlog.md` order. `moveOutCause` and `moveOutCauseNote` are on `lease`; `moveCounts(moveIns, count, causes)` returns `byMoveOutCause`, which B-400's 30/60/90-day cause split can read. If `storage_test` gets slow (marketplace-db timing out), run `npm run db:reset-test`.
 
 **B-398 is built** (2026-09-26, `36ef1a7`). **Next item: B-399**, then B-400 to B-410 in `06-backlog.md` order. POS search rows carry per-unit balance; tenant profile has card and cash links.
 
