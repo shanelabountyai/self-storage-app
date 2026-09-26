@@ -205,6 +205,7 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/reports/delinquency',
   '/admin/reports/deliverability',
   '/admin/reports/deposits',
+  '/admin/reports/rate-increases',
   '/admin/reports/funnel',
   // B-082 part 4. Same contract as the public list: a page not here is a page
   // nobody checks.

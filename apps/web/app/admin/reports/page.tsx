@@ -217,6 +217,8 @@ const REPORT_GROUPS = [
       // it looks like" before anybody chases it.
       { href: '/admin/reports/ledger-exceptions', label: 'Ledger exceptions — balances the invoices do not back' },
       { href: '/admin/reports/deposits', label: 'Deposits — recorded vs counted' },
+      // B-400. The only report that reads a rate increase after it applies.
+      { href: '/admin/reports/rate-increases', label: 'Rate increase outcomes — who stayed, who left, what it netted' },
       { href: '/admin/reports/close', label: 'Monthly close — file a month so its figures stop moving' },
       { href: '/admin/reports/pack', label: 'Management pack — the whole month on one page' },
       // B-088 part 2. Last of the money group rather than first of the old flat
