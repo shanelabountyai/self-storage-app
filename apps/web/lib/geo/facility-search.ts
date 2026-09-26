@@ -1,4 +1,5 @@
 import { prisma } from '@storage/db'
+import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
 import {
   lowestAvailableWebRateByFacility,
   type FacilityFromRate,
@@ -34,6 +35,9 @@ export type FacilityResult = {
   postalCode: string
   phone: string | null
   amenities: string[]
+  /// B-401: the search card shows today's office hours, as the facility card does.
+  officeHours: WeeklySchedule | null
+  timezone: string
   /// Kept on the result rather than dropped after ranking: B-107's map plots
   /// the same rows the list renders, and re-reading coordinates for a second
   /// consumer is how a map and a list start disagreeing about where a facility
@@ -90,6 +94,8 @@ export async function rankFacilities(
       postalCode: true,
       phone: true,
       amenities: true,
+      officeHours: true,
+      timezone: true,
       latitude: true,
       longitude: true,
     },
@@ -113,10 +119,11 @@ export async function rankFacilities(
   const photoByFacility = new Map(photos.map((photo) => [photo.facilityId, { url: photo.url }]))
 
   return facilities
-    .map(({ latitude, longitude, ...facility }) => {
+    .map(({ latitude, longitude, officeHours, ...facility }) => {
       const from = fromRates.get(facility.id) ?? null
       return {
         ...facility,
+        officeHours: parseWeeklySchedule(officeHours),
         latitude: latitude!,
         longitude: longitude!,
         distanceMiles: distanceMiles(point, { latitude: latitude!, longitude: longitude! }),

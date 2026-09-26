@@ -100,6 +100,13 @@ test('search ranks real facilities with distance and a from-price', async ({ pag
   // B-242: the from-price names the size it belongs to. A price with no size is
   // the defect — "$60" against a 5×5 and against a 10×20 are different offers.
   await expect(first).toContainText(/\d+×\d+ from \$\d/)
+
+  // B-401: the result card carries the facility card's badge and button, and
+  // the badge says whose hours it means.
+  await expect(first.getByText(/^Office (open|closed) now$/)).toBeVisible()
+  await expect(
+    first.getByRole('link', { name: 'View units at Demo — Austin South' }),
+  ).toHaveAttribute('href', /^\/storage\/tx\/austin\/demo-austin-south\?.*from=78704/)
 })
 
 test('a search with nothing nearby offers the closest facilities instead', async ({ page }) => {
@@ -238,7 +245,7 @@ test('the inbound lead endpoint refuses an unauthenticated caller', async ({ req
 
 test('a search result links through to its facility page', async ({ page }) => {
   await page.goto('/storage/search?q=78704')
-  await page.getByRole('link', { name: 'Demo — Austin South' }).click()
+  await page.getByRole('link', { name: /^Demo — Austin South/ }).click()
 
   // US-103: the crawlable URL scheme is /storage/{state}/{city}/{slug}. The
   // `from` parameter carries the search onward so the facility page can offer
@@ -434,7 +441,7 @@ test("a guide's CTA carries its filter through search onto a facility page", asy
   await page.getByRole('button', { name: 'Find storage' }).click()
   await expect(page).toHaveURL(/features=climate/)
 
-  await page.getByRole('link', { name: 'Demo — Austin South' }).click()
+  await page.getByRole('link', { name: /^Demo — Austin South/ }).click()
   await expect(page).toHaveURL(/features=climate/)
 
   // And the facility page actually applied it, rather than carrying a parameter
@@ -818,7 +825,7 @@ test('a filter combination with no matches offers a way out', async ({ page }) =
 
 test('a search result carries its query into the facility page', async ({ page }) => {
   await page.goto('/storage/search?q=78704')
-  await page.getByRole('link', { name: 'Demo — Austin South' }).click()
+  await page.getByRole('link', { name: /^Demo — Austin South/ }).click()
 
   // US-103: a comparer must be able to get back without retyping their zip.
   await expect(page.getByRole('link', { name: /Back to storage near 78704/ })).toBeVisible()
@@ -838,7 +845,7 @@ test('a size-filtered search prices each card by that size, not the facility’s
   // must not be shown it.
   expect(price).not.toBe('$59')
 
-  await card.getByRole('link', { name: /Demo — Austin South/ }).click()
+  await card.getByRole('link', { name: /^Demo — Austin South/ }).click()
   const first = page.getByRole('listitem').filter({ hasText: 'Reserve for free' }).first()
   await expect(first).toContainText(price)
 })
@@ -863,7 +870,7 @@ test('the search filter rail sets, keeps and clears size and features', async ({
 // so the one Austin site drops and the page says why rather than "none listed".
 test('a feature filter changes the results, and the status regions stay quiet', async ({ page }) => {
   await page.goto('/storage/search?q=78704')
-  const cards = page.getByRole('main').getByRole('link', { name: /Demo — Austin South/ })
+  const cards = page.getByRole('main').getByRole('link', { name: /^Demo — Austin South/ })
   await expect(cards).toHaveCount(1)
   for (const region of await page.getByRole('status').all()) await expect(region).toBeEmpty()
 

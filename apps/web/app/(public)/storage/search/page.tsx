@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { SearchFilterRail } from '@/components/site/search-filter-rail'
+import { OfficeToday } from '@/components/site/facility-card'
+import { Button } from '@/components/ui/button'
 import { FacilitySearchForm } from '@/components/site/facility-search-form'
 import { SITE } from '@/lib/site-config'
 import { formatMiles, formatRate } from '@/lib/format'
@@ -149,6 +151,8 @@ function ResultCard({
           </p>
         </div>
 
+        <OfficeToday facility={facility} dict={dict} />
+
         <address className="text-muted-foreground text-sm not-italic">
           {formatAddress(facility)}
         </address>
@@ -216,6 +220,14 @@ function ResultCard({
                 )}
           </p>
         )}
+
+        {/* B-401: the same button the facility card carries (B-387). */}
+        <Button asChild variant="outline" className="mt-1 min-h-11 self-start">
+          <Link href={href}>
+            {t('card.viewUnits')}
+            <span className="sr-only"> {t('card.viewUnitsSr', { name: facility.name })}</span>
+          </Link>
+        </Button>
       </div>
     </li>
   )
