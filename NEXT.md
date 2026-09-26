@@ -1,5 +1,7 @@
 # Next
 
+**B-400 is built** (2026-09-26, `955fdcc`). **Next item: B-401**, then B-402 to B-410 in `06-backlog.md` order. `/admin/reports/rate-increases` (+ `.csv`) reads applied increases by effective date; formulas in `packages/core/metrics/rate-increase-outcome.ts`. **Open flake, unowned:** `marketplace-db` fails in a full sweep when another suite deletes an active facility mid-feed (passes alone); see B-400's PROGRESS entry. It needs a row.
+
 **B-399 is built** (2026-09-26, `954f6e2`). **Next item: B-400** (`83azzzzt`), then B-401 to B-410 in `06-backlog.md` order. `moveOutCause` and `moveOutCauseNote` are on `lease`; `moveCounts(moveIns, count, causes)` returns `byMoveOutCause`, which B-400's 30/60/90-day cause split can read. If `storage_test` gets slow (marketplace-db timing out), run `npm run db:reset-test`.
 
 **B-398 is built** (2026-09-26, `36ef1a7`). **Next item: B-399**, then B-400 to B-410 in `06-backlog.md` order. POS search rows carry per-unit balance; tenant profile has card and cash links.
