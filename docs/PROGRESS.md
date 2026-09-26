@@ -11960,7 +11960,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **Verification.** `tests/reports-db.test.ts` 18 passed; typecheck and lint clean. Full suite and e2e not run; no schema change, staff-only surfaces, so the accessibility statement was not re-read.
 
-## B-405 — A vehicle case opens a task (2026-09-26, SHA_PLACEHOLDER)
+## B-405 — A vehicle case opens a task (2026-09-26, `ea1ec3c`)
 
 **What it built.** PRD 02 US-28 "the vehicle block is somebody's work". A new task type `vehicle_lien_required` ("Vehicle lien process required — not handled by this pipeline"). `auctionCase` (which computes readiness) raises one high-priority task on the case (`entityType: AuctionCase`, subject resolver already existed) the first time readiness carries `contains_vehicle`, with the unit number in `detail`.
 
