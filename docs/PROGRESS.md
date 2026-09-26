@@ -11949,3 +11949,13 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** SEC-03 to SEC-09 and OPS-01 stay open in `06-backlog.md`. `unreconciledEvents()` still has no caller; a sweep that retries stuck events is not built.
 
 **Verification.** New tests in `tests/stripe-webhook-db.test.ts` and `tests/rate-increase-db.test.ts`: both fail against the old code and pass with the fix. Those two files: 96 passed. typecheck and lint clean. Full suite not run; no schema change.
+
+## B-404 — Autopay share posted on the dashboard and the report (2026-09-26, `160c8c0`)
+
+**What it built.** PRD 02 US-39's "autopay penetration is posted". No new formula: `attachRate` (B-155) already takes `{ enrolled, channel, staffId }`, so `attachRateForFacility` now calls it a second time with `enrolled = lease.autopayEnabled` over the same leases, and `attachRateReport` rolls it up with `sumAttachRate` (`autopayTotal`). `/admin/reports` gets an "Autopay share" section (overall, by channel, by staff) and the dashboard an "Autopay share" tile (this month's new move-ins, links to the section). The tile is omitted without a report permission.
+
+**What it decided.** The share is of NEW move-ins in the period, not of the whole book, and shares B-155's denominator and staff attribution (earliest payment's `receivedByStaffId`; online card payments report as "Web / self-service"). `AttachSplit` got two optional heading props rather than a second table component.
+
+**What it left behind.** No book-wide penetration figure (all active leases). No new formula test, since the formula is B-155's; the roll-up and per-staff split are covered by a new `reports-db` test.
+
+**Verification.** `tests/reports-db.test.ts` 18 passed; typecheck and lint clean. Full suite and e2e not run; no schema change, staff-only surfaces, so the accessibility statement was not re-read.
