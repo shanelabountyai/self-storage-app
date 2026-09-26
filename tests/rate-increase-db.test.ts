@@ -24,6 +24,16 @@ import * as provider from '../apps/web/lib/comms/provider'
 import type { Actor } from '../apps/web/lib/rbac/actor'
 import type { PermissionKey } from '@storage/db/rbac-catalog'
 
+// SEC-02: the confirm step's actor is swapped per test.
+let sessionActor: Actor | null = null
+vi.mock('@/lib/rbac/session', () => ({
+  requireStaffActor: async () => sessionActor,
+}))
+vi.mock('next/cache', async (orig) => ({
+  ...(await orig<typeof import('next/cache')>()),
+  revalidatePath: () => {},
+}))
+
 // B-076 / PRD 02 §4.3 US-11, PRD 05 CN-9, against real rows and the real
 // seeded catalog.
 //
@@ -1443,5 +1453,31 @@ describeDb('tenant rate increases (US-11 / CN-9)', () => {
 
       await expect(activeLeaseOptions(bookkeeper, facilityId)).rejects.toThrow()
     })
+  })
+
+  it('SEC-02: the confirm echo shows nothing for a lease at a facility the actor cannot access', async () => {
+    const { scheduleOneOffAction } = await import('../apps/web/app/admin/rate-increases/actions')
+    const { leaseId } = await makeLease()
+    const form = (facility: string) => {
+      const data = new FormData()
+      data.set('facilityId', facility)
+      data.set('leaseId', leaseId)
+      data.set('newRateDollars', '149.00')
+      data.set('effectiveDate', daysFromNow(60).toISOString().slice(0, 10))
+      return data
+    }
+
+    // Allowed: the echo is there.
+    sessionActor = regional()
+    const allowed = await scheduleOneOffAction({ status: 'idle' } as never, form(facilityId))
+    expect(allowed.status).toBe('confirm')
+
+    // No assignment at this facility: no tenant name, unit or rent.
+    sessionActor = { kind: 'staff', staffUserId: managerId, assignments: [] }
+    const denied = await scheduleOneOffAction({ status: 'idle' } as never, form(facilityId)).catch(
+      (error: unknown) => error,
+    )
+    expect(JSON.stringify(denied)).not.toContain('Ada')
+    expect((denied as { status?: string }).status).not.toBe('confirm')
   })
 })

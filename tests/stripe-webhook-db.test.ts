@@ -197,6 +197,64 @@ describeDb('reconciliation into the ledger', () => {
     expect(events).toHaveLength(1)
   })
 
+  it('SEC-01: re-applies an event whose first apply failed, then treats it as done', async () => {
+    const { POST } = await import('../apps/web/app/api/stripe/webhook/route')
+    const before = {
+      key: process.env.STRIPE_SECRET_KEY,
+      hook: process.env.STRIPE_WEBHOOK_SECRET,
+    }
+    process.env.STRIPE_SECRET_KEY = 'sk_test_x'
+    process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET
+    try {
+      const intentId = `pi_${suffix}_sec01`
+      const payment = await pendingPayment(intentId)
+      const event = succeededEvent(intentId)
+      // What a failed first apply leaves behind: the claim, no processedAt.
+      await prisma.stripeEvent.create({
+        data: {
+          id: event.id,
+          type: event.type,
+          payload: event as unknown as object,
+          error: 'boom',
+        },
+      })
+      const deliver = () => {
+        const { payload, header } = signedRequest(event)
+        return POST(
+          new Request('http://localhost/api/stripe/webhook', {
+            method: 'POST',
+            headers: { 'stripe-signature': header },
+            body: payload,
+          }),
+        )
+      }
+
+      const second = await (await deliver()).json()
+      expect(second.duplicate).toBeUndefined()
+      const applied = await prisma.stripeEvent.findUniqueOrThrow({ where: { id: event.id } })
+      expect(applied.processedAt).not.toBeNull()
+      expect(applied.error).toBeNull()
+      expect(
+        (await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status,
+      ).toBe('succeeded')
+
+      const third = await (await deliver()).json()
+      expect(third.duplicate).toBe(true)
+      const events = await prisma.domainEvent.findMany({
+        where: { entityId: payment.id, name: 'payment.succeeded' },
+      })
+      expect(events).toHaveLength(1)
+    } finally {
+      for (const [k, v] of [
+        ['STRIPE_SECRET_KEY', before.key],
+        ['STRIPE_WEBHOOK_SECRET', before.hook],
+      ] as const) {
+        if (v === undefined) delete process.env[k]
+        else process.env[k] = v
+      }
+    }
+  })
+
   it('records a payment with no lease rather than inventing one', async () => {
     // Ledger entries require a lease and nothing creates one until B-021. A
     // payment we cannot post is left visible, not attached to a lease it does

@@ -42,13 +42,19 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // Claim it. A duplicate delivery loses the race here and returns 200 without
-  // touching the ledger, which is exactly what Stripe wants to hear.
+  // touching the ledger, which is exactly what Stripe wants to hear — UNLESS
+  // the first apply failed (SEC-01). That row has no `processedAt`, and the
+  // retry Stripe sends for our 500 must run again or the payment never reaches
+  // the ledger. The handlers are idempotent per payment, so re-applying is safe.
   try {
     await prisma.stripeEvent.create({
       data: { id: event.id, type: event.type, payload: event as unknown as object },
     })
   } catch {
-    return Response.json({ received: true, duplicate: true })
+    const existing = await prisma.stripeEvent.findUnique({ where: { id: event.id } })
+    if (existing?.processedAt) {
+      return Response.json({ received: true, duplicate: true })
+    }
   }
 
   try {

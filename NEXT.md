@@ -1,5 +1,7 @@
 # Next
 
+**SEC-01 and SEC-02 are built** (2026-09-26). **Owner wants this repo public again**: confirm with them first, then `git ls-files | grep -iE "\.env|secret|credential|\.pem$|\.key$"` and check `.gitignore`. Then B-404 to B-410 in `06-backlog.md` order. SEC-03 to SEC-09 and OPS-01 are still open rows. Still open, unowned: the `marketplace-db` full-sweep flake (see B-400).
+
 **B-403 is built** (2026-09-26, `0c6c6f7`). **Next: SEC-01 then SEC-02** (`06-backlog.md` ~line 584), both MED, both money/PII, so **Opus**. SEC-01: the Stripe webhook must re-apply an event whose `processedAt` is null (`app/api/stripe/webhook/route.ts:44-52`). SEC-02: `rateChangeEcho` needs `assertFacilityAccess` and a facility-scoped query (`app/admin/rate-increases/actions.ts`). **Once both are in, the owner wants this repo made public again**: confirm with them first and check no secrets are tracked. Then B-404 to B-410 in order. Still open, unowned: the `marketplace-db` full-sweep flake (see B-400).
 
 **B-402 is built** (2026-09-26, `c7e3827`). **Next item: B-403** (`83azzzzw`): walk-in move-in list sorted by name, no dimensions, sold-out sizes unlabelled (`app/admin/pos/page.tsx`). Then B-404 to B-410 in `06-backlog.md` order. Dashboard tile order is now Available, Money owed, Occupancy, Payments, Failed, Moves. **Still open, unowned:** the `marketplace-db` full-sweep flake (see B-400).

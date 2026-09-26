@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireStaffActor } from '@/lib/rbac/session'
+import { assertFacilityAccess } from '@/lib/rbac/authorize'
+import type { Actor } from '@/lib/rbac/actor'
 import {
   approveBatch,
   approveRateIncrease,
@@ -51,22 +53,31 @@ function dollarsToCents(value: FormDataEntryValue | null): number | null {
 /// `null` when the lease is missing or belongs elsewhere — the caller then
 /// falls through to the service, which owns that refusal's wording. Nothing
 /// here duplicates a rule; it only describes.
+///
+/// SEC-02: `facilityId` comes from the form, so it is checked against the
+/// actor BEFORE the lease is read. No access reads the same as a missing
+/// lease (`null`), so the echo cannot confirm that a lease exists elsewhere.
 async function rateChangeEcho(
+  actor: Actor,
   facilityId: string,
   leaseId: string,
   newRateCents: number,
   effectiveDate: Date,
 ): Promise<{ label: string; value: string }[] | null> {
-  const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+  try {
+    assertFacilityAccess(actor, facilityId)
+  } catch {
+    return null
+  }
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, facilityId },
     select: {
-      facilityId: true,
       monthlyRateCents: true,
       tenant: { select: { firstName: true, lastName: true } },
       unit: { select: { number: true } },
     },
   })
-  if (!lease || lease.facilityId !== facilityId) return null
+  if (!lease) return null
 
   return [
     { label: 'Tenant', value: `${lease.tenant.firstName} ${lease.tenant.lastName}` },
@@ -95,7 +106,7 @@ export async function scheduleOneOffAction(_prev: FormState, formData: FormData)
   if (!leaseId) return fieldError({ leaseId: 'Choose the tenant this increase is for.' })
 
   if (formData.get('confirmed') !== 'yes') {
-    const echo = await rateChangeEcho(facilityId, leaseId, newRateCents, effectiveDate)
+    const echo = await rateChangeEcho(actor, facilityId, leaseId, newRateCents, effectiveDate)
     if (echo) {
       return {
         status: 'confirm',
@@ -225,7 +236,7 @@ export async function scheduleDecreaseAction(_prev: FormState, formData: FormDat
   // tenant permanently and is the half of a retention save that cannot be
   // corrected afterwards.
   if (formData.get('confirmed') !== 'yes') {
-    const echo = await rateChangeEcho(facilityId, leaseId, newRateCents, effectiveDate)
+    const echo = await rateChangeEcho(actor, facilityId, leaseId, newRateCents, effectiveDate)
     if (echo) {
       return {
         status: 'confirm',
