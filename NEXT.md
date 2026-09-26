@@ -1,4 +1,3 @@
-# Next
 
 **B-402 is built** (2026-09-26, `c7e3827`). **Next item: B-403** (`83azzzzw`): walk-in move-in list sorted by name, no dimensions, sold-out sizes unlabelled (`app/admin/pos/page.tsx`). Then B-404 to B-410 in `06-backlog.md` order. Dashboard tile order is now Available, Money owed, Occupancy, Payments, Failed, Moves. **Still open, unowned:** the `marketplace-db` full-sweep flake (see B-400).
 
