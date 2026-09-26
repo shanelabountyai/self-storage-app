@@ -1,5 +1,7 @@
 # Next
 
+**B-402 is built** (2026-09-26, `c7e3827`). **Next item: B-403** (`83azzzzw`): walk-in move-in list sorted by name, no dimensions, sold-out sizes unlabelled (`app/admin/pos/page.tsx`). Then B-404 to B-410 in `06-backlog.md` order. Dashboard tile order is now Available, Money owed, Occupancy, Payments, Failed, Moves. **Still open, unowned:** the `marketplace-db` full-sweep flake (see B-400).
+
 **B-401 is built** (2026-09-26, `c87687f`). **Next item: B-402** (`83azzzzv`): dashboard tile order, a conditional "needs attention" hint, a stale comment. Then B-403 to B-410 in `06-backlog.md` order. The search card's name link collides with "View units at {name}", so specs anchor it: `/^Demo — Austin South/`. **Still open, unowned:** the `marketplace-db` full-sweep flake (see B-400).
 
 **B-400 is built** (2026-09-26, `955fdcc`). **Next item: B-401**, then B-402 to B-410 in `06-backlog.md` order. `/admin/reports/rate-increases` (+ `.csv`) reads applied increases by effective date; formulas in `packages/core/metrics/rate-increase-outcome.ts`. **Open flake, unowned:** `marketplace-db` fails in a full sweep when another suite deletes an active facility mid-feed (passes alone); see B-400's PROGRESS entry. It needs a row.
