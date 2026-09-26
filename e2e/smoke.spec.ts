@@ -529,6 +529,13 @@ test('"What you\'d pay today" itemizes and foots', async ({ page }) => {
   await expect(card).toContainText('Protection plan')
   await expect(card).toContainText('Total due today')
   await expect(card).toContainText('Then each month')
+
+  // B-397. The late/leave block reads the facility's own configuration (the
+  // figures are asserted against config in public-inventory-db.test.ts).
+  await expect(card).toContainText('If you pay late / If you leave')
+  await expect(card).toContainText('Rent is due')
+  await expect(card).toContainText('Late fee')
+  await expect(card).toContainText('To move out')
 })
 
 test('the hero photo sits above the fold, LCP-primed, and never repeats in the gallery below (B-118)', async ({ page }) => {

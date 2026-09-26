@@ -15,6 +15,7 @@ import {
 } from '@/lib/facility/public-facility'
 import {
   cachedPublicInventory,
+  type FacilityTerms,
   type PublicPricingContext,
   type PublicUnitType,
 } from '@/lib/inventory/public-inventory'
@@ -206,6 +207,76 @@ function sizeHint(sqFt: number): MessageKey {
   return 'facility.sizeHint.house'
 }
 
+function protectionRange({ min, max }: { min: number; max: number }, dict: Dictionary): string {
+  const perMonth = translate(dict, 'card.perMonth')
+  return min === max
+    ? `${formatRate(min)}${perMonth}`
+    : `${formatRate(min)}–${formatRate(max)}${perMonth}`
+}
+
+/// B-397. "If you pay late / If you leave": every figure is read from the
+/// configuration the engines run on (`FacilityTerms`), never typed here.
+function LateAndLeaveTerms({ terms, dict }: { terms: FacilityTerms; dict: Dictionary }) {
+  const first = terms.lateFeeSteps[0]
+  const lateFee = first
+    ? translate(
+        dict,
+        first.basis === 'flat'
+          ? 'facility.terms.lateFeeFlat'
+          : first.basis === 'percent'
+            ? 'facility.terms.lateFeePercent'
+            : first.basis === 'greater'
+              ? 'facility.terms.lateFeeGreater'
+              : 'facility.terms.lateFeeLesser',
+        {
+          amount: formatRate(first.amountCents),
+          percent: first.percentBasisPoints / 100,
+          days: first.daysPastDue,
+        },
+      )
+    : translate(dict, 'facility.terms.lateFeeNone')
+  const rows: [string, string][] = [
+    [
+      translate(dict, 'facility.terms.rentDue'),
+      translate(
+        dict,
+        terms.billingPolicy === 'first_of_month'
+          ? 'facility.terms.dueFirst'
+          : 'facility.terms.dueAnniversary',
+      ),
+    ],
+    [translate(dict, 'facility.terms.lateFee'), lateFee],
+    ...(terms.suspendAccessDay === null
+      ? []
+      : [
+          [
+            translate(dict, 'facility.terms.gate'),
+            translate(dict, 'facility.terms.gateDay', { days: terms.suspendAccessDay }),
+          ] as [string, string],
+        ]),
+    [translate(dict, 'facility.terms.sold'), translate(dict, 'facility.terms.soldWrite')],
+    [
+      translate(dict, 'facility.terms.notice'),
+      terms.moveOutNoticeDays === 0
+        ? translate(dict, 'facility.terms.noticeNone')
+        : translate(dict, 'facility.terms.noticeDays', { days: terms.moveOutNoticeDays }),
+    ],
+  ]
+  return (
+    <div className="mt-4 border-t pt-3">
+      <p className="text-sm font-medium">{translate(dict, 'facility.lateHeading')}</p>
+      <dl className="mt-2 flex flex-col gap-2 text-sm">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-4">
+            <dt>{label}</dt>
+            <dd className="text-right text-pretty">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
 /// US-301's "What you'd pay today", closed by default. A native <details>: no
 /// JavaScript, no client bundle, and it keeps working with the bundle disabled
 /// like the rest of the public path.
@@ -290,6 +361,13 @@ function CostBreakdown({
                 {costLineNote(dict, line)}
               </dd>
             )}
+            {line.key === 'protection' && pricing.terms?.protectionCents && (
+              <dd className="text-muted-foreground col-span-2 mt-0.5 text-xs text-pretty">
+                {translate(dict, 'facility.terms.protectionRange', {
+                  range: protectionRange(pricing.terms.protectionCents, dict),
+                })}
+              </dd>
+            )}
           </div>
         ))}
 
@@ -305,6 +383,7 @@ function CostBreakdown({
           </dd>
         </div>
       </dl>
+      {pricing.terms && <LateAndLeaveTerms terms={pricing.terms} dict={dict} />}
     </details>
   )
 }

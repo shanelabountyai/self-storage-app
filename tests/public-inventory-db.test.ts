@@ -155,6 +155,65 @@ describeDb('publicInventoryForFacility', () => {
     expect(await publicInventoryForFacility(`no-such-facility-${suffix}`)).toBeNull()
   })
 
+  // B-397. The "If you pay late / If you leave" block reads these terms, so the
+  // page can only ever say what the engines run on. Two facilities with
+  // different settings must publish different terms, matching their rows.
+  it('publishes each facility’s own late fee, gate day, notice and protection prices', async () => {
+    const otherSlug = `public-inv-terms-${suffix}`
+    const otherId = await makeFacility('Terms Test', otherSlug, 'active')
+    try {
+      await prisma.unitType.create({
+        data: { facilityId: otherId, name: `5x5 ${suffix}`, widthFt: 5, lengthFt: 5 },
+      }).then((type) =>
+        prisma.unitTypeRate.create({
+          data: { facilityId: otherId, unitTypeId: type.id, streetRateCents: 5_000, webRateCents: 4_000, effectiveFrom: past },
+        }),
+      )
+      await prisma.facility.update({
+        where: { id: otherId },
+        data: { billingPolicy: 'first_of_month', moveOutNoticeDays: 0 },
+      })
+      await prisma.lateFeeRule.create({
+        data: { facilityId: otherId, step: 1, daysPastDue: 7, amountCents: 3_500, basis: 'flat', effectiveFrom: past },
+      })
+      await prisma.protectionPlan.createMany({
+        data: [
+          { facilityId: otherId, tier: 'basic', name: 'Basic', coverageCents: 100_000, premiumCents: 900, effectiveFrom: past },
+          { facilityId: otherId, tier: 'plus', name: 'Plus', coverageCents: 300_000, premiumCents: 1_900, effectiveFrom: past },
+        ],
+      })
+      await prisma.delinquencyTimeline.create({
+        data: {
+          facilityId: otherId,
+          version: 1,
+          active: true,
+          label: 'test',
+          steps: [
+            { dayOffset: 20, label: 'Overlock', automatedActions: ['suspend_access'], noticeTemplateKey: null, deliveryMethods: [], staffTaskLabel: null, requiredProofFields: [] },
+          ],
+        },
+      })
+
+      const other = (await publicInventoryForFacility(otherSlug))!.pricing.terms!
+      expect(other.billingPolicy).toBe('first_of_month')
+      expect(other.moveOutNoticeDays).toBe(0)
+      expect(other.lateFeeSteps.map((step) => [step.daysPastDue, step.amountCents])).toEqual([[7, 3_500]])
+      expect(other.suspendAccessDay).toBe(20)
+      expect(other.protectionCents).toEqual({ min: 900, max: 1_900 })
+
+      // The fixture facility configured none of it: different text, not shared defaults.
+      const bare = (await publicInventoryForFacility(slug))!.pricing.terms!
+      expect(bare.lateFeeSteps).toEqual([])
+      expect(bare.suspendAccessDay).toBeNull()
+      expect(bare.protectionCents).toBeNull()
+      expect(bare.billingPolicy).toBe('anniversary')
+    } finally {
+      await prisma.unitTypeRate.deleteMany({ where: { facilityId: otherId } })
+      await prisma.unitType.deleteMany({ where: { facilityId: otherId } })
+      await prisma.facility.delete({ where: { id: otherId } })
+    }
+  })
+
   it('never exposes unit numbers', async () => {
     // US-201: listings are unit *types* with counts. Leaking unit numbers is
     // what lets two people race for the same door.

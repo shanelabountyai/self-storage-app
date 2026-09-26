@@ -2,6 +2,9 @@ import { unstable_cache } from 'next/cache'
 import { prisma } from '@storage/db'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import type { TaxRate } from '@storage/core/pricing'
+import type { LateFeeStep } from '@storage/core/billing'
+import type { TimelineStep } from '@storage/core/delinquency'
+import { lateFeeStepsFor } from '@/lib/billing/late-fees'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { mintQuoteToken } from '@/lib/pricing/quote-token'
 import { FEATURE_FILTERS, matchesSize, type FeatureKey, type SizeBand } from './unit-filters'
@@ -49,6 +52,20 @@ export type PublicPricingContext = {
   /// same as zero — a $0.00 line is noise, an absent one is correct.
   adminFeeCents?: number
   taxRates: TaxRate[]
+  /// B-397. What "If you pay late / If you leave" reads, all from the
+  /// configuration the engines run on. Optional so a failed inventory read
+  /// (`{ taxRates: [] }`) simply omits the block.
+  terms?: FacilityTerms
+}
+
+export type FacilityTerms = {
+  billingPolicy: 'anniversary' | 'first_of_month'
+  lateFeeSteps: LateFeeStep[]
+  /// First timeline step that suspends gate access; null when none is configured.
+  suspendAccessDay: number | null
+  moveOutNoticeDays: number
+  /// Active protection tiers' premium range; null when the facility sells none.
+  protectionCents: { min: number; max: number } | null
 }
 
 export type PublicInventory = {
@@ -70,7 +87,7 @@ export type PublicInventory = {
 /// as everything else: rows are never edited, the latest one on or before
 /// `asOf` wins (FR-9).
 async function pricingContext(facilityId: string, asOf: Date): Promise<PublicPricingContext> {
-  const [feeRows, taxRows] = await Promise.all([
+  const [feeRows, taxRows, facility, lateFeeSteps, timeline, planRows] = await Promise.all([
     prisma.feeSchedule.findMany({
       where: { facilityId, feeType: 'admin' },
       select: { feeType: true, amountCents: true, effectiveFrom: true },
@@ -79,12 +96,41 @@ async function pricingContext(facilityId: string, asOf: Date): Promise<PublicPri
       where: { facilityId },
       select: { jurisdiction: true, rateBasisPoints: true, effectiveFrom: true },
     }),
+    prisma.facility.findUniqueOrThrow({
+      where: { id: facilityId },
+      select: { billingPolicy: true, moveOutNoticeDays: true },
+    }),
+    lateFeeStepsFor(facilityId, asOf),
+    prisma.delinquencyTimeline.findFirst({
+      where: { facilityId, active: true },
+      orderBy: { version: 'desc' },
+      select: { steps: true },
+    }),
+    prisma.protectionPlan.findMany({
+      where: { facilityId },
+      select: { tier: true, premiumCents: true, effectiveFrom: true },
+    }),
   ])
 
   const admin = effectiveByGroup(feeRows, asOf, (row) => row.feeType).get('admin')
   const taxes = effectiveByGroup(taxRows, asOf, (row) => row.jurisdiction)
+  const premiums = [...effectiveByGroup(planRows, asOf, (row) => row.tier).values()].map(
+    (row) => row.premiumCents,
+  )
+  const suspendDays = ((timeline?.steps ?? []) as unknown as TimelineStep[])
+    .filter((step) => step.automatedActions.includes('suspend_access'))
+    .map((step) => step.dayOffset)
 
   return {
+    terms: {
+      billingPolicy: facility.billingPolicy,
+      lateFeeSteps,
+      suspendAccessDay: suspendDays.length ? Math.min(...suspendDays) : null,
+      moveOutNoticeDays: facility.moveOutNoticeDays,
+      protectionCents: premiums.length
+        ? { min: Math.min(...premiums), max: Math.max(...premiums) }
+        : null,
+    },
     adminFeeCents: admin?.amountCents,
     taxRates: [...taxes.values()]
       .map((row) => ({ jurisdiction: row.jurisdiction, rateBasisPoints: row.rateBasisPoints }))

@@ -728,6 +728,18 @@ export default async function CheckoutPage({
             />
           )}
 
+          {/* B-397. Provisioning issues the code at payment and nothing gates it
+              on the lease's start date, so a renter who picked a later day is
+              told the code exists now rather than left to assume it waits. */}
+          {session.step === 'payment' &&
+            session.requestedStartDate &&
+            session.requestedStartDate >
+              businessDateFor(new Date(), facilityPolicy?.timezone ?? 'UTC') && (
+              <p className="text-muted-foreground mb-3 text-sm text-pretty">
+                {t('facility.terms.gateCodeFuture')}
+              </p>
+            )}
+
           {session.step === 'payment' && payment && due && (
             <PaymentStep
               token={token!}

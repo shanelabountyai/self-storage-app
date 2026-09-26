@@ -1,5 +1,7 @@
 # Next
 
+**B-397 is built** (2026-09-26). **Next item: B-398**, then B-399 to B-410 in `06-backlog.md` order. The facility page's price expander now has a late/leave block from `pricing.terms`. Finding: a future-dated move-in's gate code is issued at payment, not held to the start date (recorded in PROGRESS).
+
 **B-396 is built** (2026-09-25, `0ed234f`). **Next item: B-397**, then B-398 to B-410 in `06-backlog.md` order. The facility page has a price headline and `#units` anchor; the phone sticky bar is "See sizes" only; promo and filter forms are `<details>`, so specs must click the `summary` before filling them.
 
 **B-395 is built** (2026-09-25, `66c7e82`). **Next item: B-396**, then B-397 to B-410 in `06-backlog.md` order. Search features now drop facilities with no matching unit free and price from the matching unit; size alone still keeps them (B-376).
