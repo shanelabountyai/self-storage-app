@@ -11970,7 +11970,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **Verification.** New test in `tests/auctions-db.test.ts`: two checks, one task, high priority. That file plus tasks-catalog and tasks-db: 94 passed. typecheck and lint clean. Full suite not run; no schema change, staff-only, accessibility statement not re-read.
 
-## B-406 — Vacant units are sampled on the daily walk (2026-09-26, SHA below)
+## B-406 — Vacant units are sampled on the daily walk (2026-09-26, `5b38b0f`)
 
 **What it built.** PRD 02 US-35 "vacant units are checked too". `Facility.vacantCheckSample` (default 5, 0 = off; control in Settings > Operations policy) and `Unit.lastVacantCheckAt` (migration `20260926130000_b406_vacant_unit_check`). `raiseDailyWalkthrough` now also calls `raiseVacantChecks`, which raises one `vacant_unit_check` task per sampled `available` unit, never-checked then oldest-checked first. The walkthrough screen lists them, each a `<fieldset>` of three radios (unlocked and empty / locked / not empty). `recordVacantCheck` completes the task and stamps the unit; a mismatch also raises a high-priority `vacant_unit_mismatch` task and a blocking maintenance ticket, which moves the unit to `maintenance` through the existing US-37 path. The all-facilities walkthrough roll-up counts open mismatches too (its label changed to "Walk or vacant-unit finding open").
 
