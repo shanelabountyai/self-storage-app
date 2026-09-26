@@ -11877,7 +11877,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **What it left behind.** The count says "sizes available" from the filtered list, so a set filter changes it; deliberate, matches the bar. B-408 owns the remaining reserve/size wording. No manual screen-reader pass (B-254). Verification: typecheck, lint, i18n unit; smoke + i18n e2e 283 passed, 3 skipped (both projects); a11y and own-spec-route scans green in the earlier run.
 
-## B-397: a renter can read the late fee, gate day, notice period and protection price before committing (2026-09-26, SHA below)
+## B-397: a renter can read the late fee, gate day, notice period and protection price before committing (2026-09-26, `ffa17bd`)
 
 **What it built.** `pricingContext` in `lib/inventory/public-inventory.ts` gains `terms` (`FacilityTerms`): billing policy, the late-fee ladder (`lateFeeStepsFor`, the same reader the lease and `assessLateFees` use), the first `suspend_access` step of the active delinquency timeline, `moveOutNoticeDays`, and the min/max premium of the active protection tiers. The facility page's "What you'd pay today" expander gains an "If you pay late / If you leave" `<dl>` (`LateAndLeaveTerms`) and a protection price-range note under the protection line, EN and ES. The checkout payment step shows one sentence for a future-dated move-in.
 
