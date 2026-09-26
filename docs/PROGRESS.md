@@ -11939,3 +11939,13 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** Nothing. Staff-only screen, so the public accessibility statement was not touched.
 
 **Verification.** typecheck, unit test, `e2e/admin-pos.spec.ts` on desktop-chrome against a production build: 19 passed. mobile-chrome not run.
+
+## SEC-01 and SEC-02: webhook retry re-applies a failed event; rate-change echo checks facility access (2026-09-26, `d816d3e`)
+
+**What it built.** SEC-01: on a `stripeEvent` primary-key collision the webhook now loads the row and returns `duplicate` only if `processedAt` is set; an unprocessed row falls through to `applyStripeEvent` again, so Stripe's retry of our 500 can land the payment. SEC-02: `rateChangeEcho` takes the actor, calls `assertFacilityAccess` before reading, and queries `lease.findFirst({ id, facilityId })`. No access returns `null`, the same as a missing lease, so the confirm step no longer shows tenant name, unit or rent for a facility the actor cannot see.
+
+**What it decided.** Re-applying is safe because the handlers are idempotent per payment (`payment.status === 'succeeded'` early return); no row lock was added for two simultaneous deliveries of a still-unprocessed event. The echo swallows the forbidden error rather than rethrowing, so the response does not distinguish "exists elsewhere" from "does not exist"; the service call after it still owns the refusal.
+
+**What it left behind.** SEC-03 to SEC-09 and OPS-01 stay open in `06-backlog.md`. `unreconciledEvents()` still has no caller; a sweep that retries stuck events is not built.
+
+**Verification.** New tests in `tests/stripe-webhook-db.test.ts` and `tests/rate-increase-db.test.ts`: both fail against the old code and pass with the fix. Those two files: 96 passed. typecheck and lint clean. Full suite not run; no schema change.
