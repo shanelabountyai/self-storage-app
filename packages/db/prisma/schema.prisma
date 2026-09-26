@@ -539,6 +539,9 @@ model Facility {
   /// a task. Business hours are overkill here — a lead is a person waiting for
   /// a call back, and four hours on a Sunday still feels like four hours.
   leadFollowUpHours        Int               @default(4)
+  /// B-406. How many `available` units the daily walkthrough asks staff to
+  /// physically verify (empty, unlocked). 0 turns the sample off.
+  vacantCheckSample        Int               @default(5)
   gbpVerifiedAt            DateTime?         @db.Timestamptz(6)
   /// Which checklist items were ticked at that verification. A string array
   /// rather than six booleans: the checklist is US-5 AC1's list today and will
@@ -1116,6 +1119,9 @@ model Unit {
   facilityId        String
   unitTypeId        String
   number            String
+  /// B-406. When staff last physically verified this unit while `available`;
+  /// null = never. The sample takes the oldest first.
+  lastVacantCheckAt DateTime?
   floor             Int                   @default(1)
   /// Optional grouping for the grid view, e.g. "Building A". Null for
   /// single-building sites.

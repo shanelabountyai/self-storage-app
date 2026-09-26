@@ -241,9 +241,11 @@ export async function walkthroughRollup(actor: Actor): Promise<RollupRow[]> {
     actor,
     ['tenants:view'],
     '/admin/walkthrough',
-    (n) => (n === 0 ? 'Walk confirmed, or not yet raised' : 'Walk not confirmed today'),
+    (n) => (n === 0 ? 'Walk confirmed, or not yet raised' : 'Walk or vacant-unit finding open'),
     (facilityId) =>
-      prisma.task.count({ where: { facilityId, type: 'daily_walkthrough', status: 'open' } }),
+      prisma.task.count({
+        where: { facilityId, type: { in: ['daily_walkthrough', 'vacant_unit_mismatch'] }, status: 'open' },
+      }),
   )
 }
 

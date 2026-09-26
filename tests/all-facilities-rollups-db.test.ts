@@ -229,7 +229,7 @@ describeDb('all-facilities roll-ups (B-235)', () => {
 
       const rows = mine(await walkthroughRollup(actor(['tenants:view'])))
       expect(rows.find((one) => one.facilityId === approvableId)!.summary).toBe(
-        'Walk not confirmed today',
+        'Walk or vacant-unit finding open',
       )
       // The other site has no open task — one per facility per day, so "0" is
       // not a figure anybody wants read out.

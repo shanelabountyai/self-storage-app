@@ -529,6 +529,29 @@ export const TASK_TYPES = [
     requiredProofFields: ["note"],
     sensitive: false,
   },
+  {
+    // PRD 02 US-35 (B-406). One per sampled `available` unit per walk. Closed by
+    // `recordVacantCheck` on the walkthrough screen, which needs a result a
+    // note cannot express (unlocked and empty / locked / not empty).
+    type: "vacant_unit_check",
+    label: "Vacant unit check — is it empty and unlocked?",
+    requiredProofFields: ["note"],
+    sensitive: false,
+    resolvedByAction: {
+      sentence: "Record the result on the walkthrough screen.",
+      href: "/admin/walkthrough",
+      linkLabel: "Open the walkthrough",
+    },
+  },
+  {
+    // PRD 02 US-35 (B-406). A vacant unit found locked or not empty: the
+    // ghost-rental or someone-else's-lock case. The unit is already held in
+    // `maintenance`; a manager clears it by closing the maintenance ticket.
+    type: "vacant_unit_mismatch",
+    label: "Vacant unit failed its check — locked or not empty",
+    requiredProofFields: ["note"],
+    sensitive: true,
+  },
 ] as const satisfies readonly TaskTypeSpec[];
 
 export type TaskType = (typeof TASK_TYPES)[number]["type"];

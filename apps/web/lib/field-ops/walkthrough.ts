@@ -1,4 +1,5 @@
 import { createTask } from '@/lib/admin/tasks'
+import { raiseVacantChecks } from './vacant-checks'
 
 // PRD 02 §4.9 US-35 (B-060). "Daily walkthrough checklist: a mobile-web
 // checklist generated daily per facility."
@@ -22,5 +23,10 @@ export async function raiseDailyWalkthrough(
     entityId: facilityId,
     at: businessDate,
   })
-  recordItem?.({ itemId: facilityId, ok: true, message: task.created ? 'raised' : 'already raised' })
+  const checks = await raiseVacantChecks(facilityId, businessDate)
+  recordItem?.({
+    itemId: facilityId,
+    ok: true,
+    message: `${task.created ? 'raised' : 'already raised'}, ${checks} vacant-unit checks`,
+  })
 }

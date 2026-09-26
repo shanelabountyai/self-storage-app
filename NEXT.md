@@ -1,5 +1,7 @@
 # Next
 
+**B-406 is built** (2026-09-26). **Next item: B-407**, then B-408 to B-410. Still pending: owner confirm to make the repo public (secret check first), SEC-03 to SEC-09, OPS-01.
+
 **B-405 is built** (2026-09-26). **Next item: B-406**, then B-407 to B-410. Still pending: owner confirm to make the repo public (secret check first), SEC-03 to SEC-09, OPS-01.
 
 **B-404 is built** (2026-09-26, `160c8c0`). **Next item: B-405** (`83azzzzy`, vehicle-case task, S), then B-406 to B-410. Still pending: owner confirm to make the repo public (secret check first), SEC-03 to SEC-09, OPS-01.

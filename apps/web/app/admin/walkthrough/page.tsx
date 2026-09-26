@@ -8,7 +8,8 @@ import { walkthroughRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { AnnounceRegion } from '@/components/admin/announce'
 import { TaskCompleteForm } from '@/components/admin/task-complete-form'
-import { reportFindingAction } from './actions'
+import { AdminForm } from '@/components/admin/form'
+import { recordVacantCheckAction, reportFindingAction } from './actions'
 
 export const metadata = { title: 'Walkthrough' }
 
@@ -53,13 +54,15 @@ export default async function WalkthroughPage({
 
   const facilityId = selected.facility.id
 
-  const [delinquency, walkthroughTasks, awaitingCheck, units] = await Promise.all([
+  const [delinquency, walkthroughTasksAll, awaitingCheck, units] = await Promise.all([
     delinquencyQueue(actor, facilityId),
-    facilityTasks(actor, facilityId).then((tasks) => tasks.filter((t) => t.type === 'daily_walkthrough')),
+    facilityTasks(actor, facilityId),
     prisma.unit.count({ where: { facilityId, operationalStatus: 'maintenance' } }),
     prisma.unit.findMany({ where: { facilityId }, select: { id: true, number: true }, orderBy: { number: 'asc' } }),
   ])
 
+  const walkthroughTasks = walkthroughTasksAll.filter((t) => t.type === 'daily_walkthrough')
+  const vacantChecks = walkthroughTasksAll.filter((t) => t.type === 'vacant_unit_check')
   const overlockGroups = delinquency.filter((g) => g.type === 'overlock_apply' || g.type === 'overlock_remove')
 
   return (
@@ -104,6 +107,56 @@ export default async function WalkthroughPage({
                 />
               </li>
             ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-medium">Available units to check</h2>
+        <p className="text-muted-foreground text-sm text-pretty">
+          Open each one. A locked or not-empty unit is held off the rentable list and a manager is told.
+        </p>
+        {vacantChecks.length === 0 ? (
+          <p className="text-muted-foreground text-sm">None today.</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {vacantChecks.map((task) => {
+              const subject = task.detail?.match(/^Unit ([^:]+):/)?.[1] ?? 'unit'
+              return (
+                <li key={task.id} className="border-input rounded-lg border p-4">
+                  <AdminForm
+                    action={recordVacantCheckAction}
+                    label={`Check available unit ${subject}`}
+                    announceOutside
+                    className="flex flex-col gap-3"
+                  >
+                    <input type="hidden" name="taskId" value={task.id} />
+                    <fieldset className="flex flex-col gap-2">
+                      <legend className="text-sm font-medium">Unit {subject}: what did you find?</legend>
+                      {(
+                        [
+                          ['ok', 'Unlocked and empty'],
+                          ['locked', 'Locked'],
+                          ['not_empty', 'Not empty'],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <label key={value} className="flex min-h-11 items-center gap-2 text-sm">
+                          <input type="radio" name="result" value={value} required className="h-4 w-4" />
+                          {label}
+                        </label>
+                      ))}
+                    </fieldset>
+                    <button
+                      type="submit"
+                      aria-label={`Record check for unit ${subject}`}
+                      className="border-input hover:bg-accent min-h-11 self-start rounded-md border px-4 text-sm font-medium"
+                    >
+                      Record
+                    </button>
+                  </AdminForm>
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>

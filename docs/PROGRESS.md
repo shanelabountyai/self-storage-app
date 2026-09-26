@@ -11969,3 +11969,13 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** No manager assignment and no notification. Raised on read, so a flagged case nobody opens gets no task until someone does (setting the flag returns to the case screen).
 
 **Verification.** New test in `tests/auctions-db.test.ts`: two checks, one task, high priority. That file plus tasks-catalog and tasks-db: 94 passed. typecheck and lint clean. Full suite not run; no schema change, staff-only, accessibility statement not re-read.
+
+## B-406 — Vacant units are sampled on the daily walk (2026-09-26, SHA below)
+
+**What it built.** PRD 02 US-35 "vacant units are checked too". `Facility.vacantCheckSample` (default 5, 0 = off; control in Settings > Operations policy) and `Unit.lastVacantCheckAt` (migration `20260926130000_b406_vacant_unit_check`). `raiseDailyWalkthrough` now also calls `raiseVacantChecks`, which raises one `vacant_unit_check` task per sampled `available` unit, never-checked then oldest-checked first. The walkthrough screen lists them, each a `<fieldset>` of three radios (unlocked and empty / locked / not empty). `recordVacantCheck` completes the task and stamps the unit; a mismatch also raises a high-priority `vacant_unit_mismatch` task and a blocking maintenance ticket, which moves the unit to `maintenance` through the existing US-37 path. The all-facilities walkthrough roll-up counts open mismatches too (its label changed to "Walk or vacant-unit finding open").
+
+**What it decided.** Re-runs on the same day top up only to the sample size (count of today's check tasks), so recording some does not raise more. The check task is closed only by the walkthrough action (`resolvedByAction` in the catalog), since a note cannot express a result. A manager clears a held unit by closing the maintenance ticket, the existing path; no new clear control.
+
+**What it left behind.** A unit rented between sampling and recording still gets its result stamped (a mismatch is still a real finding). No photo attach on a check. Unchecked-today tasks are not carried to tomorrow beyond the ordinary overdue behaviour of the queue.
+
+**Verification.** New `tests/vacant-checks-db.test.ts` (8 cases: 5 of 8 oldest-first, no top-up on re-run, sample 0, ok, locked, not_empty, double-record) plus walkthrough and roll-up suites: 17 passed. Typecheck clean, lint 0 errors, schema drift clean. Full suite: `invoices-db` timed out under load and `marketplace-db` failed (the open B-400 flake); both pass or fail unrelated to this change when rerun (invoices passes alone on main and here). Staff-only surface, so the accessibility statement was not re-read.

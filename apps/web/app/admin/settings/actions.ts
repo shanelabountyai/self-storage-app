@@ -848,6 +848,14 @@ export async function updateOperationsPolicyAction(
     unit: "days",
   });
 
+  // PRD 02 US-35 (B-406). Zero turns the daily sample of available units off.
+  const vacantSample = parseScaled(formData.get("vacantCheckSample"), {
+    scale: 1,
+    min: 0,
+    max: 50,
+    unit: "units",
+  });
+
   // PRD 02 US-43. At least an hour — zero would make every inquiry overdue the
   // moment it was taken, which is a queue nobody reads. A week is the ceiling
   // because past that the lead has rented somewhere else.
@@ -980,6 +988,7 @@ export async function updateOperationsPolicyAction(
   if ("error" in maxStartAhead)
     errors.maxCheckoutStartDaysAhead = maxStartAhead.error;
   if ("error" in leadHours) errors.leadFollowUpHours = leadHours.error;
+  if ("error" in vacantSample) errors.vacantCheckSample = vacantSample.error;
   if ("error" in rateNoticeDays)
     errors.rateIncreaseNoticeDays = rateNoticeDays.error;
   if ("error" in ecriPercent) errors.ecriPercentStep = ecriPercent.error;
@@ -1038,6 +1047,7 @@ export async function updateOperationsPolicyAction(
     "error" in holdGraceDays ||
     "error" in maxStartAhead ||
     "error" in leadHours ||
+    "error" in vacantSample ||
     "error" in rateNoticeDays ||
     "error" in ecriPercent ||
     "error" in ecriMinStep ||
@@ -1064,6 +1074,7 @@ export async function updateOperationsPolicyAction(
       reservationHoldGraceDays: holdGraceDays.value,
       maxCheckoutStartDaysAhead: maxStartAhead.value,
       leadFollowUpHours: leadHours.value,
+      vacantCheckSample: vacantSample.value,
       abandonmentFollowUpHours: abandonmentHours,
       rateIncreaseNoticeDays: rateNoticeDays.value,
       ecriPercentBasisPoints: ecriPercent.value,

@@ -609,6 +609,8 @@ export type OperationsPolicyInput = {
   /// PRD 02 US-43. How long a new inquiry may sit uncontacted before the
   /// morning sweep turns it into a task.
   leadFollowUpHours: number;
+  /// PRD 02 US-35 (B-406). Available units the daily walk verifies; 0 = off.
+  vacantCheckSample: number;
   /// PRD 04 US-9 AC2 (B-073). The abandoned-checkout email sequence's own
   /// timing — grouped with `leadFollowUpHours` above rather than billing
   /// policy, since both are "how soon do we follow up", not money.
@@ -670,6 +672,7 @@ export async function updateOperationsPolicy(
     reservationHoldGraceDays: row.reservationHoldGraceDays,
     maxCheckoutStartDaysAhead: row.maxCheckoutStartDaysAhead,
     leadFollowUpHours: row.leadFollowUpHours,
+    vacantCheckSample: row.vacantCheckSample,
     abandonmentFollowUpHours: row.abandonmentFollowUpHours,
     rateIncreaseNoticeDays: row.rateIncreaseNoticeDays,
     ecriPercentBasisPoints: row.ecriPercentBasisPoints,

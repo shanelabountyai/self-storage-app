@@ -1247,6 +1247,15 @@ export default async function AdminSettingsPage() {
             hint="0 means same-day only. Separate from the free-hold window above: a paid booking does not tie up a unit for nothing, so it does not need the same short limit."
           />
           <Field
+            name="vacantCheckSample"
+            label="Available units checked per daily walk"
+            type="number"
+            min={0}
+            max={50}
+            defaultValue={facility.vacantCheckSample}
+            hint="Oldest-checked first, so every available unit is visited over a cycle. 0 turns it off."
+          />
+          <Field
             name="leadFollowUpHours"
             label="Call an inquiry back within"
             type="number"
