@@ -503,6 +503,31 @@ test.describe('the dashboard (B-113)', () => {
     }
   })
 
+  test('tiles lead with money owed, and "needs attention" only on a real failure (B-402)', async ({
+    page,
+  }) => {
+    await page.goto('/admin')
+    const labels = await page
+      .getByRole('main')
+      .locator('a > p:first-child')
+      .allInnerTexts()
+    expect(labels).toEqual([
+      'Available now',
+      'Money owed',
+      'Occupancy',
+      'Payments today',
+      'Failed payments today',
+      'Move-ins today',
+      'Move-outs today',
+    ])
+
+    // Keyed to whatever the tile reads rather than a seeded failure, so the
+    // spec mutates no shared demo state: 0 must not cry wolf, >0 must say so.
+    const failed = page.getByRole('link').filter({ hasText: 'Failed payments today' })
+    const count = Number((await failed.locator('p').nth(1).innerText()).trim())
+    await expect(failed.getByText('needs attention')).toHaveCount(count > 0 ? 1 : 0)
+  })
+
   test('reports money owed in dollars, agreeing with the report it links to', async ({ page }) => {
     // The tile counted `Lease.status = 'delinquent'`, which nothing sets
     // until B-057, so it read 0 beside real receivables. Both figures now

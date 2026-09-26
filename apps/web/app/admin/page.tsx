@@ -209,40 +209,6 @@ export default async function AdminDashboardPage({
           hint={`${reservedUnits} reserved`}
           href="/admin/units?status=available"
         />
-        <Tile
-          label="Occupancy"
-          value={`${occupancyPct}%`}
-          hint={`${occupiedUnits}/${totalUnits} units`}
-          href="/admin/units?status=occupied"
-        />
-        {/* Both move tiles land on the report's own move-in/move-out section
-            rather than on a list that does not exist yet — B-114 builds the
-            tenant list these will point at. */}
-        <Tile
-          label="Move-ins today"
-          value={String(movedInToday)}
-          href="/admin/reports#moves-heading"
-        />
-        <Tile
-          label="Move-outs today"
-          value={String(movedOutToday)}
-          href="/admin/reports#moves-heading"
-        />
-        <Tile
-          label="Payments today"
-          value={formatCents(paymentsToday._sum.amountCents ?? 0)}
-          hint={`${paymentsToday._count} payment${paymentsToday._count === 1 ? '' : 's'}`}
-          // The deposit slip: the day's payments, itemised, with who took them.
-          href="/admin/pos/summary"
-        />
-        {/* The time window is in the label, not just the query: a count whose
-            period the reader has to guess is a count they cannot act on. */}
-        <Tile
-          label="Failed payments today"
-          value={String(failedPayments)}
-          hint="needs attention"
-          href="/admin/billing"
-        />
         {owed && (
           <Tile
             label="Money owed"
@@ -261,6 +227,41 @@ export default async function AdminDashboardPage({
             href="/admin/delinquency"
           />
         )}
+        <Tile
+          label="Occupancy"
+          value={`${occupancyPct}%`}
+          hint={`${occupiedUnits}/${totalUnits} units`}
+          href="/admin/units?status=occupied"
+        />
+        <Tile
+          label="Payments today"
+          value={formatCents(paymentsToday._sum.amountCents ?? 0)}
+          hint={`${paymentsToday._count} payment${paymentsToday._count === 1 ? '' : 's'}`}
+          // The deposit slip: the day's payments, itemised, with who took them.
+          href="/admin/pos/summary"
+        />
+        {/* The time window is in the label, not just the query: a count whose
+            period the reader has to guess is a count they cannot act on. */}
+        <Tile
+          label="Failed payments today"
+          value={String(failedPayments)}
+          // B-402. Only when there is something to attend to: an unconditional
+          // "needs attention" on a zero is the cry-wolf the time window fixed.
+          hint={failedPayments > 0 ? 'needs attention' : undefined}
+          href="/admin/billing"
+        />
+        {/* The tenants list has no "moved today" filter, so both move tiles
+            land on the report's own move-in/move-out section. */}
+        <Tile
+          label="Move-ins today"
+          value={String(movedInToday)}
+          href="/admin/reports#moves-heading"
+        />
+        <Tile
+          label="Move-outs today"
+          value={String(movedOutToday)}
+          href="/admin/reports#moves-heading"
+        />
       </div>
     </div>
   )

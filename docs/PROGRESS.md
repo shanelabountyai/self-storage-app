@@ -11919,3 +11919,13 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** The search smoke specs now locate the facility's name link by `/^Demo — Austin South/`: an unanchored name also matched "View units at Demo — Austin South" (substring collision). Any new spec on a page with both links needs the anchor. Accessibility statement re-read: it makes no claim about the search cards or the badge wording, so nothing went stale.
 
 **Verification.** typecheck, lint (6 pre-existing warnings), unit tests for facility-search, home-facts, i18n, live-region, scan coverage and US English: 67 passed. e2e smoke + i18n + a11y against a production build: 549 passed + 3 skipped = 552.
+
+## B-402: dashboard tiles lead with money owed; "needs attention" only on a failure (2026-09-26, `PENDING`)
+
+**What it built.** `/admin` tiles now run Available now, Money owed, Occupancy, Payments today, Failed payments today, Move-ins today, Move-outs today. "Failed payments today" shows the "needs attention" hint only when its count is above 0. The move tiles' comment no longer says the tenant list "does not exist yet" (B-114 shipped it); it now says the list has no "moved today" filter, which is why they still link `reports#moves-heading`.
+
+**What it decided.** The e2e keys the hint assertion to the count the tile actually shows (0 → absent, >0 → present) instead of seeding a failed payment today. That keeps the spec off shared demo state (CLAUDE.md's e2e fixture rule), at the cost that one sweep exercises only the branch the demo data is in. Demo data reads 0 today, so the absence branch is the one proven.
+
+**What it left behind.** A today filter on the tenants list, which would let the move tiles land on a list, stays unbuilt and unowned (the row ruled it out). Staff-only screen, so the public accessibility statement is unaffected.
+
+**Verification.** typecheck, lint (6 pre-existing warnings). e2e `admin.spec.ts` "the dashboard" against a production build, desktop-chrome + mobile-chrome: 16 passed.
