@@ -519,6 +519,16 @@ export const TASK_TYPES = [
     requiredProofFields: ["note"],
     sensitive: true,
   },
+  {
+    // PRD 02 US-28 (B-405). `auctionReadiness` hard-blocks a case whose unit
+    // holds a vehicle, boat or trailer and nothing followed: the arrears kept
+    // growing with no worklist. The vehicle lien process itself is Phase 2 and
+    // counsel-gated (D-10), so this card is the hand-off, not the process.
+    type: "vehicle_lien_required",
+    label: "Vehicle lien process required — not handled by this pipeline",
+    requiredProofFields: ["note"],
+    sensitive: false,
+  },
 ] as const satisfies readonly TaskTypeSpec[];
 
 export type TaskType = (typeof TASK_TYPES)[number]["type"];

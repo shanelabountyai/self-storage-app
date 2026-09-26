@@ -11959,3 +11959,13 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** No book-wide penetration figure (all active leases). No new formula test, since the formula is B-155's; the roll-up and per-staff split are covered by a new `reports-db` test.
 
 **Verification.** `tests/reports-db.test.ts` 18 passed; typecheck and lint clean. Full suite and e2e not run; no schema change, staff-only surfaces, so the accessibility statement was not re-read.
+
+## B-405 — A vehicle case opens a task (2026-09-26, SHA_PLACEHOLDER)
+
+**What it built.** PRD 02 US-28 "the vehicle block is somebody's work". A new task type `vehicle_lien_required` ("Vehicle lien process required — not handled by this pipeline"). `auctionCase` (which computes readiness) raises one high-priority task on the case (`entityType: AuctionCase`, subject resolver already existed) the first time readiness carries `contains_vehicle`, with the unit number in `detail`.
+
+**What it decided.** Idempotent per CASE, not per business day: it looks for any task of that type on the case before calling `createTask`, so completing it does not get it re-raised on the next page view. The task is unassigned (visible to anyone at the facility) rather than assigned to managers. The vehicle lien process itself stays Phase 2 and counsel-gated (D-10).
+
+**What it left behind.** No manager assignment and no notification. Raised on read, so a flagged case nobody opens gets no task until someone does (setting the flag returns to the case screen).
+
+**Verification.** New test in `tests/auctions-db.test.ts`: two checks, one task, high priority. That file plus tasks-catalog and tasks-db: 94 passed. typecheck and lint clean. Full suite not run; no schema change, staff-only, accessibility statement not re-read.

@@ -25,7 +25,7 @@ import { effectsByLease } from '@/lib/admin/holds'
 import { allChainIds, leaseSuccessorIds } from '@/lib/billing/transfer-chain'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { formatCents } from '@/lib/format'
-import { cancelOpenTask } from '@/lib/admin/tasks'
+import { cancelOpenTask, createTask } from '@/lib/admin/tasks'
 
 // PRD 02 §4.6 US-28 (B-062). The auction pipeline.
 //
@@ -346,6 +346,27 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     scheduledSaleDate: row.scheduledSaleDate,
     minDaysNoticeToSale: row.timeline?.minDaysNoticeToSale ?? 0,
   })
+
+  // B-405. The hard block stops the sale and would otherwise be nobody's work.
+  // Once per case, not once per business day (`createTask`'s own key), so a
+  // closed task is not re-raised by the next page view.
+  // ponytail: unassigned (anyone at the facility sees it); assign managers if a queue owner is wanted.
+  if (readiness.blockers.some((one) => one.kind === 'contains_vehicle')) {
+    const raised = await prisma.task.findFirst({
+      where: { type: 'vehicle_lien_required', entityId: row.id },
+      select: { id: true },
+    })
+    if (!raised) {
+      await createTask({
+        facilityId: row.facilityId,
+        type: 'vehicle_lien_required',
+        entityType: 'AuctionCase',
+        entityId: row.id,
+        priority: 'high',
+        detail: `Unit ${currentLease?.unit.number ?? row.unit.number}: vehicle lien process required — not handled by this pipeline.`,
+      })
+    }
+  }
 
   const blockedDays = new Set(readiness.blockers.map((one) => one.dayOffset).filter(Boolean))
   const obligation = surplusObligation(

@@ -297,6 +297,21 @@ describeDb('the auction pipeline', () => {
       expect(row.scheduledSaleDate).toBeNull()
     })
 
+    it('opens one high-priority task for a vehicle case, and a second check opens none (B-405)', async () => {
+      const opened = await openAuctionCase({ leaseId, facilityId })
+      await setContainsVehicle(manager(), opened!.id, true, 'Camper van inside.')
+
+      await auctionCase(regional(), opened!.id)
+      await auctionCase(regional(), opened!.id)
+
+      const tasks = await prisma.task.findMany({
+        where: { type: 'vehicle_lien_required', entityId: opened!.id },
+      })
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0]?.priority).toBe('high')
+      expect(tasks[0]?.facilityId).toBe(facilityId)
+    })
+
     it('refuses to even APPROVE a vehicle case', async () => {
       const opened = await openAuctionCase({ leaseId, facilityId })
       await setContainsVehicle(manager(), opened!.id, true, 'Camper van inside.')

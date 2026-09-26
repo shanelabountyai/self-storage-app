@@ -1,5 +1,7 @@
 # Next
 
+**B-405 is built** (2026-09-26). **Next item: B-406**, then B-407 to B-410. Still pending: owner confirm to make the repo public (secret check first), SEC-03 to SEC-09, OPS-01.
+
 **B-404 is built** (2026-09-26, `160c8c0`). **Next item: B-405** (`83azzzzy`, vehicle-case task, S), then B-406 to B-410. Still pending: owner confirm to make the repo public (secret check first), SEC-03 to SEC-09, OPS-01.
 
 **SEC-01 and SEC-02 are built** (2026-09-26). **Owner wants this repo public again**: confirm with them first, then `git ls-files | grep -iE "\.env|secret|credential|\.pem$|\.key$"` and check `.gitignore`. Then B-404 to B-410 in `06-backlog.md` order. SEC-03 to SEC-09 and OPS-01 are still open rows. Still open, unowned: the `marketplace-db` full-sweep flake (see B-400).
