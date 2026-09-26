@@ -11869,7 +11869,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **What it left behind.** The new zero-match state is not a `SCANNED_STATES` row or axe-scanned. Verification: typecheck, lint, 17 search DB tests, 29 i18n tests; e2e smoke search specs 32 passed and the new spec 4 passed (setup, desktop-chrome, mobile-chrome).
 
-## B-396: the facility page leads with its price, and the phone bar stops renting the wrong size (2026-09-25, SHA below)
+## B-396: the facility page leads with its price, and the phone bar stops renting the wrong size (2026-09-25, `0ed234f`)
 
 **What it built.** `storage/[state]/[city]/[slug]/page.tsx` gains a header line straight under the contact block, "From $59/mo · 3 sizes available — See sizes" (`facility.headlineOne/Other`, `facility.seeSizes`, EN and ES), computed from the same filtered `visible` inventory as the sticky bar and anchored to `#units`; the units `<h2>` gets `tabIndex={-1}` so the anchor moves focus, not only scroll. The promo form and the filter form each sit in a native `<details>`, open while a code is typed or a filter is set; the filter form's own `<h3>` became the `<summary>`. The phone sticky bar is now "From $X/mo" plus one "See sizes" link: the POST form, its hidden `promo` input, and the "Reserve free" link are gone, and `facility.reserveFree` is deleted (one reserve string, "Reserve for free"). `e2e/smoke.spec.ts` replaces the two old sticky-bar tests with one at 375×667 (headline, no button or reserve link in the bar, "See sizes" focuses the units heading, and the bar does not cover it via `elementFromPoint`) and one for the closed/open promo `<details>`; the promo, filter, sticky-absent and Spanish-promo specs now open the disclosure first.
 
