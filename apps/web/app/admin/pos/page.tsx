@@ -9,6 +9,7 @@ import { searchTenants } from '@/lib/admin/tenants'
 import { counterPayableAccounts, counterPayableLeases } from '@/lib/admin/pos'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { formatCents } from '@/lib/format'
+import { orderWalkInSizes, walkInSizeLabel } from '@/lib/admin/walk-in-sizes'
 import { CounterPaymentForm } from '@/components/admin/counter-payment-form'
 import { startWalkInMoveInAction } from './actions'
 
@@ -62,10 +63,12 @@ export default async function PosPage({
     tenantId ? counterPayableAccounts(actor, facilityId, { tenantId }) : [],
     prisma.unitType.findMany({
       where: { facilityId },
-      orderBy: { name: 'asc' },
       select: {
         id: true,
         name: true,
+        widthFt: true,
+        lengthFt: true,
+        climateControlled: true,
         _count: { select: { units: { where: { status: 'available' } } } },
       },
     }),
@@ -193,18 +196,20 @@ export default async function PosPage({
           quoted at the in-store price.
         </p>
         <ul className="flex flex-col gap-2">
-          {unitTypes.map((unitType) => {
+          {orderWalkInSizes(
+            unitTypes.map((u) => ({ ...u, available: u._count.units })),
+          ).map((unitType) => {
             const rate = rates.get(unitType.id)
-            const available = unitType._count.units
+            const available = unitType.available
             return (
               <li
                 key={unitType.id}
                 className="bg-card flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-sm"
               >
                 <span>
-                  <span className="font-medium">{unitType.name}</span>{' '}
+                  <span className="font-medium">{walkInSizeLabel(unitType)}</span>{' '}
                   <span className="text-muted-foreground">
-                    · {available} available
+                    · {available > 0 ? `${available} available` : 'Full — 0 available'}
                     {rate && <> · <span className="font-mono">{formatCents(rate.streetRateCents)}</span>/mo in store</>}
                   </span>
                 </span>
