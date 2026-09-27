@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { SITE } from '@/lib/site-config'
 import { formatRate } from '@/lib/format'
-import { sizeBandFor } from '@/lib/inventory/unit-filters'
+import { SIZE_BANDS, sizeBandFor } from '@/lib/inventory/unit-filters'
 import { cachedSizePricing } from '@/lib/inventory/public-inventory'
 import {
   dimensionKey,
@@ -11,6 +11,7 @@ import {
   UNIT_SIZE_ORDER,
 } from '@storage/core/marketing'
 import { EnglishBody } from '@/components/i18n/english-body'
+import { en } from '@/lib/i18n/en'
 
 export const metadata = {
   title: 'What size storage unit do I need?',
@@ -46,7 +47,16 @@ const SIZES = UNIT_SIZE_ORDER.map((key) => {
   return { ...UNIT_SIZES[key]!, widthFt, lengthFt, spoken: dimensionSpoken(widthFt, lengthFt) }
 })
 
-export default async function SizeGuidePage() {
+export default async function SizeGuidePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ zip?: string }>
+}) {
+  // B-407: a ZIP typed here rides on every card's link, so the search opens
+  // already located. Anything but five digits is ignored, not echoed.
+  const { zip: rawZip } = await searchParams
+  const zip = /^\d{5}$/.test(rawZip ?? '') ? rawZip : undefined
+
   // B-366 (D-147). The cheapest current web rate anywhere for each dimension,
   // so the guide states a real starting price rather than the kit's invented
   // one. A size nobody has available today prints no badge — never a
@@ -65,9 +75,38 @@ export default async function SizeGuidePage() {
         height unless the facility page says otherwise.
       </p>
 
+      <form method="get" className="mt-6 flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="zip" className="text-sm font-medium">
+            Your ZIP code
+          </label>
+          <input
+            id="zip"
+            name="zip"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]{5}"
+            maxLength={5}
+            autoComplete="postal-code"
+            defaultValue={zip}
+            className="bg-background h-10 w-32 rounded-md border px-3"
+          />
+        </div>
+        <button type="submit" className="bg-primary text-primary-foreground h-10 rounded-md px-4 font-medium">
+          {zip ? 'Update' : 'Use this ZIP'}
+        </button>
+        {zip && (
+          <p role="status" className="text-muted-foreground text-sm">
+            Links below search near {zip}.
+          </p>
+        )}
+      </form>
+
       <div className="mt-8 flex flex-col gap-6">
         {SIZES.map((size) => {
           const from = pricing.get(dimensionKey(size.widthFt, size.lengthFt))
+          const band = sizeBandFor(size.sqFt)
+          const search = new URLSearchParams({ size: band, ...(zip && { q: zip }) })
           return (
             <section
               key={size.label}
@@ -109,11 +148,15 @@ export default async function SizeGuidePage() {
                   size is in the link's name (SC 2.4.4). */}
               <p className="mt-3 text-sm">
                 <Link
-                  href={`/storage/search?size=${sizeBandFor(size.sqFt)}`}
+                  href={`/storage/search?${search}`}
                   className="font-medium underline underline-offset-4"
                 >
                   See facilities
-                  <span className="sr-only"> with {size.spoken} units</span>
+                  <span className="sr-only">
+                    {' '}
+                    with {en[SIZE_BANDS[band].labelKey].toLowerCase()} units ({size.spoken})
+                    {zip ? ` near ${zip}` : ' near you'}
+                  </span>
                 </Link>
               </p>
             </section>

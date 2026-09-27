@@ -893,6 +893,20 @@ test('every size-guide card links to a search carrying its band, and the footer 
   await expect(page.getByRole('contentinfo').locator('a[href="/storage/locations"]')).toHaveCount(1)
 })
 
+test('a ZIP typed on the size guide rides on every card link (B-407)', async ({ page }) => {
+  await page.goto('/storage/size-guide')
+  await page.getByLabel('Your ZIP code').fill('78704')
+  await page.getByRole('button', { name: 'Use this ZIP' }).click()
+  const links = page.getByRole('main').getByRole('link', { name: /^See facilities/ })
+  for (const link of await links.all()) {
+    await expect(link).toHaveAttribute('href', /q=78704/)
+    await expect(link).toHaveAccessibleName(/(small|medium|large) \(.*\) units .* near 78704/)
+  }
+  await links.nth(3).click()
+  await expect(page).toHaveURL(/size=(small|medium|large)/)
+  await expect(page).toHaveURL(/q=78704/)
+})
+
 test('the size guide answers the question the links promise', async ({ page }) => {
   await page.goto('/storage/size-guide')
   await expect(page.getByRole('heading', { level: 1 })).toContainText('What size')
