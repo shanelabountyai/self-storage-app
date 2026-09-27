@@ -147,6 +147,23 @@ export function sortByDistance(
     })
 }
 
+/// B-408. The office-hours line beside a phone number on FAQ, the size guide
+/// and the contact page — only when every active facility keeps the same
+/// hours in the same timezone. Same shape as `holdDays` above: a courtesy
+/// that stops rendering, rather than guesses, the moment facilities diverge.
+export function sharedOfficeHours(
+  facilities: readonly HomeFacility[],
+): { schedule: WeeklySchedule; timezone: string } | null {
+  const first = facilities[0]
+  if (!first?.officeHours) return null
+  const same = facilities.every(
+    (f) =>
+      f.timezone === first.timezone &&
+      JSON.stringify(f.officeHours) === JSON.stringify(first.officeHours),
+  )
+  return same ? { schedule: first.officeHours, timezone: first.timezone } : null
+}
+
 /// B-387. Today's office hours and whether the desk is staffed right now, read
 /// off the facility's own clock. Null when no schedule is published: the card
 /// then shows neither hours nor a badge, since guessing "closed" would turn

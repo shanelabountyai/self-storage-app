@@ -12,6 +12,8 @@ import {
 } from '@storage/core/marketing'
 import { EnglishBody } from '@/components/i18n/english-body'
 import { en } from '@/lib/i18n/en'
+import { formatTimeOfDay } from '@/lib/facility/public-facility'
+import { cachedHomeFacts, officeToday, sharedOfficeHours } from '@/lib/marketing/home-facts'
 
 export const metadata = {
   title: 'What size storage unit do I need?',
@@ -64,6 +66,10 @@ export default async function SizeGuidePage({
   const pricing = new Map(
     (await cachedSizePricing()).map((rate) => [dimensionKey(rate.widthFt, rate.lengthFt), rate]),
   )
+  // B-408: beside the phone number below, not a claim about every facility —
+  // only shown when every active one keeps the same hours (`sharedOfficeHours`).
+  const shared = sharedOfficeHours((await cachedHomeFacts()).facilities)
+  const hoursToday = shared && officeToday(shared.schedule, shared.timezone, new Date())
 
   return (
     <EnglishBody className="mx-auto w-full max-w-4xl px-4 py-12">
@@ -182,7 +188,15 @@ export default async function SizeGuidePage({
           Still not sure?{' '}
           <a href={`tel:${SITE.phone.href}`} className="font-medium underline underline-offset-4">
             Call {SITE.phone.display}
-          </a>{' '}
+          </a>
+          {hoursToday && (
+            <span className="text-muted-foreground">
+              {' · '}
+              {hoursToday.hours.closed
+                ? 'Office closed today'
+                : `Office today: ${formatTimeOfDay(hoursToday.hours.open)} to ${formatTimeOfDay(hoursToday.hours.close)}`}
+            </span>
+          )}{' '}
           <span className="text-muted-foreground">
             and describe what you have — it takes about a minute.
           </span>

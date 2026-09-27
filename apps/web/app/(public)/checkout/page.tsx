@@ -634,12 +634,7 @@ export default async function CheckoutPage({
           {/* Each step's own form arrives with its item; what this owns is that
               the heading exists, is focusable, and names where the renter is. */}
           <h2 id="step" tabIndex={-1} className="text-xl font-medium">
-            {session.step === 'details' && t('step.details')}
-            {session.step === 'unit_assign' && t('step.unit_assign')}
-            {session.step === 'insurance' && t('checkout.stepProtect')}
-            {session.step === 'lease' && t('checkout.stepLease')}
-            {session.step === 'payment' && t('step.payment')}
-            {session.step === 'provisioned' && t('checkout.stepMovedIn')}
+            {labelForStep(session.step, dict)}
           </h2>
 
           {/* Session data wins over the reservation prefill: if the renter has

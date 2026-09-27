@@ -76,8 +76,10 @@ export default async function ReservePage({
         </Link>
       </p>
 
+      {/* B-408: the same string as the CTA that leads here (SC 2.4.6) —
+          "Reserve this unit" used to be a second, unmatching name for it. */}
       <h1 className="text-3xl font-semibold tracking-tight text-balance">
-        {t('reserve.heading')}
+        {t('facility.reserveForFree')}
       </h1>
 
       {/* §6.6: the trust line belongs beside the decision, not in the lease —

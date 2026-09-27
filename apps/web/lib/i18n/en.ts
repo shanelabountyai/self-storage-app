@@ -155,7 +155,7 @@ export const en = {
   'search.filtersFeatures': 'Features',
   'search.filtersAnySize': 'Any size',
   'search.filtersApply': 'Apply filters',
-  'search.filtersClear': 'Clear all',
+  'search.filtersClear': 'Clear filters',
   'search.sizeGuideBefore': 'Not sure what size you need? Read the',
   'search.sizeGuideLink': 'size guide',
 
@@ -241,8 +241,6 @@ export const en = {
   'facility.ceiling': ' · {height} ft ceiling',
   'facility.rentNow': 'Rent now',
   'facility.reserveForFree': 'Reserve for free',
-  'facility.trustLine':
-    'Month-to-month, no long-term commitment · Reserving is free and needs no card',
   'facility.allRented': 'All rented right now — ',
   'facility.allRentedAfter': ' about this size; units open up most weeks.',
   'facility.onlyLeftOne': 'Only {count} left',
@@ -254,7 +252,7 @@ export const en = {
   'facility.anySize': 'Any size',
   'facility.sortBy': 'Sort by',
   'facility.features': 'Features',
-  'facility.apply': 'Apply',
+  'facility.apply': 'Apply filters',
   'facility.clearFilters': 'Clear filters',
   'facility.matchesOne': '{count} size matches',
   'facility.matchesOther': '{count} sizes match',
@@ -262,7 +260,7 @@ export const en = {
   'facility.noLiveAvailabilityAfter':
     'to confirm what is open and we will hold it for you.',
   'facility.noFilterMatch': 'Nothing here matches those filters.',
-  'facility.clearThem': 'Clear them',
+  'facility.clearThem': 'Clear filters',
   'facility.clearThemAfter': 'to see every size at this location.',
   'facility.noSizesPublished': "We haven't published sizes for this location yet.",
   'facility.noSizesPublishedAfter': 'and we will tell you what is here.',
@@ -312,7 +310,6 @@ export const en = {
   // two dictionary entries for one label is how the two forms drift apart.
   'reserve.title': 'Reserve a unit for free',
   'reserve.back': 'Back to {facility}',
-  'reserve.heading': 'Reserve this unit',
   // The three cases `holdWindowKey` picks between. Never assembled from a
   // count and a plural `s`: 0 and 1 are "the day you picked" and "the day
   // after" to somebody deciding whether to hand over their phone number.
@@ -492,9 +489,6 @@ export const en = {
   'checkout.bigger': 'bigger',
   'checkout.smaller': 'smaller',
   'checkout.trade': '{area}, {money}',
-  'checkout.stepProtect': 'Protect what you store',
-  'checkout.stepLease': 'Your lease',
-  'checkout.stepMovedIn': 'You are moved in',
   'checkout.emailedTo': 'Your unit is yours. We have emailed your lease and receipt to',
   'checkout.didntArrive': "Didn't arrive? Check your spam folder, or",
   'checkout.didntArriveAfter': 'and we will send it again.',

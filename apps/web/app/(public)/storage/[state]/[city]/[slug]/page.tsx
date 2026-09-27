@@ -575,9 +575,10 @@ function UnitTypeCard({
               {t('facility.reserveForFree')}
             </Link>
           </div>
-          {/* §6.6: the trust line for each action, beside the action. */}
+          {/* B-408: one string for this claim (SC 3.2.4) — it used to also
+              appear, worded differently, further down this same page. */}
           <p className="text-muted-foreground mt-2 text-xs">
-            {t('facility.trustLine')}
+            {t('facility.monthToMonth')}
           </p>
         </div>
       )}
@@ -1148,12 +1149,6 @@ export default async function FacilityPage({
           </a>
         </p>
       )}
-
-      {/* §6.6: the commitment terms belong next to the decision, not buried in
-          the lease. */}
-      <p className="text-muted-foreground mt-4 text-sm">
-        {t('facility.monthToMonth')}
-      </p>
 
       <section aria-labelledby="hours" className="mt-10">
         <h2 id="hours" className="text-xl font-medium">

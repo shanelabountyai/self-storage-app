@@ -154,7 +154,7 @@ export const es: Dictionary = {
   'search.filtersFeatures': 'Características',
   'search.filtersAnySize': 'Cualquier tamaño',
   'search.filtersApply': 'Aplicar filtros',
-  'search.filtersClear': 'Borrar todo',
+  'search.filtersClear': 'Quitar filtros',
   'search.sizeGuideBefore': '¿No sabe qué tamaño necesita? Lea la',
   'search.sizeGuideLink': 'guía de tamaños',
 
@@ -240,8 +240,6 @@ export const es: Dictionary = {
   'facility.ceiling': ' · {height} pies de altura',
   'facility.rentNow': 'Rentar ahora',
   'facility.reserveForFree': 'Reservar gratis',
-  'facility.trustLine':
-    'Mes a mes, sin compromiso a largo plazo · Reservar es gratis y no pide tarjeta',
   'facility.allRented': 'Todo rentado en este momento — ',
   'facility.allRentedAfter': ' sobre este tamaño; casi todas las semanas se desocupa algo.',
   // Spanish agrees the verb with the count where English does not, so these
@@ -257,7 +255,7 @@ export const es: Dictionary = {
   'facility.anySize': 'Cualquier tamaño',
   'facility.sortBy': 'Ordenar por',
   'facility.features': 'Características',
-  'facility.apply': 'Aplicar',
+  'facility.apply': 'Aplicar filtros',
   'facility.clearFilters': 'Quitar filtros',
   'facility.matchesOne': '{count} tamaño coincide',
   'facility.matchesOther': '{count} tamaños coinciden',
@@ -265,7 +263,7 @@ export const es: Dictionary = {
   'facility.noLiveAvailabilityAfter':
     'para confirmar qué hay libre y se lo apartamos.',
   'facility.noFilterMatch': 'Nada coincide con esos filtros.',
-  'facility.clearThem': 'Quítelos',
+  'facility.clearThem': 'Quitar filtros',
   'facility.clearThemAfter': 'para ver todos los tamaños de esta sucursal.',
   'facility.noSizesPublished': 'Todavía no publicamos los tamaños de esta sucursal.',
   'facility.noSizesPublishedAfter': 'y le decimos qué hay aquí.',
@@ -309,7 +307,6 @@ export const es: Dictionary = {
   // --- The reservation form on the facility page (US-401, B-267) ---------
   'reserve.title': 'Reserve una unidad gratis',
   'reserve.back': 'Volver a {facility}',
-  'reserve.heading': 'Reserve esta unidad',
   'reserve.holdThroughMoveIn': 'Gratis hasta el final del día de su mudanza',
   'reserve.holdDayAfter': 'Gratis hasta el día siguiente al de su mudanza',
   'reserve.holdDays': 'Gratis por {days} días después del día de su mudanza',
@@ -450,9 +447,6 @@ export const es: Dictionary = {
   'checkout.bigger': 'más grande',
   'checkout.smaller': 'más pequeña',
   'checkout.trade': '{area}, {money}',
-  'checkout.stepProtect': 'Proteja lo que guarda',
-  'checkout.stepLease': 'Su contrato',
-  'checkout.stepMovedIn': 'Ya se mudó',
   'checkout.emailedTo':
     'La unidad es suya. Le enviamos por correo su contrato y su recibo a',
   'checkout.didntArrive': '¿No llegó? Revise su carpeta de correo no deseado, o',

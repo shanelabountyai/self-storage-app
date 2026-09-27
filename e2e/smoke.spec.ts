@@ -795,19 +795,21 @@ test('filters narrow the list and survive into the URL', async ({ page }) => {
   // select further down the page — two controls may legitimately mention size,
   // so the filter is addressed precisely rather than by substring.
   //
-  // B-122 hit the same thing twice more on this one page, which is the lesson
-  // worth keeping: `getByRole`'s `name` is a SUBSTRING match, so the promo
-  // box's "Apply code" button started matching `{ name: 'Apply' }`, and its
-  // (deliberately pre-mounted, deliberately empty) live region became a second
-  // `role="status"` here. Neither is a defect in the page — a page may have
-  // two live regions and two buttons whose labels share a word — so both
-  // locators are narrowed rather than the page changed.
+  // B-122 hit the same thing twice more on this one page: `getByRole`'s
+  // `name` is a SUBSTRING match, so the promo box's "Apply code" button
+  // started matching a bare `{ name: 'Apply' }`, and its (deliberately
+  // pre-mounted, deliberately empty) live region became a second
+  // `role="status"` here. B-408 renamed this button "Apply filters" (one
+  // string for the concept, no longer bare "Apply"), which stopped the
+  // collision on its own — `exact` stays, since "Apply filters" is still a
+  // substring of nothing else on the page but there is no reason to drop the
+  // belt-and-suspenders check that caught it before.
   await page.locator('summary', { hasText: 'Narrow these down' }).click()
   await page.getByLabel('Size', { exact: true }).selectOption('small')
   // 3.2.2: selecting must not navigate on its own.
   await expect(page).not.toHaveURL(/size=small/)
 
-  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  await page.getByRole('button', { name: 'Apply filters', exact: true }).click()
   await expect(page).toHaveURL(/size=small/)
   await expect(page.getByRole('status').filter({ hasText: /sizes? match/ })).toContainText(
     '1 size matches',
@@ -819,8 +821,13 @@ test('a filter combination with no matches offers a way out', async ({ page }) =
   // different problem from "this facility has nothing", and needs different copy.
   await page.goto('/storage/tx/austin/demo-austin-south?size=small&features=driveUp')
 
-  await expect(page.getByRole('main')).toContainText('Nothing here matches those filters')
-  await expect(page.getByRole('link', { name: 'Clear them' })).toBeVisible()
+  // B-408 gave the filter panel's own "Clear filters" link (inside the still-
+  // closed `<details>`) the same name as this one, since they do the same
+  // thing — so `main` alone no longer disambiguates a `getByRole` lookup.
+  // Scoped to the empty-state paragraph, which is the one actually visible.
+  const message = page.locator('p', { hasText: 'Nothing here matches those filters' })
+  await expect(message).toBeVisible()
+  await expect(message.getByRole('link', { name: 'Clear filters' })).toBeVisible()
 })
 
 test('a search result carries its query into the facility page', async ({ page }) => {
@@ -862,7 +869,7 @@ test('the search filter rail sets, keeps and clears size and features', async ({
   await expect(page).toHaveURL(/size=medium/)
   await expect(page).toHaveURL(/features=climate/)
   await expect(page.getByLabel('Medium (5×10 to 10×10)')).toBeChecked()
-  await page.getByRole('link', { name: 'Clear all' }).click()
+  await page.getByRole('link', { name: 'Clear filters' }).click()
   await expect(page).toHaveURL(/\/storage\/search\?q=78704$/)
 })
 
@@ -921,7 +928,7 @@ test('reserving a unit holds it, for free, with no account', async ({ page }) =>
   const card = page.getByRole('listitem').filter({ hasText: '10x10 Test' }).first()
   await card.getByRole('link', { name: 'Reserve for free' }).click()
 
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Reserve this unit')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Reserve for free')
   await expect(page.getByRole('main')).toContainText('No credit card needed')
 
   // B-267. The route's only scan. The entry that stood for it in
@@ -1126,9 +1133,8 @@ test('a checkout step change moves focus and announces where it went', async ({ 
   // have passed the assertions above and still left every later Continue
   // silent.
   await page.getByRole('button', { name: 'This is right' }).click()
-  // The stepper's own short label ("Protection"), not the step's page
-  // heading ("Protect what you store") — the same distinction B-110's
-  // comment already draws for step 2's "Your unit".
+  // B-408: the stepper's announcement and the step's own page heading are
+  // now the same string ("Protection") — they used to differ (SC 2.4.6).
   await expect(announcer).toHaveText(/Protection — step 3 of 6/)
   await expect(page.locator('#step')).toBeFocused()
 })
@@ -1233,7 +1239,7 @@ test('checkout goes back, from the control and from the progress indicator', asy
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
   await page.getByRole('button', { name: 'This is right' }).click()
-  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Protection' })).toBeVisible()
 
   const progress = page.getByRole('navigation', { name: 'Checkout progress' })
   // Focus + Enter, not click: below `sm` the row is sr-only (B-378), keyboard-
@@ -1272,18 +1278,18 @@ test('a total that moves says what moved it', async ({ page }) => {
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
   await page.getByRole('button', { name: 'This is right' }).click()
-  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Protection' })).toBeVisible()
 
   const summary = page.getByRole('complementary', { name: 'What you are paying' })
   await page.getByRole('radio', { name: /\$5,000 cover/ }).check()
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Your lease' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Lease' })).toBeVisible()
   await expect(summary.getByRole('status')).toContainText(/Protection plan added/)
 
   // Cleared by the next step, not left standing — a note that outlives its
   // cause attributes the current total to a change two steps ago.
   await page.getByRole('button', { name: 'Back to protection' }).click()
-  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Protection' })).toBeVisible()
   await expect(summary.getByRole('status')).toHaveText('')
 })
 
@@ -1312,9 +1318,9 @@ test('the sticky price summary does not cover the payment step at 360px', async 
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
   await page.getByRole('button', { name: 'This is right' }).click()
-  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Protection' })).toBeVisible()
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Your lease' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Lease' })).toBeVisible()
   // Named, not positional. B-112 moved the active-duty declaration onto this
   // step, so `.first()` is no longer the E-SIGN consent — and checking the
   // wrong box gets the signature refused for a reason the test cannot see.
@@ -1447,7 +1453,7 @@ test('the protection step cannot be skipped and updates the total', async ({ pag
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await page.getByRole('button', { name: 'This is right' }).click()
 
-  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Protection' })).toBeVisible()
   // US-501: the mid tier is preselected and changeable in one tap.
   await expect(page.getByRole('radio', { name: /\$3,000 cover/ })).toBeChecked()
 
@@ -1461,7 +1467,7 @@ test('the protection step cannot be skipped and updates the total', async ({ pag
   // A plan instead, and the recurring total moves with a stated cause (§6.4).
   await page.getByRole('radio', { name: /\$5,000 cover/ }).check()
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
-  await expect(page.getByRole('main')).toContainText('Your lease')
+  await expect(page.getByRole('main')).toContainText('Lease')
   await expect(page.getByRole('main')).toContainText('Protection')
 })
 
@@ -1489,7 +1495,7 @@ test('the lease shows a summary first and signs with a typed name', async ({ pag
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Your unit' })).toBeVisible()
   await page.getByRole('button', { name: 'This is right' }).click()
-  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Protection' })).toBeVisible()
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
 
   // §6.4: the plain-language summary is real page content above the full text.
@@ -1587,12 +1593,12 @@ test('the payment step itemises before it charges and discloses autopay', async 
   await assertNoAxeViolations(page) // step 2: Your unit
 
   await page.getByRole('button', { name: 'This is right' }).click()
-  await expect(page.getByRole('heading', { name: 'Protect what you store' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Protection' })).toBeVisible()
   await assertNoAxeViolations(page) // step 3: Protection
 
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'The short version' })).toBeVisible()
-  await assertNoAxeViolations(page) // step 4: Your lease
+  await assertNoAxeViolations(page) // step 4: Lease
 
   // Named, not positional. B-112 moved the active-duty declaration onto this
   // step, so `.first()` is no longer the E-SIGN consent — and checking the

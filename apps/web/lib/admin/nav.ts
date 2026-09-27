@@ -53,31 +53,31 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'walkthrough', label: 'Walkthrough', href: '/admin/walkthrough', group: 'property', anyOf: ['units:edit'] },
   { key: 'maintenance', label: 'Maintenance', href: '/admin/maintenance', group: 'property', anyOf: ['units:edit'] },
   { key: 'overlocks', label: 'Overlocks', href: '/admin/overlocks', group: 'property', anyOf: ['delinquency:execute_step'] },
-  { key: 'access', label: 'Gate Activity', href: '/admin/access', group: 'property', anyOf: ['access:events'] },
-  { key: 'keypad-queue', label: 'Keypad Queue', href: '/admin/access/queue', group: 'property', anyOf: ['tenants:view'] },
+  { key: 'access', label: 'Gate activity', href: '/admin/access', group: 'property', anyOf: ['access:events'] },
+  { key: 'keypad-queue', label: 'Keypad queue', href: '/admin/access/queue', group: 'property', anyOf: ['tenants:view'] },
   // PRD 03 §8 Phase 2 (B-080). Where a quiet webhook feed or a dead-lettered
   // command becomes visible before a tenant phones about it.
-  { key: 'gate-health', label: 'Gate Health', href: '/admin/access/health', group: 'property', anyOf: ['access:events'] },
+  { key: 'gate-health', label: 'Gate health', href: '/admin/access/health', group: 'property', anyOf: ['access:events'] },
   { key: 'tenants', label: 'Tenants', href: '/admin/tenants', group: 'money', anyOf: ['tenants:view'] },
   { key: 'billing', label: 'Billing', href: '/admin/billing', group: 'money', anyOf: ['payments:take', 'reports:financial'] },
-  { key: 'pos', label: 'POS / Drawer', href: '/admin/pos', group: 'money', anyOf: ['payments:take'] },
+  { key: 'pos', label: 'POS / drawer', href: '/admin/pos', group: 'money', anyOf: ['payments:take'] },
   // PRD 01 §9 Phase 3 (B-090 part 5). Under Money & tenants beside Billing:
   // an account is a payer, and the question it answers ("who settles unit 12")
   // is a billing one rather than a setting.
-  { key: 'billing-accounts', label: 'Business Accounts', href: '/admin/billing/accounts', group: 'money', anyOf: ['billing_accounts:manage', 'reports:financial'] },
+  { key: 'billing-accounts', label: 'Business accounts', href: '/admin/billing/accounts', group: 'money', anyOf: ['billing_accounts:manage', 'reports:financial'] },
   { key: 'delinquency', label: 'Delinquency', href: '/admin/delinquency', group: 'money', anyOf: ['delinquency:execute_step'] },
   // B-076 / PRD 02 US-11. The rate-increase review screen. Gated on the
   // permission that schedules them; the regional-rank check that governs
   // APPROVAL lives in the service, since a site manager may legitimately
   // build a worklist they cannot sign off.
-  { key: 'rate-increases', label: 'Rate Increases', href: '/admin/rate-increases', group: 'money', anyOf: ['rates:tenant_increase'] },
+  { key: 'rate-increases', label: 'Rate increases', href: '/admin/rate-increases', group: 'money', anyOf: ['rates:tenant_increase'] },
   { key: 'auctions', label: 'Auctions', href: '/admin/auctions', group: 'money', anyOf: ['auctions:approve'] },
   { key: 'reports', label: 'Reports', href: '/admin/reports', group: 'money', anyOf: ['reports:operational', 'reports:financial', 'reports:rollup'] },
   // PRD 09 FR-21 (B-092). In the Admin group beside Settings rather than in
   // Reports: it is an oversight surface for the person who owns the business,
   // not a figure anybody works from daily, and D-13a makes it the only channel
   // through which misuse of impersonation becomes visible at all.
-  { key: 'support-sessions', label: 'Support Sessions', href: '/admin/impersonation', group: 'admin', anyOf: ['impersonation:oversee'] },
+  { key: 'support-sessions', label: 'Support sessions', href: '/admin/impersonation', group: 'admin', anyOf: ['impersonation:oversee'] },
   { key: 'settings', label: 'Settings', href: '/admin/settings', group: 'admin', anyOf: ['facility:settings'] },
   // 'leases' and 'audit-log' are DELETED, not hidden — both resolved only to
   // the "built in a later backlog item" placeholder, and a nav promising two

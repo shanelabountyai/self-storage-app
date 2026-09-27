@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { officeToday, sortByDistance, type HomeFacility } from '../apps/web/lib/marketing/home-facts'
+import {
+  officeToday,
+  sharedOfficeHours,
+  sortByDistance,
+  type HomeFacility,
+} from '../apps/web/lib/marketing/home-facts'
 import type { WeeklySchedule } from '../packages/core/facility-settings'
 
 // B-366. The locations page's nearest-first cut — real enough to deserve its
@@ -67,5 +72,44 @@ describe('officeToday', () => {
   it('is closed on a closed day and null without a schedule', () => {
     expect(officeToday(week, 'America/Chicago', new Date('2026-09-27T17:00:00Z'))?.open).toBe(false)
     expect(officeToday(null, 'America/Chicago', new Date())).toBeNull()
+  })
+})
+
+// B-408. FAQ/size-guide/contact show one office-hours line beside the phone
+// number only when it is true of every active facility — never a guess.
+describe('sharedOfficeHours', () => {
+  const day = { closed: false as const, open: '09:00', close: '18:00' }
+  const week = Object.fromEntries(
+    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((d) => [
+      d,
+      d === 'sunday' ? { closed: true } : day,
+    ]),
+  ) as unknown as WeeklySchedule
+
+  it('is null with no facilities', () => {
+    expect(sharedOfficeHours([])).toBeNull()
+  })
+
+  it('is null when the first facility has no published hours', () => {
+    expect(sharedOfficeHours([facility({ officeHours: null })])).toBeNull()
+  })
+
+  it('returns the schedule when every facility agrees, same timezone', () => {
+    const facilities = [facility({ officeHours: week }), facility({ id: 'f2', officeHours: week })]
+    expect(sharedOfficeHours(facilities)).toEqual({ schedule: week, timezone: 'America/Chicago' })
+  })
+
+  it('is null once one facility publishes different hours', () => {
+    const other: WeeklySchedule = { ...week, monday: { closed: true } }
+    const facilities = [facility({ officeHours: week }), facility({ id: 'f2', officeHours: other })]
+    expect(sharedOfficeHours(facilities)).toBeNull()
+  })
+
+  it('is null once one facility is in a different timezone', () => {
+    const facilities = [
+      facility({ officeHours: week }),
+      facility({ id: 'f2', officeHours: week, timezone: 'America/Denver' }),
+    ]
+    expect(sharedOfficeHours(facilities)).toBeNull()
   })
 })

@@ -142,7 +142,7 @@ export default async function AdminStreetRatesPage() {
           anybody already renting — raising an existing tenant is a different job with its own
           notice period, on{' '}
           <Link href="/admin/rate-increases" className="underline underline-offset-2">
-            Rate Increases
+            Rate increases
           </Link>
           .
         </p>

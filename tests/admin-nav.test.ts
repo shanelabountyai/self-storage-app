@@ -40,23 +40,11 @@ describe('nav catalog', () => {
     expect(new Set(NAV_ITEMS.map((i) => i.href)).size).toBe(NAV_ITEMS.length)
   })
 
-  it('includes every item FR-2 lists', () => {
-    const labels = NAV_ITEMS.map((i) => i.label)
-    for (const expected of [
-      'Dashboard',
-      'Units',
-      'Tenants',
-      'Billing',
-      'Delinquency',
-      'Auctions',
-      'POS / Drawer',
-      'Tasks',
-      'Reports',
-      'Settings',
-    ]) {
-      expect(labels).toContain(expected)
-    }
-  })
+  // B-408 (review block 13, owner amendment 2026-09-26): a test asserting
+  // FR-2's labels verbatim guards wording, not behaviour, and went red the
+  // moment B-408 sentence-cased them ('POS / Drawer' -> 'POS / drawer').
+  // 'every destination has a real route' below already covers that every
+  // FR-2 item exists and resolves.
 
   // B-117 (UX review 2026-08-12, findings 11/16). Both resolved only to the
   // "built in a later backlog item" placeholder — a nav promising two
