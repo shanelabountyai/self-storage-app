@@ -1,5 +1,7 @@
 # Next
 
+**Review block 13 is written** (2026-09-26, `7adbd87`): B-411 to B-441, from four reviewers (operator, UX, a11y, tenant). **Next item: B-408**, then B-409, B-411, B-412, B-410 (B-411/B-412 sit before B-410 on purpose: B-410's e2e tests their fixes), then B-413 (lien rules per state, money/legal, **Opus**). Eight open owner calls are listed in a note after B-441; the first is D-113 (auto-refund to card, B-414). New agent `tenant-reviewer` exists (registers after a restart). Still pending: owner confirm to make the repo public (secret check first), SEC-03 to SEC-09, OPS-01.
+
 **B-407 is built** (2026-09-26). **Next item: B-408**, then B-409, B-410. Still pending: owner confirm to make the repo public (secret check first), SEC-03 to SEC-09, OPS-01.
 
 **B-406 is built** (2026-09-26). **Next item: B-407**, then B-408 to B-410. Still pending: owner confirm to make the repo public (secret check first), SEC-03 to SEC-09, OPS-01.
