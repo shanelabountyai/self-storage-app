@@ -80,6 +80,9 @@ export default async function SizeGuidePage({
           <label htmlFor="zip" className="text-sm font-medium">
             Your ZIP code
           </label>
+          <p id="zip-hint" className="text-muted-foreground text-xs">
+            5 digits
+          </p>
           <input
             id="zip"
             name="zip"
@@ -89,7 +92,9 @@ export default async function SizeGuidePage({
             maxLength={5}
             autoComplete="postal-code"
             defaultValue={zip}
-            className="bg-background h-10 w-32 rounded-md border px-3"
+            aria-describedby="zip-hint"
+            title="Enter a 5-digit ZIP code"
+            className="bg-background border-input h-10 w-32 rounded-md border px-3"
           />
         </div>
         <button type="submit" className="bg-primary text-primary-foreground h-10 rounded-md px-4 font-medium">
