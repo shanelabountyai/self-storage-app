@@ -11979,3 +11979,13 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 **What it left behind.** A unit rented between sampling and recording still gets its result stamped (a mismatch is still a real finding). No photo attach on a check. Unchecked-today tasks are not carried to tomorrow beyond the ordinary overdue behaviour of the queue.
 
 **Verification.** New `tests/vacant-checks-db.test.ts` (8 cases: 5 of 8 oldest-first, no top-up on re-run, sample 0, ok, locked, not_empty, double-record) plus walkthrough and roll-up suites: 17 passed. Typecheck clean, lint 0 errors, schema drift clean. Full suite: `invoices-db` timed out under load and `marketplace-db` failed (the open B-400 flake); both pass or fail unrelated to this change when rerun (invoices passes alone on main and here). Staff-only surface, so the accessibility statement was not re-read.
+
+## B-407 — Size guide carries a ZIP into its search links (2026-09-26, `2431d1a`)
+
+**What it built.** `/storage/size-guide` has a GET form with one labelled ZIP field (`autocomplete="postal-code"`). A valid five-digit `?zip=` rides on every card's link as `q=`, beside the `size` band, so the search opens located and filtered. The link's accessible name gives the band, the exact size and the ZIP ("See facilities with medium (5×10 to 10×10) units (…) near 78704", or "near you" with no ZIP).
+
+**What it decided.** No JS: the form reloads the page and the server builds the links. Anything but five digits is ignored, never echoed. The guide stays English inside `EnglishBody`.
+
+**What it left behind.** The row's "link through `/size/[dimension]` where a city is known" is not built: a ZIP alone gives no city, and nothing on this page knows one. It would need a ZIP-to-city lookup; no row.
+
+**Verification.** New smoke test (ZIP typed, every link carries `q`, accessible name, click lands on results with both params); the two existing size-guide specs pass with it (6 passed, desktop-chrome, `E2E_DEV=1`). Typecheck clean, lint 0 errors. Full suite not run. Accessibility statement grepped for size-guide claims: none to change.
