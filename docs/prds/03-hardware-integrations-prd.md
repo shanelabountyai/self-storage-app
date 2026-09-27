@@ -143,6 +143,7 @@ Physical access must not depend on our app being up — and our app must not lie
 - AC2: Code is delivered via the tenant's chosen channels (portal always; SMS/email opt-in) only after the adapter confirms provisioning; delivery is logged.
 - AC3: Tenant renting a second unit at the same facility keeps one code (grant is facility-scoped, linked to all active leases); renting at a second facility yields a second, independent grant.
 - AC4: In simulation mode, entering the code on the virtual keypad within gate hours returns "granted" and logs an `AccessEvent`.
+- **AC (a tenant can replace their own code) — added 2026-09-26 from the tenant review, review block 13; B-418:** `/portal/access` offers "Get a new code": after confirming, the old PIN is revoked through `revokeCredential`, a new one is issued through `issueCredential`, and it is shown behind the existing show-tap. Staff can do the same from the tenant profile, audited. Authorized persons' credentials are not touched.
 
 **US-2: Move-out revocation.**
 *As an operator, when a tenant moves out of their last unit at a facility, their gate access there ends automatically.*
@@ -171,6 +172,7 @@ Physical access must not depend on our app being up — and our app must not lie
 - AC2: Tenant detail page shows that tenant's recent access history.
 - AC3: Flags are computed and filterable: `after_hours_attempt`, `denied_repeated` (≥ 5 denials in 15 min), `unknown_code`, `suspended_attempt`, `long_dwell` (entry without exit ≥ configurable hours, where direction data exists — degrade gracefully when the vendor can't distinguish in/out).
 - AC4: Flagged events can raise notifications to manager per facility notification settings.
+- **AC (the tenant sees their own entries) — added 2026-09-26 from the tenant review, review block 13; B-431:** AC2 puts access history on the staff tenant page only. `/portal/access` lists the last 30 days of entries by the tenant and their authorized persons: facility-local time, gate, result, keypad or phone, and who. Never another tenant's events.
 
 **US-6: Manual fallback operation.**
 *As a facility manager at a site with a non-integrated legacy keypad (or during a vendor outage), I fulfill access changes from a work queue instead of the system talking to hardware.*
@@ -196,6 +198,13 @@ Physical access must not depend on our app being up — and our app must not lie
 - **Self-service built in B-105** at `/portal/access`. The tenant and the counter call the *same* functions — a second path to a working gate code would be a second place for the cap, the audit entry and the suspension state to be wrong. `GrantCause` gained a `tenant:` prefix so the gate log can tell "the tenant let this person in" from "a manager did", which are different facts after a theft claim. A tenant may withdraw somebody a manager added: it is their unit, and making them ring the office is how a person keeps access they should not have over a weekend.
 - **AC2's delinquency cascade was not actually wired up until B-105.** `cascadeAuthorizedAccess` had existed since B-029 with no caller, so a delinquent tenant locked out under D-16 could still send somebody in on that person's own code — the suspension was real for exactly one of the people it was meant to cover. Both directions are now driven from `applySuspend`/`applyRestore`; restoring only the tenant would have left everyone they authorised locked out permanently with nothing on any screen saying why. A person added *while* the tenant is suspended starts suspended too, or a locked-out tenant could add somebody from the portal and be back in the building on a code we issued.
 - AC5: The authorized-access list and the tenant's **alternate contact** are different things and are never conflated: the alternate contact is who we call, not who gets in. Access by a non-tenant after default is a lien-process input and stays in the event log.
+
+**US-10 [P2]: Non-tenant gate codes.** *(Added 2026-09-26 from the operator review, review block 13; B-436.)*
+*As a facility manager, I give staff, vendors and auction buyers their own gate codes, so nobody borrows a tenant's.*
+- AC1: `AccessGrant` gains a holder type `staff`, `vendor` or `temporary`, with holder name, facility, time window and expiry, through the same grant, credential and outbox path as a tenant code.
+- AC2: A staff user's grants revoke when the user is deactivated.
+- AC3: Auction-day buyer codes are created from the `AuctionCase` and expire with it.
+- AC4: The gate event log names the holder, and a code used outside its window is denied and logged.
 
 **US-8 (Phase 3): Smart-entry shared access.**
 *As a tenant with smart locks, I unlock via my phone and grant time-boxed access to a family member.*
