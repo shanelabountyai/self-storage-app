@@ -6,6 +6,7 @@ import { LocaleProvider } from '@/components/i18n/locale-provider'
 import { headers } from 'next/headers'
 import {
   CHECKOUT_HEADER,
+  clientDictionaryFor,
   dictionaryFor,
   translate,
 } from '@/lib/i18n'
@@ -33,7 +34,7 @@ export default async function PublicLayout({ children }: { children: React.React
   const minimalHeader = (await headers()).has(CHECKOUT_HEADER)
 
   return (
-    <LocaleProvider locale={locale} dict={dict}>
+    <LocaleProvider locale={locale} dict={clientDictionaryFor(locale)}>
       {/* First focusable element on every page: keyboard and switch users get
           past the header without tabbing the whole nav (WCAG 2.4.1). Visible
           only when focused, but never display:none — it has to be reachable. */}

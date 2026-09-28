@@ -1,6 +1,10 @@
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   acceptLanguageLocale,
+  clientDictionaryFor,
   DEFAULT_LOCALE,
   LOCALES,
   dictionaryFor,
@@ -639,5 +643,34 @@ describe('refused amount (B-337)', () => {
     for (const message of [en1, es1]) expect(message).toContain('$1284')
     expect(en1).not.toMatch(/put .*back/i)
     expect(es1).not.toMatch(/volvimos a poner/i)
+  })
+})
+
+// The Lighthouse LCP repair (2026-09-28). `LocaleProvider` is a client
+// component, so whatever it is handed is serialised into the page. English is
+// its default and already in the bundle; handing it over too made every
+// English document three times its size, and nothing but a byte count showed it.
+describe('the dictionary a page serialises', () => {
+  it('is absent for English and whole for Spanish', () => {
+    expect(clientDictionaryFor('en')).toBeUndefined()
+    expect(clientDictionaryFor('es')).toBe(es)
+  })
+
+  it('reaches LocaleProvider only through clientDictionaryFor', () => {
+    const repoRoot = fileURLToPath(new URL('..', import.meta.url))
+    const files = execFileSync(
+      'git',
+      ['ls-files', '--cached', '--others', '--exclude-standard', 'apps/web/**/*.tsx'],
+      { cwd: repoRoot, encoding: 'utf8' },
+    )
+      .trim()
+      .split('\n')
+    const tags = files.flatMap((file) =>
+      [...readFileSync(`${repoRoot}/${file}`, 'utf8').matchAll(/<LocaleProvider\s[^>]*>/g)].map(
+        ([tag]) => `${file}: ${tag}`,
+      ),
+    )
+    expect(tags.length).toBeGreaterThan(0)
+    expect(tags.filter((tag) => !tag.includes('dict={clientDictionaryFor(locale)}'))).toEqual([])
   })
 })

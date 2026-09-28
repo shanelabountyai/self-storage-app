@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { LocaleProvider } from '@/components/i18n/locale-provider'
 import { PortalPayment } from '@/components/portal/portal-payment'
 import { formatCents, formatRate } from '@/lib/format'
-import { dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
+import { clientDictionaryFor, dictionaryFor, translate, type Locale, type MessageKey } from '@/lib/i18n'
 import { attributePayment, checkPayLink, payLinkLocale } from '@/lib/portal/pay-links'
 import {
   AMOUNT_PROBLEM_KEYS,
@@ -211,7 +211,7 @@ export default async function PayLinkPage({
 function Shell({ locale, children }: { locale: Locale; children: React.ReactNode }) {
   const dict = dictionaryFor(locale)
   return (
-    <LocaleProvider locale={locale} dict={dict}>
+    <LocaleProvider locale={locale} dict={clientDictionaryFor(locale)}>
     <div className="flex min-h-screen flex-col">
       <a
         href="#main"

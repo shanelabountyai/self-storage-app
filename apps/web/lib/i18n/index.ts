@@ -124,6 +124,15 @@ export function dictionaryFor(locale: Locale): Dictionary {
   return DICTIONARIES[locale]
 }
 
+/// What a layout hands `LocaleProvider`, which serialises it into the page.
+/// English is `undefined` because the provider already has it: `en` is its
+/// default and so is in the client bundle. Passing it as well put the whole
+/// dictionary in every English page's HTML, 108 KB of a 165 KB document.
+// ponytail: a Spanish page still carries the whole dictionary; per-route key
+// subsets if that page's weight ever matters.
+export function clientDictionaryFor(locale: Locale): Dictionary | undefined {
+  return locale === DEFAULT_LOCALE ? undefined : DICTIONARIES[locale]
+}
 
 /// Look up a message, substituting `{name}` placeholders.
 ///

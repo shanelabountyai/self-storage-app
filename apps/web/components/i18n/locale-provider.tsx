@@ -34,11 +34,12 @@ const LocaleContext = createContext<LocaleContextValue>({
 
 export function LocaleProvider({
   locale,
-  dict,
+  dict = en,
   children,
 }: {
   locale: Locale
-  dict: Dictionary
+  /// From `clientDictionaryFor`: absent for English, which is already here.
+  dict?: Dictionary
   children: React.ReactNode
 }) {
   const value = useMemo(() => ({ locale, dict }), [locale, dict])

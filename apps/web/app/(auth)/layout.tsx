@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { LocaleProvider } from '@/components/i18n/locale-provider'
 import { LanguageToggle } from '@/components/site/language-toggle'
-import { dictionaryFor, RESET_TOKEN_HEADER, translate } from '@/lib/i18n'
+import { clientDictionaryFor, dictionaryFor, RESET_TOKEN_HEADER, translate } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { resetLinkLocale } from '@/lib/auth/flows'
 
@@ -26,7 +26,7 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
   const dict = dictionaryFor(locale)
 
   return (
-    <LocaleProvider locale={locale} dict={dict}>
+    <LocaleProvider locale={locale} dict={clientDictionaryFor(locale)}>
       <a
         href="#main"
         className="bg-background focus:ring-ring sr-only rounded-md px-4 py-2 text-sm font-medium focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:ring-2"

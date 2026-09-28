@@ -231,6 +231,18 @@ jobs:
       - name: Lighthouse
         run: npx lhci autorun
 
+      # Every run, not only a failed one: the log prints a figure only once it
+      # breaks a budget, so a slowdown that stays under it leaves no record.
+      # 2026-09-28's regression had no passing report to be compared with.
+      # `include-hidden-files` because upload-artifact v4 skips dot-directories.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse
+          path: .lighthouseci/
+          include-hidden-files: true
+          retention-days: 14
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

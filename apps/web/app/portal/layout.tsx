@@ -12,7 +12,7 @@ import { currentImpersonation, hasStaleImpersonationCookie } from '@/lib/imperso
 import { ImpersonationBanner } from '@/components/impersonation/banner'
 import { LocaleProvider } from '@/components/i18n/locale-provider'
 import { LanguageToggle } from '@/components/site/language-toggle'
-import { dictionaryFor, translate } from '@/lib/i18n'
+import { clientDictionaryFor, dictionaryFor, translate } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
 // PRD 01 §4.7 US-701. The portal shell: every route under here requires a
@@ -74,7 +74,7 @@ export default async function PortalLayout({ children }: { children: React.React
   }
 
   return (
-    <LocaleProvider locale={locale} dict={dict}>
+    <LocaleProvider locale={locale} dict={clientDictionaryFor(locale)}>
       <div className="flex min-h-screen flex-col">
       <ImpersonationBanner />
       <a

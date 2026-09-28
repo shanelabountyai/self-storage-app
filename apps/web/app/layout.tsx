@@ -13,7 +13,13 @@ import './globals.css'
 // rather than the kit's Google Fonts @import, so no request leaves the site.
 const archivo = Archivo({ variable: '--font-archivo', subsets: ['latin'] })
 const sourceSans = Source_Sans_3({ variable: '--font-source-sans', subsets: ['latin'] })
-const jetbrainsMono = JetBrains_Mono({ variable: '--font-jetbrains-mono', subsets: ['latin'] })
+// Not preloaded: it sets prices, never a page's largest text, and a preloaded
+// font is fetched ahead of first paint on every page whether it is used or not.
+const jetbrainsMono = JetBrains_Mono({
+  variable: '--font-jetbrains-mono',
+  subsets: ['latin'],
+  preload: false,
+})
 
 export const metadata: Metadata = {
   // Without this, a page-level `alternates.canonical` renders as a relative
