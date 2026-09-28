@@ -543,6 +543,11 @@ test('"What you\'d pay today" itemizes and foots', async ({ page }) => {
   await expect(card).toContainText('Rent is due')
   await expect(card).toContainText('Late fee')
   await expect(card).toContainText('To move out')
+
+  // B-410. A closed <details> is invisible to axe, so the route loop's scan of
+  // this page never saw the breakdown or B-397's block.
+  // a11y-state: /storage/[state]/[city]/[slug] | price breakdown open
+  await assertNoAxeViolations(page)
 })
 
 test('the hero photo sits above the fold, LCP-primed, and never repeats in the gallery below (B-118)', async ({ page }) => {

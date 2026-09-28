@@ -2982,6 +2982,21 @@ function reviewedOn(locale: Locale): string {
 // this one only renders with a Stripe key (D-63), is not axe-scanned, and the
 // statement makes no claim about it. B-410 owns the e2e. `LAST_REVIEWED` is
 // not bumped (D-115).
+//
+// Re-read 2026-09-28, at B-410. Two lines are ADDED to the list of states the
+// automated checks do not reach: checkout's "Confirming your payment" section
+// (B-392) and its "cannot take a card" message (B-412). Both entries above said
+// the statement made no claim about them; on a page that promises to name its
+// gaps, saying nothing about two states on the money path was the
+// understatement. `e2e/checkout-stripe-load.spec.ts` asserts their focus and
+// wording, but only where a Stripe TEST key exists, and no CI lane has one, so
+// they are exceptions and not scanned states. The same two states on
+// `/portal/pay`, `/pay/[token]` and the counter card screen are not listed and
+// not scanned either. One state moved the other way: the facility page's price
+// breakdown, open, with B-397's late/leave block, is now axe-scanned
+// (`e2e/smoke.spec.ts`) and measured at 320px, 200% zoom and forced text
+// spacing. B-393's two balance states were re-run and are unchanged.
+// `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

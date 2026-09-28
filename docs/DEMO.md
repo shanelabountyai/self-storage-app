@@ -253,7 +253,7 @@ server's console, and the tenant's communication history still records them.
   *E2E — Ledger corrections* and *Demo — E2E Sandbox*, which appear in the
   facility switcher and on the Austin city page. They cannot be deleted
   because the audit log is append-only by design.
-- **Delayed webhook.** Checkout shows *Confirming your payment* until the webhook advances it; with `stripe listen` stopped it stalls on *Check again* and the phone, by design (finalising is webhook-only, FR-4.4). B-392 was verified by typecheck and unit tests only; walk it once with a real test card.
+- **Delayed webhook.** Checkout shows *Confirming your payment* until the webhook advances it; with `stripe listen` stopped it stalls on *Check again* and the phone, by design (finalising is webhook-only, FR-4.4). An automated test covers the stalled state and a card form that cannot load, but only on a machine with a Stripe test key; CI has none. Nobody has yet walked the card payment with a screen reader.
 
 ---
 

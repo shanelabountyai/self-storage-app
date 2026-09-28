@@ -310,6 +310,17 @@ const STATE_REACH: Record<string, { audience: Audience; go: (page: Page) => Prom
       await expect(page.getByRole('heading', { name: 'Unidades disponibles' })).toBeVisible()
     },
   },
+  // B-410. The price breakdown with B-397's late/leave block, which is a table
+  // of figures inside the narrowest card on the page and closed at rest.
+  '/storage/[state]/[city]/[slug] | price breakdown open': {
+    audience: 'public',
+    async go(page) {
+      await page.goto('/storage/tx/austin/demo-austin-south')
+      const card = page.getByRole('listitem').filter({ hasText: '10x10 Climate' }).first()
+      await card.getByText("What you'd pay today").click()
+      await expect(card).toContainText('If you pay late / If you leave')
+    },
+  },
   // B-290 (D-133). The Spanish offer bar above the header, which the public
   // reflow loop never renders because its browser does not prefer Spanish.
   //

@@ -539,6 +539,15 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     spec: 'e2e/i18n.spec.ts',
     layout: 'reached',
   },
+  // B-410. "What you'd pay today" opened, which is where B-397 put the late
+  // fee, gate day and move-out notice. Closed at rest, so the route loop's scan
+  // and its width measurements never saw any of it.
+  {
+    route: '/storage/[state]/[city]/[slug]',
+    state: 'price breakdown open',
+    spec: 'e2e/smoke.spec.ts',
+    layout: 'reached',
+  },
   // B-290 (D-133). The offer of Spanish above the header, which only a browser
   // preferring Spanish with no locale cookie ever sees, so no route loop can.
   // `layout: 'reached'`: it is a new bar at the top of every public page, and
@@ -1068,6 +1077,29 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
       'reached in Spanish by e2e/i18n.spec.ts as far as step 1, which asserts the language rather than running axe — the later steps need a session the scan loop does not build',
     reasonEs:
       'en español se llega hasta el paso 1, que comprueba el idioma en vez de correr el revisor automático — los pasos siguientes necesitan una sesión que la corrida de revisión no arma',
+  },
+  // B-410. B-392's confirming section and B-412's "cannot take a card" message
+  // render only with a Stripe key, and no automated lane carries one (D-63
+  // refuses a live key outside production). `e2e/checkout-stripe-load.spec.ts`
+  // asserts their focus and wording where a test key exists and skips where it
+  // does not, so neither is a `SCANNED_STATES` claim.
+  {
+    route: '/checkout',
+    state: 'confirming payment',
+    audience: 'public',
+    reason:
+      'the "Confirming your payment" section shown after a card is charged, which needs a payment provider test key the automated run does not carry',
+    reasonEs:
+      'la sección «Confirmando su pago» que aparece después de cobrar la tarjeta, que necesita una clave de prueba del procesador de pagos que la corrida automática no tiene',
+  },
+  {
+    route: '/checkout',
+    state: 'card form did not load',
+    audience: 'public',
+    reason:
+      'the message shown when the card form cannot load, which needs a payment provider test key the automated run does not carry',
+    reasonEs:
+      'el mensaje que aparece cuando el formulario de la tarjeta no carga, que necesita una clave de prueba del procesador de pagos que la corrida automática no tiene',
   },
   // B-139 named `/portal/pay/done`'s not-found state as scanned; the four
   // outcomes below are what a real payment settles to, and the demo seed
