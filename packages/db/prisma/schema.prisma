@@ -1121,7 +1121,7 @@ model Unit {
   number            String
   /// B-406. When staff last physically verified this unit while `available`;
   /// null = never. The sample takes the oldest first.
-  lastVacantCheckAt DateTime?
+  lastVacantCheckAt DateTime? @db.Timestamptz(6)
   floor             Int                   @default(1)
   /// Optional grouping for the grid view, e.g. "Building A". Null for
   /// single-building sites.

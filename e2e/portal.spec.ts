@@ -1,6 +1,11 @@
 import { PORTAL_SCAN_ROUTES as PORTAL_ROUTES } from '../apps/web/lib/a11y/scan-coverage'
 import { expect, test } from '@playwright/test'
-import { signInAsDemoTenant, signInAsPlanTenant, signInAsPosTenant } from './sign-in'
+import {
+  establishTenantSession,
+  signInAsDemoTenant,
+  signInAsPlanTenant,
+  signInAsPosTenant,
+} from './sign-in'
 import {
   assertNoAxeViolations,
   expectAnnounced,
@@ -400,6 +405,14 @@ test.describe('signed in as the demo tenant', () => {
   test('autopay cannot be turned on with no card to charge', async ({ page }) => {
     // The guard that stops the dashboard reading "On" while the billing day
     // takes nothing. The demo tenant has no saved method.
+    //
+    // A live sign-in, not the replayed jar the `beforeEach` loaded. Turning
+    // autopay ON sits behind US-701's 15-minute fresh-login gate, and the jar
+    // is minted once by the setup project: in CI this test runs more than 15
+    // minutes into the sweep, so the action redirected to /reauth and the
+    // alert never rendered. Desktop only, and never locally, where the sweep
+    // is half as long.
+    await establishTenantSession(page)
     await page.goto('/portal/methods')
     const turnOn = page.getByRole('button', { name: /turn on automatic payments/i }).first()
     await expect(turnOn).toBeVisible()
@@ -411,11 +424,11 @@ test.describe('signed in as the demo tenant', () => {
   })
 
   // The re-auth gate on turning autopay ON (US-701) is NOT exercised here:
-  // every e2e session is minted seconds earlier by the sign-in helper, so it
-  // is genuinely fresh and the gate correctly declines to fire. Driving the
-  // stale branch would mean either a >15-minute-old session or forging
-  // `authTime` in the JWT, and the decision itself is already covered
-  // directly by tests/reauth.test.ts's boundary cases. See PROGRESS.md.
+  // the test above signs in live, so its session is genuinely fresh and the
+  // gate correctly declines to fire. The stale branch is reached by accident
+  // whenever a replayed session outlives 15 minutes, which is not a test of
+  // it; the decision itself is covered directly by tests/reauth.test.ts's
+  // boundary cases. See PROGRESS.md.
 
   // /portal/documents and /portal/contact's axe coverage now lives in
   // PORTAL_ROUTES above — this used to be its own small loop, which is the

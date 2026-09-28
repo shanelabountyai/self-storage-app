@@ -86,7 +86,14 @@ export type PublicInventory = {
 /// Effective admin fee and tax rates for a facility. Same effective-dating rule
 /// as everything else: rows are never edited, the latest one on or before
 /// `asOf` wins (FR-9).
-async function pricingContext(facilityId: string, asOf: Date): Promise<PublicPricingContext> {
+///
+/// Null when the facility is gone: it was read by slug a moment ago, and a
+/// delete landing between the two reads is "not found", not a 500. One
+/// vanished facility used to fail the whole marketplace feed.
+async function pricingContext(
+  facilityId: string,
+  asOf: Date,
+): Promise<PublicPricingContext | null> {
   const [feeRows, taxRows, facility, lateFeeSteps, timeline, planRows] = await Promise.all([
     prisma.feeSchedule.findMany({
       where: { facilityId, feeType: 'admin' },
@@ -96,7 +103,7 @@ async function pricingContext(facilityId: string, asOf: Date): Promise<PublicPri
       where: { facilityId },
       select: { jurisdiction: true, rateBasisPoints: true, effectiveFrom: true },
     }),
-    prisma.facility.findUniqueOrThrow({
+    prisma.facility.findUnique({
       where: { id: facilityId },
       select: { billingPolicy: true, moveOutNoticeDays: true },
     }),
@@ -111,6 +118,7 @@ async function pricingContext(facilityId: string, asOf: Date): Promise<PublicPri
       select: { tier: true, premiumCents: true, effectiveFrom: true },
     }),
   ])
+  if (!facility) return null
 
   const admin = effectiveByGroup(feeRows, asOf, (row) => row.feeType).get('admin')
   const taxes = effectiveByGroup(taxRows, asOf, (row) => row.jurisdiction)
@@ -181,6 +189,7 @@ export async function publicInventoryForFacility(
     availableCountsByUnitType(facility.id),
     pricingContext(facility.id, asOf),
   ])
+  if (!pricing) return null
 
   const priced: PublicUnitType[] = []
   for (const unitType of unitTypes) {

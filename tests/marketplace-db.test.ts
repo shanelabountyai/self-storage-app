@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
 import { marketplaceFeed } from '../apps/web/lib/marketing/marketplace-feed'
 import { captureMarketplaceLead, partnerForKey } from '../apps/web/lib/marketing/marketplace-leads'
@@ -100,6 +100,38 @@ describeDb('marketplace integration', () => {
       const feed = await marketplaceFeed()
       const row = feed.facilities.find((facility) => facility.slug === slug)!
       expect(row.url).toMatch(/^https?:\/\/.+\/storage\/tx\/austin\//)
+    })
+
+    it('omits a facility it cannot read, and still publishes the rest', async () => {
+      // What made this file fail in a full sweep: another suite's facility
+      // with a timeline step that has no `automatedActions`, which the
+      // inventory read throws on. The feed reads every active facility.
+      const broken = await prisma.facility.create({
+        data: {
+          slug: `mkt-broken-${suffix}`,
+          name: `Marketplace Broken ${suffix}`,
+          status: 'active',
+          addressLine1: '1 Broken Way',
+          city: 'Austin',
+          state: 'TX',
+          postalCode: '78704',
+          timezone: 'America/Chicago',
+          delinquencyTimelines: {
+            create: { version: 1, active: true, label: 'malformed', steps: [{ dayOffset: 5 }] },
+          },
+        },
+      })
+      const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        const feed = await marketplaceFeed()
+        expect(feed.facilities.some((facility) => facility.slug === broken.slug)).toBe(false)
+        expect(feed.facilities.some((facility) => facility.slug === slug)).toBe(true)
+        expect(quiet).toHaveBeenCalled()
+      } finally {
+        quiet.mockRestore()
+        await prisma.delinquencyTimeline.deleteMany({ where: { facilityId: broken.id } })
+        await prisma.facility.deleteMany({ where: { id: broken.id } })
+      }
     })
 
     it('drops a facility we have stopped advertising', async () => {

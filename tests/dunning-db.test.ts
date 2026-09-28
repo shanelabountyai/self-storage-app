@@ -237,7 +237,9 @@ describeDb('dunning ladder', () => {
 
     const events = await prisma.domainEvent.findMany({
       where: { facilityId, name: 'delinquency.day_reached' },
-      orderBy: { occurredAt: 'asc' },
+      // The same tie-break as `daysEmitted`, for the same reason: the rungs
+      // land in one millisecond, and this read failed in CI as position 2.
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     })
     const last = events.at(-1)!.payload as { position: number; totalSteps: number }
     expect(last).toMatchObject({ position: 3, totalSteps: 4 })

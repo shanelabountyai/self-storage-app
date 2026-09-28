@@ -85,7 +85,15 @@ export async function marketplaceFeed(asOf: Date = new Date()): Promise<Marketpl
   // its own query, which is how the two prices start to differ.
   const rows = await Promise.all(
     facilities.map(async (facility) => {
-      const inventory = await publicInventoryForFacility(facility.slug, asOf)
+      // One facility that cannot be read is omitted, below, like one that
+      // read as null. Letting it reject failed the feed for the whole
+      // portfolio: every site de-listed because one had a bad row.
+      const inventory = await publicInventoryForFacility(facility.slug, asOf).catch(
+        (error: unknown) => {
+          console.error(`marketplace feed: omitted ${facility.slug}`, error)
+          return null
+        },
+      )
       return { facility, inventory }
     }),
   )
