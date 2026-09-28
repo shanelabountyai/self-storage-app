@@ -12058,7 +12058,7 @@ No backlog row: CI had been red on every push since 2026-09-20 (last green `12bc
 
 **Found along the way.** CI went red on this item's push at the `Lighthouse` step, on both attempts, and the item did not cause it: `verify` and Playwright passed (1714 passed, 18 skipped, the new spec among the skipped). Largest Contentful Paint on the CI runner was under 2500 ms on all four measured pages on 2026-09-20 (`12bcc18`) and is 2600 to 3300 ms now, so `/` and `/storage/size-guide` pass or fail the 3000 ms budget on runner noise. The slowdown landed while a red `verify` kept the `e2e` lane from running. Cause not established; the figures and the first suspect are in `NEXT.md`. No row.
 
-## CI repair — the Lighthouse LCP budget: a third preloaded font, and English shipped twice (2026-09-28)
+## CI repair — the Lighthouse LCP budget: a third preloaded font, and English shipped twice (2026-09-28, `7b1b0f9`)
 
 No backlog row: CI went red at the `Lighthouse` step on `f1c2ca0` (run 36488276481, both attempts), and a red CI is the item. Playwright and `verify` had passed.
 
