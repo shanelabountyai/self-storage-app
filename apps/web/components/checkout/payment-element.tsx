@@ -6,7 +6,7 @@ import { loadStripe } from '@stripe/stripe-js'
 import { useLocale, useT } from '@/components/i18n/locale-provider'
 import { PaymentConfirming } from './payment-confirming'
 import { alreadyPaidCode } from '@/lib/checkout/payment-codes'
-import { CardsUnavailable } from './cards-unavailable'
+import { StripeLoadStatus, useStripeLoad } from './stripe-load'
 
 // PRD 01 US-501 step 5 / §4.6. The Stripe Payment Element.
 //
@@ -35,10 +35,6 @@ const appearance = {
   },
 } as const
 
-/// B-392. How long the card form waits for Stripe.js before saying it cannot
-/// take a card, rather than showing a button that silently does nothing.
-const STRIPE_LOAD_MS = 10_000
-
 function PaymentForm({ returnUrl, token }: { returnUrl: string; token: string }) {
   const t = useT()
   const stripe = useStripe()
@@ -48,8 +44,7 @@ function PaymentForm({ returnUrl, token }: { returnUrl: string; token: string })
   // B-392. Set once the intent is known to be paid or paying; the form is
   // replaced for good, never re-shown.
   const [confirming, setConfirming] = useState<string | false>(false)
-  const [loadStuck, setLoadStuck] = useState(false)
-  const [loadingNotice, setLoadingNotice] = useState('')
+  const load = useStripeLoad(stripe)
   const errorRef = useRef<HTMLParagraphElement>(null)
   // The guard that replaces `disabled` (see the button). A ref rather than the
   // state above because this one is about not charging a card twice, and a ref
@@ -63,17 +58,11 @@ function PaymentForm({ returnUrl, token }: { returnUrl: string; token: string })
     if (error) errorRef.current?.focus()
   }, [error])
 
-  useEffect(() => {
-    if (stripe) return
-    const id = setTimeout(() => setLoadStuck(true), STRIPE_LOAD_MS)
-    return () => clearTimeout(id)
-  }, [stripe])
-
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     if (inFlight.current) return
     if (!stripe || !elements) {
-      setLoadingNotice(t('pay.cardFormLoading'))
+      load.pressedEarly()
       return
     }
 
@@ -111,7 +100,6 @@ function PaymentForm({ returnUrl, token }: { returnUrl: string; token: string })
   }
 
   if (confirming) return <PaymentConfirming token={token} lead={confirming} />
-  if (loadStuck && !stripe) return <CardsUnavailable t={t} />
 
   return (
     <form onSubmit={submit} className="mt-4">
@@ -131,12 +119,11 @@ function PaymentForm({ returnUrl, token }: { returnUrl: string; token: string })
           payment…" tells a sighted user what is happening and tells a screen
           reader nothing — the name of a control the user has just left is not
           re-read. Confirming a card can take several seconds, and silence for
-          several seconds after paying reads as "it didn't work". */}
-      <p role="status" className="text-muted-foreground mt-2 text-sm empty:mt-0">
-        {submitting ? t('pay.takingPaymentStatus') : loadingNotice}
-      </p>
+          several seconds after paying reads as "it didn't work". B-412: the
+          same region takes the "cannot take a card" message, and focus. */}
+      <StripeLoadStatus load={load} status={submitting ? t('pay.takingPaymentStatus') : ''} moveIn />
 
-      <PaymentElement options={{ layout: 'tabs' }} />
+      {!load.stuck && <PaymentElement options={{ layout: 'tabs' }} />}
 
       {/* B-230. `aria-busy:opacity-60` was on this button and it failed 1.4.3
           at 3.34:1 (#dadada on #747474). Caught by the counter card screen's
@@ -158,13 +145,15 @@ function PaymentForm({ returnUrl, token }: { returnUrl: string; token: string })
           moment the page goes quiet — the failure `use-my-location.tsx` already
           documents, on the screen where it costs the most. A second press is a
           no-op via `inFlight` instead. */}
-      <button
-        type="submit"
-        aria-busy={!stripe || submitting}
-        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
-      >
-        {submitting ? t('pay.takingPayment') : t('pay.payAndComplete')}
-      </button>
+      {!load.stuck && (
+        <button
+          type="submit"
+          aria-busy={!stripe || submitting}
+          className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
+        >
+          {submitting ? t('pay.takingPayment') : t('pay.payAndComplete')}
+        </button>
+      )}
     </form>
   )
 }

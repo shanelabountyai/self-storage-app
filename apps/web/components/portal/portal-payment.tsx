@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
 import { loadStripe } from '@stripe/stripe-js'
 import { useLocale, useT } from '@/components/i18n/locale-provider'
+import { StripeLoadStatus, useStripeLoad } from '@/components/checkout/stripe-load'
 
 // PRD 01 US-703. The Payment Element for a portal one-time payment.
 //
@@ -40,6 +41,7 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
   const elements = useElements()
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const load = useStripeLoad(stripe)
   const errorRef = useRef<HTMLParagraphElement>(null)
   // The guard that replaces `disabled` (see the button). A ref, not the state
   // above: this one is about not charging a card twice, and a ref is already
@@ -55,7 +57,10 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     if (inFlight.current) return
-    if (!stripe || !elements) return
+    if (!stripe || !elements) {
+      load.pressedEarly()
+      return
+    }
 
     inFlight.current = true
     setSubmitting(true)
@@ -93,12 +98,11 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
 
       {/* Also pre-mounted and empty. A button whose LABEL changes to "Taking
           payment…" is not re-read to a screen reader, so paying was several
-          seconds of silence — which reads as "it didn't work". */}
-      <p role="status" className="text-muted-foreground mt-2 text-sm empty:mt-0">
-        {submitting ? t('pay.takingPaymentStatus') : ''}
-      </p>
+          seconds of silence — which reads as "it didn't work". B-412: the
+          same region takes the "cannot take a card" message, and focus. */}
+      <StripeLoadStatus load={load} status={submitting ? t('pay.takingPaymentStatus') : ''} />
 
-      <PaymentElement options={{ layout: 'tabs' }} />
+      {!load.stuck && <PaymentElement options={{ layout: 'tabs' }} />}
 
       {/* B-230. `aria-busy:opacity-60` was on this button and it failed 1.4.3
           at 3.34:1 (#dadada on #747474). Caught by the counter card screen's
@@ -118,13 +122,15 @@ function PayForm({ returnUrl, amountLabel }: { returnUrl: string; amountLabel: s
           `use-my-location.tsx` documents: disabling the focused element blurs
           it to <body> in Chromium, losing the payer's place at exactly the
           moment the page goes quiet. `inFlight` stops the second press. */}
-      <button
-        type="submit"
-        aria-busy={!stripe || submitting}
-        className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
-      >
-        {submitting ? t('pay.takingPayment') : t('ppay.payAmount', { amount: amountLabel })}
-      </button>
+      {!load.stuck && (
+        <button
+          type="submit"
+          aria-busy={!stripe || submitting}
+          className="bg-primary text-primary-foreground mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-md px-4 text-base font-medium sm:w-auto"
+        >
+          {submitting ? t('pay.takingPayment') : t('ppay.payAmount', { amount: amountLabel })}
+        </button>
+      )}
     </form>
   )
 }

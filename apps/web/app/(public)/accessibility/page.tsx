@@ -2971,6 +2971,17 @@ function reviewedOn(locale: Locale): string {
 // above says, the statement makes no claim about this state at all, and B-410
 // still owns the e2e assertion once a Stripe test key exists. `LAST_REVIEWED`
 // is not bumped (D-115).
+//
+// Re-read 2026-09-28, at B-412. When Stripe.js has not loaded after ten
+// seconds, the card form on checkout, `/portal/pay`, `/pay/[token]` and the
+// counter card screen now writes "We can't take card payments online just now"
+// and the phone number into the status region that was already mounted, and
+// moves focus to it; before, checkout swapped in a paragraph with no role and
+// no focus, and the other three said nothing. The form comes back only on
+// "Try the card form again". Needs no change here: like the confirming state,
+// this one only renders with a Stripe key (D-63), is not axe-scanned, and the
+// statement makes no claim about it. B-410 owns the e2e. `LAST_REVIEWED` is
+// not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

@@ -801,6 +801,8 @@ export const es: Dictionary = {
   'pay.checkAgain': 'Comprobar de nuevo',
   'pay.alreadyPaid': 'Este pago ya fue enviado. No necesita pagar de nuevo.',
   'pay.cardFormLoading': 'El formulario de la tarjeta aún se está cargando. Espere un momento y vuelva a pulsar el botón.',
+  'pay.tryCardFormAgain': 'Probar de nuevo el formulario de la tarjeta',
+  'pay.cardFormReady': 'El formulario de la tarjeta está listo.',
   'pay.payAndComplete': 'Pagar y terminar la mudanza',
 
   // --- Portal chrome (US-701, B-239) ------------------------------------

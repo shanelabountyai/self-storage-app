@@ -894,6 +894,8 @@ export const en = {
   'pay.checkAgain': 'Check again',
   'pay.alreadyPaid': 'This payment has already been submitted. You do not need to pay again.',
   'pay.cardFormLoading': 'The card form is still loading. Wait a moment, then press the button again.',
+  'pay.tryCardFormAgain': 'Try the card form again',
+  'pay.cardFormReady': 'The card form is ready.',
   'pay.payAndComplete': 'Pay and complete move-in',
 
   // --- Portal chrome (US-701, B-239) ------------------------------------
