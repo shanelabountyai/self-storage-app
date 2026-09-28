@@ -12032,7 +12032,7 @@ The facts come from `cachedHomeFacts()` (`lib/marketing/home-facts.ts`), cached 
 
 **Found along the way.** The machine restarted during this item and local Postgres stayed down for every project: `postmaster.pid` (dated 2026-09-17) named PID 873, which after the boot was a Siri service. With no Postgres process running and nothing on 5432, the file was moved to `postmaster.pid.stale-2026-09-28` and the server came up through crash recovery.
 
-## CI repair — four causes behind eight days of red (2026-09-28, TBD)
+## CI repair — four causes behind eight days of red (2026-09-28, `71e311c`)
 
 No backlog row: CI had been red on every push since 2026-09-20 (last green `12bcc18`, B-329), and the owner asked for it fixed. `verify` failed first, so `e2e` was skipped and its own failure stayed hidden behind it.
 
