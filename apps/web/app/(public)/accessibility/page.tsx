@@ -2962,6 +2962,15 @@ function reviewedOn(locale: Locale): string {
 // are added to `SCANNED_STATES` (portal and admin), each axe-scanned. Manual
 // screen-reader passes over it are still owed under B-254 and the statement
 // claims none. No visible line changes; `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-28, at B-411. "Check again" in the confirming section (B-392)
+// used to unmount itself on press, dropping focus to `<body>`, and its status
+// text was present on mount rather than written in after. Both are fixed:
+// focus now lands on the confirming heading, and the region renders empty for
+// one tick before the sentence is set. Needs no change here — as B-392's entry
+// above says, the statement makes no claim about this state at all, and B-410
+// still owns the e2e assertion once a Stripe test key exists. `LAST_REVIEWED`
+// is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
