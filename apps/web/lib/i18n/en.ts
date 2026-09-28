@@ -1745,6 +1745,42 @@ export const en = {
   'faq.hours.q': 'When can I get to my unit?',
   'faq.hours.a':
     'Office hours and gate hours are different, and both are listed on every facility page. Gate hours are when you can reach your unit; office hours are when staff are there.',
+  // B-409 (first-time-renter finding 7). Each answer below is sourced from a
+  // fact the product already states — see the code comment at its Section.
+  'faq.forbidden.q': "What can't I store?",
+  'faq.forbidden.a':
+    "Nothing alive, perishable, stolen, flammable, explosive or hazardous. You can't live in the unit or run a business out of it that brings people to the site.",
+  'faq.forbidden.caveat': 'This follows our lease terms, which are a draft and not legal advice.',
+  'faq.lock.q': 'Do I need my own lock?',
+  'faq.lock.a': 'Yes. Bring your own, or buy one at the office when you move in.',
+  'faq.lostcode.q': 'What if I lose my gate code?',
+  'faq.lostcode.a':
+    'Your gate code does not change and always works at the keypad, so keep it somewhere you can find it. If you turned on phone unlock and lost that phone,',
+  'faq.lostcode.link': 'turn it off in your account',
+  'faq.lostcode.tail': 'so it can no longer open the gate.',
+  'faq.cardfail.q': 'What happens if my card is declined?',
+  'faq.cardfail.aRetry':
+    'We try your card again automatically on day {days} after it was due, before anything else changes.',
+  'faq.cardfail.suspendOne':
+    "If it still hasn't gone through by {days} day past due, gate access pauses until it has.",
+  'faq.cardfail.suspendOther':
+    "If it still hasn't gone through by {days} days past due, gate access pauses until it has.",
+  'faq.cardfail.aGeneric':
+    "We try your card again automatically a few times before anything else changes, and if it still hasn't gone through, gate access can pause until it has.",
+  'faq.cardfail.link': 'Update your card',
+  'faq.cardfail.tail': 'any time from your account.',
+  'faq.moveout.q': 'How do I move out?',
+  'faq.moveout.aZero': 'No notice needed — just clear out the unit whenever you are ready.',
+  'faq.moveout.noticeOne': 'Give {days} day notice, then clear out the unit.',
+  'faq.moveout.noticeOther': 'Give {days} days notice, then clear out the unit.',
+  'faq.moveout.aGeneric': 'Check your lease or account for your notice period, then clear out the unit.',
+  'faq.moveout.link': 'Start your move-out',
+  'faq.moveout.tail': 'in your account.',
+  'faq.transfer.q': 'Can I move to a different unit?',
+  'faq.transfer.a':
+    'Yes, if a different size opens up at the same facility. Request a transfer and we will hold the new unit and arrange the move.',
+  'faq.transfer.link': 'Request a transfer',
+  'faq.transfer.tail': 'in your account.',
   'faq.else.q': 'Something else?',
   'faq.else.call': 'Call',
 

@@ -1657,6 +1657,40 @@ export const es: Dictionary = {
   'faq.hours.q': '¿Cuándo puedo llegar a mi unidad?',
   'faq.hours.a':
     'El horario de oficina y el horario de la puerta son distintos, y los dos están en la página de cada sucursal. El horario de la puerta es cuando usted puede llegar a su unidad; el horario de oficina es cuando hay personal.',
+  'faq.forbidden.q': '¿Qué no puedo guardar?',
+  'faq.forbidden.a':
+    'Nada vivo, perecedero, robado, inflamable, explosivo o peligroso. No puede vivir en la unidad ni operar un negocio desde ella que traiga gente al lugar.',
+  'faq.forbidden.caveat': 'Esto sigue los términos de nuestro contrato, que son un borrador y no son asesoría legal.',
+  'faq.lock.q': '¿Necesito mi propio candado?',
+  'faq.lock.a': 'Sí. Traiga el suyo, o compre uno en la oficina cuando se mude.',
+  'faq.lostcode.q': '¿Qué pasa si pierdo mi código de la puerta?',
+  'faq.lostcode.a':
+    'Su código de la puerta no cambia y siempre funciona en el teclado, así que guárdelo donde lo pueda encontrar. Si activó el desbloqueo por teléfono y perdió ese teléfono,',
+  'faq.lostcode.link': 'apáguelo en su cuenta',
+  'faq.lostcode.tail': 'para que ya no pueda abrir la puerta.',
+  'faq.cardfail.q': '¿Qué pasa si rechazan mi tarjeta?',
+  'faq.cardfail.aRetry':
+    'Intentamos cobrar su tarjeta otra vez automáticamente el día {days} después de la fecha de vencimiento, antes de que cambie algo más.',
+  'faq.cardfail.suspendOne':
+    'Si para entonces todavía no se ha cobrado, con {days} día de atraso el acceso a la puerta se pausa hasta que se cobre.',
+  'faq.cardfail.suspendOther':
+    'Si para entonces todavía no se ha cobrado, con {days} días de atraso el acceso a la puerta se pausa hasta que se cobre.',
+  'faq.cardfail.aGeneric':
+    'Intentamos cobrar su tarjeta otra vez automáticamente varias veces antes de que cambie algo más, y si todavía no se cobra, el acceso a la puerta se puede pausar hasta que se cobre.',
+  'faq.cardfail.link': 'Actualice su tarjeta',
+  'faq.cardfail.tail': 'cuando quiera, desde su cuenta.',
+  'faq.moveout.q': '¿Cómo me doy de baja?',
+  'faq.moveout.aZero': 'No necesita avisar — solo vacíe la unidad cuando esté listo.',
+  'faq.moveout.noticeOne': 'Avise con {days} día de anticipación, y luego vacíe la unidad.',
+  'faq.moveout.noticeOther': 'Avise con {days} días de anticipación, y luego vacíe la unidad.',
+  'faq.moveout.aGeneric': 'Revise su contrato o su cuenta para saber cuánto debe avisar, y luego vacíe la unidad.',
+  'faq.moveout.link': 'Empiece su mudanza',
+  'faq.moveout.tail': 'desde su cuenta.',
+  'faq.transfer.q': '¿Puedo cambiarme a otra unidad?',
+  'faq.transfer.a':
+    'Sí, si se libera un tamaño distinto en la misma sucursal. Solicite un cambio y le apartamos la nueva unidad para arreglar la mudanza.',
+  'faq.transfer.link': 'Solicite un cambio',
+  'faq.transfer.tail': 'desde su cuenta.',
   'faq.else.q': '¿Algo más?',
   'faq.else.call': 'Llame al',
 

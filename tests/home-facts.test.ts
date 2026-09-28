@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   officeToday,
+  sharedAccessSuspendDays,
+  sharedMoveOutNoticeDays,
   sharedOfficeHours,
+  sharedPaymentRetryDays,
   sortByDistance,
   type HomeFacility,
 } from '../apps/web/lib/marketing/home-facts'
@@ -26,6 +29,9 @@ function facility(overrides: Partial<HomeFacility> = {}): HomeFacility {
     officeHours: null,
     timezone: 'America/Chicago',
     amenities: [],
+    accessSuspendDaysPastDue: 6,
+    paymentRetryDays: [1, 3, 5],
+    moveOutNoticeDays: 10,
     ...overrides,
   }
 }
@@ -111,5 +117,53 @@ describe('sharedOfficeHours', () => {
       facility({ id: 'f2', officeHours: week, timezone: 'America/Denver' }),
     ]
     expect(sharedOfficeHours(facilities)).toBeNull()
+  })
+})
+
+// B-409. The FAQ's card-decline and move-out answers, each stated only when
+// every active facility's config agrees — same shape as `sharedOfficeHours`.
+describe('sharedAccessSuspendDays', () => {
+  it('is null with no facilities', () => {
+    expect(sharedAccessSuspendDays([])).toBeNull()
+  })
+
+  it('returns the day when every facility agrees', () => {
+    const facilities = [facility({ accessSuspendDaysPastDue: 6 }), facility({ id: 'f2', accessSuspendDaysPastDue: 6 })]
+    expect(sharedAccessSuspendDays(facilities)).toBe(6)
+  })
+
+  it('is null once one facility disagrees', () => {
+    const facilities = [facility({ accessSuspendDaysPastDue: 6 }), facility({ id: 'f2', accessSuspendDaysPastDue: 10 })]
+    expect(sharedAccessSuspendDays(facilities)).toBeNull()
+  })
+})
+
+describe('sharedPaymentRetryDays', () => {
+  it('returns the schedule when every facility agrees', () => {
+    const facilities = [
+      facility({ paymentRetryDays: [1, 3, 5] }),
+      facility({ id: 'f2', paymentRetryDays: [1, 3, 5] }),
+    ]
+    expect(sharedPaymentRetryDays(facilities)).toEqual([1, 3, 5])
+  })
+
+  it('is null once one facility publishes a different schedule', () => {
+    const facilities = [
+      facility({ paymentRetryDays: [1, 3, 5] }),
+      facility({ id: 'f2', paymentRetryDays: [1, 3] }),
+    ]
+    expect(sharedPaymentRetryDays(facilities)).toBeNull()
+  })
+})
+
+describe('sharedMoveOutNoticeDays', () => {
+  it('returns the days when every facility agrees, including zero', () => {
+    const facilities = [facility({ moveOutNoticeDays: 0 }), facility({ id: 'f2', moveOutNoticeDays: 0 })]
+    expect(sharedMoveOutNoticeDays(facilities)).toBe(0)
+  })
+
+  it('is null once one facility disagrees', () => {
+    const facilities = [facility({ moveOutNoticeDays: 10 }), facility({ id: 'f2', moveOutNoticeDays: 30 })]
+    expect(sharedMoveOutNoticeDays(facilities)).toBeNull()
   })
 })

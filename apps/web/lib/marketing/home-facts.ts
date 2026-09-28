@@ -35,6 +35,11 @@ export type HomeFacility = {
   officeHours: WeeklySchedule | null
   timezone: string
   amenities: string[]
+  /// B-409. The three FAQ figures below: US-45's gate-suspension day, US-20's
+  /// retry schedule, and the move-out notice window.
+  accessSuspendDaysPastDue: number
+  paymentRetryDays: number[]
+  moveOutNoticeDays: number
 }
 
 export type HomeFacts = {
@@ -67,6 +72,9 @@ async function homeFacts(): Promise<HomeFacts> {
       officeHours: true,
       timezone: true,
       amenities: true,
+      accessSuspendDaysPastDue: true,
+      paymentRetryDays: true,
+      moveOutNoticeDays: true,
     },
     orderBy: [{ state: 'asc' }, { city: 'asc' }, { name: 'asc' }],
   })
@@ -98,6 +106,9 @@ async function homeFacts(): Promise<HomeFacts> {
       officeHours: parseWeeklySchedule(f.officeHours),
       timezone: f.timezone,
       amenities: f.amenities,
+      accessSuspendDaysPastDue: f.accessSuspendDaysPastDue,
+      paymentRetryDays: f.paymentRetryDays,
+      moveOutNoticeDays: f.moveOutNoticeDays,
     })),
     sizes: [...sizes]
       .sort((a, b) => b.availableUnits - a.availableUnits)
@@ -162,6 +173,38 @@ export function sharedOfficeHours(
       JSON.stringify(f.officeHours) === JSON.stringify(first.officeHours),
   )
   return same ? { schedule: first.officeHours, timezone: first.timezone } : null
+}
+
+/// B-409. Same "true of every active facility, or not stated" shape as
+/// `sharedOfficeHours` above, for a single scalar/array field instead of a
+/// compound one — the FAQ's card-decline and move-out answers read these.
+function sharedFact<T>(facilities: readonly HomeFacility[], pick: (f: HomeFacility) => T): T | null {
+  const first = facilities[0]
+  if (first === undefined) return null
+  const value = pick(first)
+  const same = facilities.every((f) => JSON.stringify(pick(f)) === JSON.stringify(value))
+  return same ? value : null
+}
+
+/// US-45 / D-16. The day past due the gate stops working, when every active
+/// facility agrees. `FacilityTerms.suspendAccessDay` (B-397) reads a Phase-2
+/// delinquency-timeline row instead, which an ordinary seeded facility has
+/// none of — this reads the field that actually gates the tenant
+/// (`accessSuspendDaysPastDue`, `packages/core/access/suspension.ts`).
+export function sharedAccessSuspendDays(facilities: readonly HomeFacility[]): number | null {
+  return sharedFact(facilities, (f) => f.accessSuspendDaysPastDue)
+}
+
+/// US-20. The retry schedule (days after the original due date), when every
+/// active facility agrees.
+export function sharedPaymentRetryDays(facilities: readonly HomeFacility[]): number[] | null {
+  return sharedFact(facilities, (f) => f.paymentRetryDays)
+}
+
+/// The move-out notice window, when every active facility agrees. 0 is a real
+/// value ("no notice needed"), distinct from null ("facilities disagree").
+export function sharedMoveOutNoticeDays(facilities: readonly HomeFacility[]): number | null {
+  return sharedFact(facilities, (f) => f.moveOutNoticeDays)
 }
 
 /// B-387. Today's office hours and whether the desk is staffed right now, read

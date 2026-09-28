@@ -921,6 +921,39 @@ test('the size guide answers the question the links promise', async ({ page }) =
   await expect(page.getByRole('main')).toContainText('half a standard garage')
 })
 
+// B-409. Every seeded facility carries the schema defaults (retry days
+// [1, 3, 5], suspend at 6 days past due, 10 days move-out notice), so these
+// answers render the real figures rather than the no-config fallback text —
+// the config-equals-copy assertion the ticket asks for, at the page a renter
+// actually reads (the pure "is it uniform" logic has its own unit tests in
+// `tests/home-facts.test.ts`).
+test('the FAQ states real figures for card retries, gate suspension and move-out notice', async ({
+  page,
+}) => {
+  await page.goto('/faq')
+  const main = page.getByRole('main')
+  await expect(main).toContainText('on day 1, 3, and 5 after it was due')
+  await expect(main).toContainText('by 6 days past due')
+  await expect(main).toContainText('Give 10 days notice')
+
+  await expect(page.getByRole('link', { name: 'turn it off in your account' })).toHaveAttribute(
+    'href',
+    '/portal/access',
+  )
+  await expect(page.getByRole('link', { name: 'Update your card' })).toHaveAttribute(
+    'href',
+    '/portal/methods',
+  )
+  await expect(page.getByRole('link', { name: 'Start your move-out' })).toHaveAttribute(
+    'href',
+    '/portal/move-out',
+  )
+  await expect(page.getByRole('link', { name: 'Request a transfer' })).toHaveAttribute(
+    'href',
+    '/portal/transfer',
+  )
+})
+
 test('reserving a unit holds it, for free, with no account', async ({ page }) => {
   // US-401 / D-7: no password, no card. The whole journey from a unit card to
   // a confirmed hold.
