@@ -9,7 +9,10 @@
         "http://localhost:3000/storage/tx/austin/demo-austin-south",
         "http://localhost:3000/storage/size-guide"
       ],
-      "numberOfRuns": 3
+      "numberOfRuns": 3,
+      "settings": {
+        "throttlingMethod": "devtools"
+      }
     },
     "assert": {
       "assertMatrix": [
