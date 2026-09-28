@@ -151,13 +151,14 @@ const REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<vo
     audience: 'admin',
     go: (page) => fromProfile(page, 'Transfer', /\/transfer\?lease=/),
   },
-  // B-230. Reached the way the counter reaches it. `Take payment` renders only
+  // B-230. Reached the way the counter reaches it. `Take card payment` (the
+  // link's name since B-398 split card from cash) renders only
   // on a lease with a balance, which is why Dana is the tenant this table
   // already opens. Read-only: with no Stripe key configured the page raises no
   // intent and writes nothing, so it touches no shared fixture (B-120).
   '/admin/pos/card': {
     audience: 'admin',
-    go: (page) => fromProfile(page, 'Take payment', /\/admin\/pos\/card\?lease=/),
+    go: (page) => fromProfile(page, 'Take card payment', /\/admin\/pos\/card\?lease=/),
   },
   // B-267. The reservation form, at 320px, at 200% zoom and under forced text
   // spacing — three checks it had never had, for the same reason it had no axe

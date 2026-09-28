@@ -515,6 +515,8 @@ test.describe('the dashboard (B-113)', () => {
       'Available now',
       'Money owed',
       'Occupancy',
+      // B-404 added it here; this list was not updated with it.
+      'Autopay share',
       'Payments today',
       'Failed payments today',
       'Move-ins today',

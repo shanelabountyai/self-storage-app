@@ -400,7 +400,8 @@ test('the Spanish reservation form asks and refuses in Spanish (B-267)', async (
   // row, so a Spanish visitor pressed a Spanish button and landed here in
   // English — the whole surface, not a gap inside a translated one.
   await expect(page.locator('html')).toHaveAttribute('lang', 'es')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Reserve esta unidad')
+  // B-408: one string for "reserve", so the heading is the button's words.
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Reservar gratis')
   await expect(page.getByRole('main')).toContainText('No necesita tarjeta de crédito')
   // The trust line is chosen by `holdWindowKey` from the facility's own grace
   // setting, so this asserts the wiring as well as the words.
