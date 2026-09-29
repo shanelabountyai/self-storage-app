@@ -101,6 +101,8 @@ export const CONSUMERS: readonly Consumer[] = [
     events: [
       'lease.moved_in',
       'lease.moved_out',
+      // B-414. The refund a move-out left owing has been recorded.
+      'refund.sent',
       'payment.succeeded',
       'payment.failed',
       'invoice.created',

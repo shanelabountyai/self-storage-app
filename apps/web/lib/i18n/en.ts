@@ -1620,6 +1620,8 @@ export const en = {
   'mo.monthsOther': '{count} months',
   'mo.refundExpected': 'Refund you should expect',
   'mo.willStillOwe': 'You will still owe',
+  'mo.refundOffice':
+    'If we owe you {amount} when you move out, the office puts it on its list of refunds to send.',
   'mo.settledInFull': 'Settled in full',
   'mo.activeUntil':
     'Your gate code and account stay active until {date}. Our team will verify the unit is empty before your account is finally closed.',

@@ -552,6 +552,21 @@ export const TASK_TYPES = [
     requiredProofFields: ["note"],
     sensitive: true,
   },
+  {
+    // PRD 02 US-14 (B-414). A move-out settled with money owed back. The
+    // detail names the amount. Recording the refund on the tenant's profile
+    // (US-23) closes it once the lease holds no credit; a note cannot, because
+    // the ledger would still say we owe it. Refunding to the card
+    // automatically is D-113 option (A), which is open.
+    type: "move_out_refund_due",
+    label: "Refund owed after a move-out",
+    requiredProofFields: ["note"],
+    sensitive: false,
+    resolvedByAction: {
+      sentence:
+        "Record the refund on this tenant’s profile. A note cannot close this, because the money is still owed.",
+    },
+  },
 ] as const satisfies readonly TaskTypeSpec[];
 
 export type TaskType = (typeof TASK_TYPES)[number]["type"];

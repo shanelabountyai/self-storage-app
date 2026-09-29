@@ -28,6 +28,8 @@ import { recaptureForLease } from "@/lib/promotions/billing";
 import type { Recapture } from "@storage/core/promotions";
 import { dictionaryFor } from "@/lib/i18n";
 import { recaptureReasonText } from "@/lib/promotions/message";
+import { createTask } from "@/lib/admin/tasks";
+import { formatCents } from "@/lib/format";
 
 // PRD 02 US-14 (move-out) / PRD 03 US-2 / PRD 05 CN-8.
 
@@ -603,6 +605,20 @@ export async function completeMoveOut(
         proof: { note: "Move-out finalized." },
       },
     });
+
+    // B-414. Money owed back is somebody's work. In the transaction, so a
+    // lease cannot end owing a refund with nothing on the queue saying so.
+    // `refundPayment` closes it.
+    if (settlement.refundDueCents > 0) {
+      await createTask({
+        facilityId: lease.facilityId,
+        type: "move_out_refund_due",
+        entityType: "Lease",
+        entityId: lease.id,
+        detail: `Refund ${formatCents(settlement.refundDueCents)} to ${preview.tenantName}, unit ${preview.unitNumber}.`,
+        client: tx,
+      });
+    }
 
     await recordAudit(
       {

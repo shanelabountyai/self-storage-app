@@ -1161,6 +1161,18 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
     reasonEs:
       'la fila que dibuja un pago devuelto, que necesita uno y los datos de demostración no crean ninguno',
   },
+  // B-414. The preview that settles to a refund: one paragraph and one phone
+  // link under the figures. The demo tenant owes money and their facility does
+  // not prorate a move-out, so no demo preview reaches it.
+  {
+    route: '/portal/move-out',
+    state: 'refund expected',
+    audience: 'portal',
+    reason:
+      'the preview that settles to a refund, which needs a tenant who has paid ahead at a facility that prorates a move-out; the demo tenant owes a balance and their facility does not prorate',
+    reasonEs:
+      'la vista previa que termina en un reembolso, que necesita un inquilino que haya pagado por adelantado en una instalación que prorratea la salida; el inquilino de demostración debe un saldo y su instalación no prorratea',
+  },
   // B-137. Considered and deliberately not built: the demo seed's one
   // pending_auction lease belongs to a tenant with no portal credential, and
   // minting one to scan a paragraph and a link is a fixture nobody else needs.

@@ -197,6 +197,51 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       'facility.phone',
     ],
   },
+  // ── B-414: the refund a move-out left owing, once it is recorded ──────────
+  //
+  // The move-out confirmation above says money is owed and promises neither a
+  // method nor a date. This is the message that states both, and it is sent
+  // only when staff have recorded the refund (US-23). Email only: it is a
+  // record to keep.
+  {
+    key: 'refund_sent',
+    classification: 'transactional',
+    subject: 'Your refund of {{refund.amount}} from {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'We refunded money we owed you for unit {{unit.number}} at {{facility.name}}.',
+      '',
+      'Amount: {{refund.amount}}',
+      'How: {{refund.method}}',
+      'Date: {{refund.date}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    es: {
+      subject: 'Su reembolso de {{refund.amount}} de {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Le reembolsamos dinero que le debíamos por la unidad {{unit.number}} en {{facility.name}}.',
+        '',
+        'Monto: {{refund.amount}}',
+        'Cómo: {{refund.method}}',
+        'Fecha: {{refund.date}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'refund.amount',
+      'refund.method',
+      'refund.date',
+      'facility.phone',
+    ],
+  },
   {
     // PRD 01 US-707: "Confirmation email/SMS sent" the moment the tenant
     // submits the request, distinct from the finalized move-out confirmation
@@ -2169,6 +2214,13 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
   {
     event: 'lease.moved_out',
     templateKey: 'lease_moved_out_confirmation',
+    classification: 'transactional',
+  },
+  {
+    // B-414. No skip conditions and no category: the tenant has moved out by
+    // definition, and a refund is not something to opt out of hearing about.
+    event: 'refund.sent',
+    templateKey: 'refund_sent',
     classification: 'transactional',
   },
 

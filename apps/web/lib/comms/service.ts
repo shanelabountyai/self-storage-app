@@ -982,6 +982,23 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
   },
 
+  // B-414. From the payload the refund's own transaction wrote, for the
+  // reason above.
+  'refund.sent': async (event, recipient) => {
+    const payload = (event.payload ?? {}) as { amountCents?: number; method?: string; checkNumber?: string | null }
+    const tag = LOCALE_TAG[recipient.locale]
+    return {
+      'refund.amount': formatCents(payload.amountCents ?? 0, tag),
+      'refund.method': proseFor(recipient.locale).refundMethod(payload.method ?? '', payload.checkNumber ?? null),
+      'refund.date': new Intl.DateTimeFormat(tag, {
+        timeZone: recipient.facility?.timezone ?? 'America/Chicago',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(event.occurredAt),
+    }
+  },
+
   // PRD 01 US-707. The date, from the request itself — not re-read off the
   // lease, which a cancel-and-re-request between send and this render could
   // have already changed to a different one.

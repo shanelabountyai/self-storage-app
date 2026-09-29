@@ -7,6 +7,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 import { prisma } from "../packages/db";
 import {
@@ -25,6 +26,9 @@ import {
   requestOverlock,
 } from "../apps/web/lib/delinquency/overlock";
 import { completeTask } from "../apps/web/lib/admin/tasks";
+import { refundPayment } from "../apps/web/lib/billing/refunds";
+import { processCommsEvent } from "../apps/web/lib/comms/service";
+import * as provider from "../apps/web/lib/comms/provider";
 import { waiveFeeInvoice } from "../apps/web/lib/billing/late-fees";
 import { isOccupied, isRentable } from "@storage/core/metrics";
 import type { Actor } from "../apps/web/lib/rbac/actor";
@@ -180,6 +184,11 @@ describeDb("move-out", () => {
   beforeEach(async () => {
     await prisma.domainEvent.deleteMany({ where: { facilityId } });
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } });
+    // B-414. Refunds first: each points at the payment it returns.
+    await prisma.payment.deleteMany({
+      where: { facilityId, refundOfPaymentId: { not: null } },
+    });
+    await prisma.payment.deleteMany({ where: { facilityId } });
     await prisma.accessCredential.deleteMany({ where: { facilityId } });
     await prisma.accessGrant.deleteMany({ where: { facilityId } });
     await prisma.unitOverlock.deleteMany({ where: { facilityId } });
@@ -204,6 +213,11 @@ describeDb("move-out", () => {
     if (!hasDatabase) return;
     await prisma.domainEvent.deleteMany({ where: { facilityId } });
     await prisma.ledgerEntry.deleteMany({ where: { facilityId } });
+    // B-414. Refunds first: each points at the payment it returns.
+    await prisma.payment.deleteMany({
+      where: { facilityId, refundOfPaymentId: { not: null } },
+    });
+    await prisma.payment.deleteMany({ where: { facilityId } });
     await prisma.accessCredential.deleteMany({ where: { facilityId } });
     await prisma.accessGrant.deleteMany({ where: { facilityId } });
     await prisma.promoRedemption.deleteMany({ where: { facilityId } });
@@ -1083,6 +1097,211 @@ describeDb("move-out", () => {
             leaseId: lease.id,
             description: { contains: "Promotional" },
           },
+        }),
+      ).toBe(0);
+    });
+  });
+
+  describe("a refund due at move-out is somebody's work (B-414)", () => {
+    const refunder = (): Actor => {
+      const base = actorOf(managerId, 20);
+      return {
+        ...base,
+        assignments: [
+          {
+            ...base.assignments[0]!,
+            permissions: new Set<PermissionKey>([
+              ...base.assignments[0]!.permissions,
+              "refunds:approve",
+            ]),
+            limits: { maxFeeWaiverCents: 0, maxRefundCents: null, maxCreditCents: 0 },
+          },
+        ],
+      };
+    };
+
+    /// A lease whose month was billed and paid, so a mid-month move-out owes
+    /// $170.00 back and there is a payment to refund it from.
+    async function paidLease() {
+      const lease = await makeLease(unitAId, 31_000);
+      const payment = await prisma.payment.create({
+        data: {
+          facilityId,
+          tenantId,
+          amountCents: 31_000,
+          method: "card",
+          status: "succeeded",
+        },
+      });
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId: lease.id,
+          type: "payment",
+          amountCents: -31_000,
+          description: "Payment",
+          paymentId: payment.id,
+        },
+      });
+      const result = await completeMoveOut(actorOf(counterId, 10), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-08-15"),
+        reason: "tenant_request",
+      });
+      expect(result).toMatchObject({ ok: true, settlement: { refundDueCents: 17_000 } });
+      return { leaseId: lease.id, paymentId: payment.id };
+    }
+
+    const refundTasks = (leaseId: string) =>
+      prisma.task.findMany({
+        where: { type: "move_out_refund_due", entityId: leaseId },
+      });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("raises exactly one task naming tenant, unit and amount", async () => {
+      const { leaseId } = await paidLease();
+      const tasks = await refundTasks(leaseId);
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({
+        status: "open",
+        priority: "normal",
+        entityType: "Lease",
+        detail: "Refund $170.00 to Ada Renter, unit A-1.",
+      });
+      // A note cannot close it: the ledger would still say we owe the money.
+      const base = actorOf(counterId, 10);
+      const closer = {
+        ...base,
+        assignments: [
+          {
+            ...base.assignments[0]!,
+            permissions: new Set<PermissionKey>([
+              ...base.assignments[0]!.permissions,
+              "tenants:edit",
+            ]),
+          },
+        ],
+      };
+      const closed = await completeTask(closer, tasks[0]!.id, {
+        note: "Called them.",
+      });
+      expect(closed.ok).toBe(false);
+      expect((await refundTasks(leaseId))[0]!.status).toBe("open");
+    });
+
+    it("raises nothing when nothing is owed back", async () => {
+      const lease = await makeLease(unitAId, 500);
+      const result = await completeMoveOut(actorOf(counterId, 10), {
+        leaseId: lease.id,
+        moveOutDate: d("2026-08-31"),
+        reason: "tenant_request",
+      });
+      expect(result).toMatchObject({ ok: true, settlement: { refundDueCents: 0 } });
+      expect(await refundTasks(lease.id)).toHaveLength(0);
+    });
+
+    it("recording the refund closes the task, writes refund.sent and sends one message", async () => {
+      vi.spyOn(provider, "selectProvider").mockImplementation(() => ({
+        name: "test",
+        async sendEmail() {
+          return { ok: true, providerMessageId: "test_refund" };
+        },
+      }));
+      vi.spyOn(provider, "commsEnabled").mockReturnValue(true);
+      vi.spyOn(provider, "effectiveRecipient").mockImplementation(
+        (address: string) => address,
+      );
+      await prisma.facility.update({
+        where: { id: facilityId },
+        data: { phone: "(512) 555-0100" },
+      });
+
+      const { leaseId, paymentId } = await paidLease();
+
+      // Part of it: the tenant is told, and the task stays, because the lease
+      // still holds a credit.
+      const part = await refundPayment(refunder(), paymentId, {
+        amountCents: 7_000,
+        reasonCode: "move_out_credit",
+        asMethod: "cash",
+      });
+      expect(part).toMatchObject({ ok: true });
+      expect((await refundTasks(leaseId))[0]!.status).toBe("open");
+
+      const rest = await refundPayment(refunder(), paymentId, {
+        amountCents: 10_000,
+        reasonCode: "move_out_credit",
+        asMethod: "check",
+        checkNumber: "1042",
+      });
+      expect(rest).toMatchObject({ ok: true });
+
+      const tasks = await refundTasks(leaseId);
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({
+        status: "completed",
+        completedByStaffId: managerId,
+      });
+
+      const events = await prisma.domainEvent.findMany({
+        where: { name: "refund.sent", entityId: leaseId },
+        orderBy: { occurredAt: "asc" },
+      });
+      expect(events.map((event) => event.payload)).toMatchObject([
+        { amountCents: 7_000, method: "cash" },
+        { amountCents: 10_000, method: "check", checkNumber: "1042" },
+      ]);
+
+      await processCommsEvent(events[1]!);
+      // Redelivered: still one.
+      await processCommsEvent(events[1]!);
+      const messages = await prisma.message.findMany({
+        where: { eventId: events[1]!.id },
+      });
+      expect(messages).toHaveLength(1);
+      expect(messages[0]!.error).toBeNull();
+      expect(messages[0]).toMatchObject({
+        recipientTenantId: tenantId,
+        templateKey: "refund_sent",
+        status: "sent",
+      });
+      expect(messages[0]!.bodySnapshot).toContain("$100.00");
+      expect(messages[0]!.bodySnapshot).toContain("By check number 1042");
+      expect(messages[0]!.bodySnapshot).toContain("A-1");
+    });
+
+    it("a refund on a lease that owes nothing back says nothing", async () => {
+      const lease = await makeLease(unitAId, 0);
+      const payment = await prisma.payment.create({
+        data: {
+          facilityId,
+          tenantId,
+          amountCents: 5_000,
+          method: "cash",
+          status: "succeeded",
+        },
+      });
+      await prisma.ledgerEntry.create({
+        data: {
+          facilityId,
+          leaseId: lease.id,
+          type: "payment",
+          amountCents: -5_000,
+          description: "Payment",
+          paymentId: payment.id,
+        },
+      });
+      const result = await refundPayment(refunder(), payment.id, {
+        amountCents: 5_000,
+        reasonCode: "duplicate",
+      });
+      expect(result).toMatchObject({ ok: true });
+      expect(
+        await prisma.domainEvent.count({
+          where: { name: "refund.sent", entityId: lease.id },
         }),
       ).toBe(0);
     });

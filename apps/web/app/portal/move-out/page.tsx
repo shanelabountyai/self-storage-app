@@ -378,6 +378,24 @@ export default async function PortalMoveOutPage({
         </dl>
       )}
 
+      {/* B-414. Directly under the figures it explains (SC 1.3.1). It states
+          the amount and who has it, and promises no method and no date: how a
+          credit is refunded is D-113, which is open. */}
+      {preview && preview.settlement.refundDueCents > 0 && (
+        <p className="text-muted-foreground text-sm text-pretty">
+          {t('mo.refundOffice', {
+            amount: formatRate(preview.settlement.refundDueCents),
+          })}{" "}
+          {t('dash.questionsCall')}{" "}
+          <a
+            href={`tel:${phoneFor(lease.facilityPhone || null).href}`}
+            className="underline underline-offset-4"
+          >
+            {phoneFor(lease.facilityPhone || null).display}
+          </a>
+        </p>
+      )}
+
         {/* B-174. Hidden rather than disabled when there is nothing priced
             behind it. A disabled button is not focusable and announces nothing,
             so a keyboard or screen-reader user meets silence where a sighted

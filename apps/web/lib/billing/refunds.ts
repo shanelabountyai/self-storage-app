@@ -180,6 +180,43 @@ export async function refundPayment(
           paymentId: refund.id,
         },
       })
+
+      // B-414. This lease's move-out left money owed back, and this is it
+      // going. The tenant is told on every refund; the task closes only once
+      // the lease holds no credit, so a part refund leaves it on the queue.
+      const owed = await tx.task.findFirst({
+        where: { type: 'move_out_refund_due', entityId: leaseId, status: 'open' },
+        select: { id: true },
+      })
+      if (owed) {
+        const balance = await tx.ledgerEntry.aggregate({ where: { leaseId }, _sum: { amountCents: true } })
+        if ((balance._sum.amountCents ?? 0) >= 0) {
+          await tx.task.update({
+            where: { id: owed.id },
+            data: {
+              status: 'completed',
+              completedByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
+              completedAt: new Date(),
+              proof: { note: 'Refund recorded.' },
+            },
+          })
+        }
+        await emitEvent(
+          {
+            name: 'refund.sent',
+            facilityId: payment.facilityId,
+            entityType: 'Lease',
+            entityId: leaseId,
+            payload: {
+              refundPaymentId: refund.id,
+              amountCents: input.amountCents,
+              method,
+              checkNumber: input.checkNumber?.trim() || null,
+            },
+          },
+          tx,
+        )
+      }
     }
 
     const totalRefunded = alreadyRefunded + input.amountCents

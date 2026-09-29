@@ -2997,6 +2997,14 @@ function reviewedOn(locale: Locale): string {
 // (`e2e/smoke.spec.ts`) and measured at 320px, 200% zoom and forced text
 // spacing. B-393's two balance states were re-run and are unchanged.
 // `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-29, at B-414. `/portal/move-out` gains one sentence and one
+// phone link under the settlement figures, shown only when the preview settles
+// to a refund. No demo tenant reaches that preview (the demo tenant owes a
+// balance and their facility does not prorate), so it is a `STATE_EXCEPTIONS`
+// row and the page lists it; it is not scanned and not measured for layout.
+// The at-rest page's scan is unchanged. No other claim on this page changes.
+// `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

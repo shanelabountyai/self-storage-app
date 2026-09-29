@@ -67,6 +67,10 @@ export const EVENT_NAMES = [
   /// Emitted from the Stripe reconciler for full and partial refunds alike —
   /// the payload says which (B-019). Refund *authorisation* is B-048.
   "payment.refunded",
+  /// B-414. A refund recorded against a lease whose move-out left money owed
+  /// back. On the Lease, not the Payment, and its own name: `payment.refunded`
+  /// fires for every refund and has no comms rule; this one tells the tenant.
+  "refund.sent",
   /// B-146. Money we received and recorded, taken back by the bank — a bounced
   /// cheque, an ACH return, a lost dispute. Distinct from `payment.failed`,
   /// which never settled anything.

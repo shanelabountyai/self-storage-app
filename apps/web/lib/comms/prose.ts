@@ -173,6 +173,8 @@ export type CommsProse = {
 
   // ── lease.moved_out ───────────────────────────────────────────────────────
   settlementRefund: (amount: string) => string
+  /// B-414. How a refund went, for `refund.sent`. `method` is a `RefundMethod`.
+  refundMethod: (method: string, checkNumber: string | null) => string
   settlementOutstanding: (amount: string) => string
   settlementSettled: string
 
@@ -304,7 +306,17 @@ const en: CommsProse = {
     program_disabled: 'The referral program is not running at this location right now.',
   },
 
-  settlementRefund: (amount) => `We owe you ${amount} back — we'll be in touch about getting it to you.`,
+  // B-414. States the amount and who has it. No method and no date (D-113 is
+  // open); the template's next line carries the office phone.
+  settlementRefund: (amount) => `We owe you ${amount} back. It is on the office's list of refunds to send.`,
+  refundMethod: (method, checkNumber) =>
+    method === 'card'
+      ? 'To the card you paid with. It can take 5 to 10 business days to show on your statement.'
+      : method === 'check'
+        ? checkNumber
+          ? `By check number ${checkNumber}`
+          : 'By check'
+        : 'In cash',
   settlementOutstanding: (amount) => `There is ${amount} still outstanding on the account.`,
   settlementSettled: 'Your account is settled in full — nothing further is owed.',
 
@@ -485,7 +497,15 @@ const es: CommsProse = {
   },
 
   settlementRefund: (amount) =>
-    `Le debemos ${amount} de reembolso — nos comunicaremos con usted para hacérselo llegar.`,
+    `Le debemos ${amount} de reembolso. Está en la lista de reembolsos por enviar de la oficina.`,
+  refundMethod: (method, checkNumber) =>
+    method === 'card'
+      ? 'A la tarjeta con la que pagó. Puede tardar de 5 a 10 días hábiles en aparecer en su estado de cuenta.'
+      : method === 'check'
+        ? checkNumber
+          ? `Con el cheque número ${checkNumber}`
+          : 'Con cheque'
+        : 'En efectivo',
   settlementOutstanding: (amount) => `Quedan ${amount} pendientes en la cuenta.`,
   settlementSettled: 'Su cuenta queda saldada por completo — no debe nada más.',
 
