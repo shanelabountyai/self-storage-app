@@ -445,6 +445,29 @@ describeDb('the auction pipeline', () => {
       expect(result.reason).toContain('has already passed')
     })
 
+    // B-413. The case is pinned to the timeline that governed it, and that
+    // timeline was written for the state the facility was in. Nothing about
+    // the case changes when the facility's state is edited, which is why the
+    // rule reads the facility as it stands at every call.
+    it('refuses a pending case once the facility is in another state than its timeline', async () => {
+      const caseId = await makeReadyCase()
+      await prisma.facility.update({ where: { id: facilityId }, data: { state: 'OK' } })
+
+      try {
+        const result = await scheduleSale(regional(), caseId, saleDay())
+        expect(result.ok).toBe(false)
+        if (result.ok) throw new Error('unreachable')
+        expect(result.blockers?.map((one) => one.kind)).toEqual(['timeline_for_another_state'])
+        expect(result.blockers?.[0].message).toContain('written for TX')
+        expect(result.blockers?.[0].message).toContain('the facility is in OK')
+
+        const row = await prisma.auctionCase.findUniqueOrThrow({ where: { id: caseId } })
+        expect(row.status).not.toBe('scheduled')
+      } finally {
+        await prisma.facility.update({ where: { id: facilityId }, data: { state: 'TX' } })
+      }
+    })
+
     it('schedules when every rule passes', async () => {
       const caseId = await makeReadyCase()
       const result = await scheduleSale(regional(), caseId, saleDay())

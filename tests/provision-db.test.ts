@@ -297,8 +297,10 @@ describeDb('move-in provisioning', () => {
     expect(lease.startDate.toISOString()).toBe(localToday.toISOString())
     // The anniversary and the start date now come from ONE value, so they
     // cannot disagree — which they could before, for the five hours a day the
-    // two were different days.
-    expect(lease.billingDay).toBe(localToday.getUTCDate())
+    // two were different days. Capped at 28 like every anniversary
+    // (`billingDayFor`): without the cap this failed on the 29th, 30th and
+    // 31st of every month and passed on the rest.
+    expect(lease.billingDay).toBe(Math.min(localToday.getUTCDate(), 28))
   })
 
   it('qualifies a referral the checkout arrived on (B-100)', async () => {

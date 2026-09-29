@@ -100,6 +100,14 @@ export async function saveLadderDefaultAction(
     return fieldError({ cap: 'A percentage step needs a cap. An uncapped percentage grows with the balance it is punishing.' })
   }
 
+  // B-413. The state the whole ladder is written for, not this step alone: a
+  // default is pushed as a unit, to facilities in one state.
+  const jurisdiction = String(formData.get('jurisdiction') ?? '').trim().toUpperCase()
+  if (!/^[A-Z]{2}$/.test(jurisdiction)) {
+    return fieldError({ jurisdiction: 'Enter the 2-letter state this ladder is written for, for example TX.' })
+  }
+  const before = await getOrgDefault('late_fee_ladder')
+
   const existing = await currentLadder()
   const ladder = [
     ...existing.filter((rule) => rule.step !== step),
@@ -118,6 +126,7 @@ export async function saveLadderDefaultAction(
       scope: 'late_fee_ladder',
       label: String(formData.get('label') ?? '').trim() || 'Org late-fee ladder',
       payload: { ladder },
+      jurisdiction,
     })
   } catch (error) {
     if (error instanceof ForbiddenError) {
@@ -127,7 +136,15 @@ export async function saveLadderDefaultAction(
   }
 
   revalidatePath('/admin/settings/org')
-  return success(`Step ${step} of the org ladder saved. Push it below to apply it anywhere.`)
+  // Said out loud when it changes, because it re-marks every step and not only
+  // the one just saved.
+  const remarked =
+    before?.jurisdiction && before.jurisdiction !== jurisdiction
+      ? ` The whole ladder is now marked as written for ${jurisdiction}; it was ${before.jurisdiction}.`
+      : ''
+  return success(
+    `Step ${step} of the org ladder saved, written for ${jurisdiction}.${remarked} Push it below to apply it to facilities in ${jurisdiction}.`,
+  )
 }
 
 /// Takes a facility's active timeline and makes it the org default.
@@ -160,6 +177,9 @@ export async function adoptTimelineDefaultAction(
       payload: {
         timeline: { qualifyingAmount: timeline.qualifyingAmount, steps: timeline.steps },
       },
+      // B-413. The default is for the state the adopted version was written
+      // for, which is the choice the owner made by picking that facility.
+      jurisdiction: timeline.jurisdiction,
     })
   } catch (error) {
     if (error instanceof ForbiddenError) {
@@ -170,7 +190,7 @@ export async function adoptTimelineDefaultAction(
 
   revalidatePath('/admin/settings/org')
   return success(
-    `"${timeline.label}" is now the org default timeline. Nothing changed at any facility — push it below to roll it out.`,
+    `"${timeline.label}" is now the org default timeline, written for ${timeline.jurisdiction}. Nothing changed at any facility — push it below to roll it out to facilities in ${timeline.jurisdiction}.`,
   )
 }
 
@@ -206,6 +226,7 @@ export async function pushOrgDefaultAction(
   const pushed = results.filter((r) => r.outcome === 'pushed')
   const skipped = results.filter((r) => r.outcome === 'already_matched')
   const refused = results.filter((r) => r.outcome === 'forbidden' || r.outcome === 'invalid')
+  const elsewhere = results.filter((r) => r.outcome === 'wrong_state')
 
   // Every facility is named in the result, including the ones nothing happened
   // to. "Pushed to 9 of 12" without saying which three were skipped is how an
@@ -220,6 +241,7 @@ export async function pushOrgDefaultAction(
           ? `${r.facilityName}: skipped — you cannot change settings at this facility`
           : `${r.facilityName}: refused — ${r.detail ?? 'the default is not valid here'}`,
       ),
+      ...elsewhere.map((r) => `${r.facilityName}: not pushed — ${r.detail}`),
     ],
   )
 }

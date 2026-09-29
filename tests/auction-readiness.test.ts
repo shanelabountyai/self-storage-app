@@ -31,6 +31,8 @@ function step(overrides: Partial<StepEvidence> = {}): StepEvidence {
 function ready(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
   return {
     timelineConfigured: true,
+    timelineJurisdiction: 'TX',
+    facilityState: 'TX',
     steps: [step()],
     containsVehicle: false,
     lienNoticeServed: true,
@@ -47,6 +49,48 @@ function ready(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
 describe('auctionReadiness — the happy path', () => {
   it('is ready when every rule is satisfied', () => {
     expect(auctionReadiness(ready())).toEqual({ ready: true, blockers: [] })
+  })
+})
+
+// B-413. A facility outside Texas was handed the Texas timeline at creation and
+// nothing read the facility's state, so every step could run, with proof, on
+// another state's notice days. The stamp is a guard, not a claim of compliance.
+describe('auctionReadiness — the state the timeline was written for', () => {
+  it('blocks a sale whose timeline was written for another state, and names both', () => {
+    const result = auctionReadiness(ready({ timelineJurisdiction: 'TX', facilityState: 'OK' }))
+
+    expect(result.ready).toBe(false)
+    expect(result.blockers.map((one) => one.kind)).toEqual(['timeline_for_another_state'])
+    expect(result.blockers[0].message).toContain('written for TX')
+    expect(result.blockers[0].message).toContain('the facility is in OK')
+  })
+
+  it('reads the state as a person typed it', () => {
+    expect(auctionReadiness(ready({ timelineJurisdiction: 'tx', facilityState: ' TX ' })).ready).toBe(
+      true,
+    )
+  })
+
+  it('blocks when either state cannot be read, rather than passing on silence', () => {
+    for (const unreadable of [
+      { timelineJurisdiction: null },
+      { timelineJurisdiction: '' },
+      { facilityState: '' },
+      { timelineJurisdiction: 'Texas', facilityState: 'Texas' },
+    ]) {
+      expect(auctionReadiness(ready(unreadable)).blockers.map((one) => one.kind)).toEqual([
+        'timeline_for_another_state',
+      ])
+    }
+  })
+
+  it('says nothing about the state when there is no timeline at all', () => {
+    const kinds = auctionReadiness(
+      ready({ timelineConfigured: false, timelineJurisdiction: null, steps: [] }),
+    ).blockers.map((one) => one.kind)
+
+    expect(kinds).toContain('no_timeline')
+    expect(kinds).not.toContain('timeline_for_another_state')
   })
 })
 

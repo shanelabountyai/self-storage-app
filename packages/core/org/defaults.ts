@@ -25,6 +25,50 @@ export const ORG_DEFAULT_SCOPE_LABELS: Record<OrgDefaultScope, string> = {
 }
 
 // ---------------------------------------------------------------------------
+// Jurisdiction (B-413)
+// ---------------------------------------------------------------------------
+
+/// The scopes whose numbers a state's lien law sets: the days between notices,
+/// and what a late fee may be. `fee_schedule` is not one of them and is pushed
+/// to a facility in any state.
+export const LIEN_BEARING_SCOPES: readonly OrgDefaultScope[] = [
+  'late_fee_ladder',
+  'delinquency_timeline',
+]
+
+export function isLienBearing(scope: OrgDefaultScope): boolean {
+  return LIEN_BEARING_SCOPES.includes(scope)
+}
+
+/// A two-letter state as it is stored and compared, or null when the value is
+/// not one. `Facility.state` is upper-cased on every save, but it is also a
+/// plain text column a seed or an import can write, so nothing here trusts it.
+export function normalizeJurisdiction(value: string | null | undefined): string | null {
+  const state = (value ?? '').trim().toUpperCase()
+  return /^[A-Z]{2}$/.test(state) ? state : null
+}
+
+/// Whether something written for `jurisdiction` may govern a facility in
+/// `facilityState`. Two unreadable values are not a match: a guard that passes
+/// when it cannot tell is not one.
+export function sameJurisdiction(
+  jurisdiction: string | null | undefined,
+  facilityState: string | null | undefined,
+): boolean {
+  const written = normalizeJurisdiction(jurisdiction)
+  return written !== null && written === normalizeJurisdiction(facilityState)
+}
+
+/// Whether an org default may be pushed to a facility in `facilityState`.
+export function defaultAppliesTo(
+  scope: OrgDefaultScope,
+  jurisdiction: string | null | undefined,
+  facilityState: string | null | undefined,
+): boolean {
+  return !isLienBearing(scope) || sameJurisdiction(jurisdiction, facilityState)
+}
+
+// ---------------------------------------------------------------------------
 // Payload shapes
 // ---------------------------------------------------------------------------
 

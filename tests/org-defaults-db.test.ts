@@ -4,6 +4,7 @@ import { prisma } from '../packages/db'
 import {
   compareFacilities,
   getOrgDefault,
+  MissingJurisdictionError,
   pushOrgDefault,
   saveOrgDefault,
   templateOverrides,
@@ -31,6 +32,13 @@ const EFFECTIVE = new Date('2026-09-01T00:00:00.000Z')
 
 const FEES = { fees: [{ feeType: 'admin', amountCents: 2_500 }, { feeType: 'nsf', amountCents: 3_000 }] }
 
+const LADDER = {
+  ladder: [
+    { step: 1, daysPastDue: 10, amountCents: 2_000, percentBasisPoints: 0, basis: 'flat', capCents: null },
+  ],
+}
+const TIMELINE = { timeline: { qualifyingAmount: 'full_balance', steps: [] } }
+
 function actor(options: { allFacilities?: boolean; facilityIds?: string[] } = {}): Actor {
   const assignments = options.allFacilities
     ? [{ facilityId: null }]
@@ -50,14 +58,14 @@ function actor(options: { allFacilities?: boolean; facilityIds?: string[] } = {}
 }
 
 /// B-237. A brand-new site, created the way the admin screen creates one.
-function newFacility(who: Actor, key: string) {
+function newFacility(who: Actor, key: string, state = 'TX') {
   return createFacility(who, {
     name: `Born ${key} ${suffix}`,
     slug: `born-${key}-${suffix}`,
     addressLine1: '1 Storage Way',
     addressLine2: null,
     city: 'Austin',
-    state: 'TX',
+    state,
     postalCode: '78704',
     timezone: 'America/Chicago',
     phone: null,
@@ -273,6 +281,7 @@ describeDb('org defaults (US-4)', () => {
     await saveOrgDefault(who, {
       scope: 'late_fee_ladder',
       label: 'Ladder',
+      jurisdiction: 'TX',
       payload: {
         ladder: [
           { step: 1, daysPastDue: 10, amountCents: 2_000, percentBasisPoints: 0, basis: 'flat', capCents: null },
@@ -292,6 +301,8 @@ describeDb('org defaults (US-4)', () => {
       orderBy: { step: 'asc' },
     })
     expect(rows).toHaveLength(2)
+    // B-413. Each rung says which state it was written for.
+    expect(rows.map((row) => row.jurisdiction)).toEqual(['TX', 'TX'])
     expect(rows[1]).toMatchObject({
       step: 2,
       daysPastDue: 30,
@@ -300,6 +311,96 @@ describeDb('org defaults (US-4)', () => {
       capCents: 5_000,
     })
     expect((await compareFacilities(who, 'late_fee_ladder')).find((r) => r.facilityId === facilityA)?.report.matches).toBe(true)
+  })
+
+  // B-413 / PRD 02 US-4 "a default is for one state". Until this, a site
+  // created in Oklahoma was handed the Texas ladder and the Texas timeline, and
+  // nothing downstream ever read the facility's state.
+  describe('a default is for one state (B-413)', () => {
+    it('refuses a ladder or a timeline saved without the state it is written for', async () => {
+      const who = actor({ allFacilities: true })
+      for (const jurisdiction of [undefined, null, '', 'Texas', 'T']) {
+        await expect(
+          saveOrgDefault(who, { scope: 'late_fee_ladder', label: 'Ladder', payload: LADDER, jurisdiction }),
+        ).rejects.toBeInstanceOf(MissingJurisdictionError)
+      }
+      await expect(
+        saveOrgDefault(who, { scope: 'delinquency_timeline', label: 'Timeline', payload: TIMELINE }),
+      ).rejects.toBeInstanceOf(MissingJurisdictionError)
+      expect(await prisma.orgDefault.count()).toBe(0)
+    })
+
+    it('stores the state as two capitals, and none on a fee schedule', async () => {
+      const who = actor({ allFacilities: true })
+      await saveOrgDefault(who, { scope: 'late_fee_ladder', label: 'Ladder', payload: LADDER, jurisdiction: ' tx ' })
+      await saveOrgDefault(who, { scope: 'fee_schedule', label: 'Fees', payload: FEES, jurisdiction: 'TX' })
+
+      expect((await getOrgDefault('late_fee_ladder'))?.jurisdiction).toBe('TX')
+      expect((await getOrgDefault('fee_schedule'))?.jurisdiction).toBeNull()
+    })
+
+    it('creates a facility in a state with no default without a ladder or a timeline, and says so', async () => {
+      const owner = actor({ allFacilities: true })
+      await saveOrgDefault(owner, { scope: 'fee_schedule', label: 'Org fees', payload: FEES })
+      await saveOrgDefault(owner, { scope: 'late_fee_ladder', label: 'Ladder', payload: LADDER, jurisdiction: 'TX' })
+      await saveOrgDefault(owner, { scope: 'delinquency_timeline', label: 'Timeline', payload: TIMELINE, jurisdiction: 'TX' })
+
+      const site = await newFacility(owner, 'oklahoma', 'ok')
+
+      // The fee schedule is not bound to a state, and still arrives.
+      expect(site.pushed).toEqual(['fee_schedule'])
+      expect(await prisma.lateFeeRule.count({ where: { facilityId: site.id } })).toBe(0)
+      expect(await prisma.delinquencyTimeline.count({ where: { facilityId: site.id } })).toBe(0)
+
+      const gaps = await facilityReadiness(site.id)
+      expect(gaps.map((gap) => gap.what)).toEqual(
+        expect.arrayContaining(['No late-fee ladder for OK', 'No delinquency timeline for OK']),
+      )
+      expect(gaps.map((gap) => gap.kind)).not.toContain('fee_schedule')
+    })
+
+    it('still hands a Texas facility the Texas ladder at birth', async () => {
+      const owner = actor({ allFacilities: true })
+      await saveOrgDefault(owner, { scope: 'late_fee_ladder', label: 'Ladder', payload: LADDER, jurisdiction: 'TX' })
+
+      const site = await newFacility(owner, 'texas')
+
+      expect(site.pushed).toEqual(['late_fee_ladder'])
+      const rows = await prisma.lateFeeRule.findMany({ where: { facilityId: site.id } })
+      expect(rows.map((row) => row.jurisdiction)).toEqual(['TX'])
+      expect((await facilityReadiness(site.id)).map((gap) => gap.kind)).not.toContain('late_fee_ladder')
+    })
+
+    it('does not push to a facility in another state, even one ticked on the form', async () => {
+      const who = actor({ allFacilities: true })
+      await saveOrgDefault(who, { scope: 'late_fee_ladder', label: 'Ladder', payload: LADDER, jurisdiction: 'OK' })
+
+      const results = await pushOrgDefault(who, {
+        scope: 'late_fee_ladder',
+        facilityIds: [facilityA],
+        effectiveFrom: EFFECTIVE,
+      })
+
+      expect(results.map((result) => result.outcome)).toEqual(['wrong_state'])
+      expect(results[0].detail).toBe('this default is written for OK and the facility is in TX')
+      expect(await prisma.lateFeeRule.count({ where: { facilityId: facilityA } })).toBe(0)
+
+      const row = (await compareFacilities(who, 'late_fee_ladder')).find((r) => r.facilityId === facilityA)
+      expect(row).toMatchObject({ applies: false, facilityState: 'TX' })
+    })
+
+    it('names a ladder written for another state as the gap, and says it is still charging', async () => {
+      const who = actor({ allFacilities: true })
+      await saveOrgDefault(who, { scope: 'late_fee_ladder', label: 'Ladder', payload: LADDER, jurisdiction: 'TX' })
+      const site = await newFacility(who, 'moved')
+      await prisma.facility.update({ where: { id: site.id }, data: { state: 'OK' } })
+
+      const gap = (await facilityReadiness(site.id)).find((one) => one.kind === 'late_fee_ladder')
+
+      expect(gap?.what).toBe('No late-fee ladder for OK')
+      expect(gap?.consequence).toContain('written for TX (step 1)')
+      expect(gap?.consequence).toContain('late fees are being charged')
+    })
   })
 
   it('audits the push once per facility', async () => {

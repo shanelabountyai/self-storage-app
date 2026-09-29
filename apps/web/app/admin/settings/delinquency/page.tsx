@@ -393,7 +393,8 @@ export default async function DelinquencyTimelinePage({
                   v{version.version} — {version.label}
                 </span>
                 <span className="text-muted-foreground">
-                  {version.active ? ' · active' : ''} · {version.steps.length} steps ·{' '}
+                  {version.active ? ' · active' : ''} · written for {version.jurisdiction} ·{' '}
+                  {version.steps.length} steps ·{' '}
                   {formatDate(version.createdAt)}
                   {version.createdByName ? ` · ${version.createdByName}` : ''}
                 </span>

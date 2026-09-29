@@ -5,6 +5,9 @@ import {
   compareFeeSchedule,
   compareLateFeeLadder,
   compareTimeline,
+  defaultAppliesTo,
+  isLienBearing,
+  normalizeJurisdiction,
   type FeeDefault,
   type LateFeeDefault,
   type OverrideReport,
@@ -33,8 +36,20 @@ export type OrgDefaultRecord = {
   scope: OrgDefaultScope
   label: string
   payload: unknown
+  /// B-413. The state a lien-bearing default was written for. Null on
+  /// `fee_schedule`.
+  jurisdiction: string | null
   updatedAt: Date
   updatedByName: string | null
+}
+
+/// B-413. A lien-bearing default saved without the state it was written for.
+/// The forms ask for it; this is the same rule at the boundary a POST reaches.
+export class MissingJurisdictionError extends Error {
+  constructor(scope: OrgDefaultScope) {
+    super(`An org default for ${scope} needs the two-letter state it was written for`)
+    this.name = 'MissingJurisdictionError'
+  }
 }
 
 export async function getOrgDefault(scope: OrgDefaultScope): Promise<OrgDefaultRecord | null> {
@@ -48,6 +63,7 @@ export async function getOrgDefault(scope: OrgDefaultScope): Promise<OrgDefaultR
     scope: row.scope,
     label: row.label,
     payload: row.payload,
+    jurisdiction: row.jurisdiction,
     updatedAt: row.updatedAt,
     updatedByName: row.updatedByStaff
       ? `${row.updatedByStaff.firstName} ${row.updatedByStaff.lastName}`.trim()
@@ -57,9 +73,16 @@ export async function getOrgDefault(scope: OrgDefaultScope): Promise<OrgDefaultR
 
 export async function saveOrgDefault(
   actor: Actor,
-  input: { scope: OrgDefaultScope; label: string; payload: object },
+  input: { scope: OrgDefaultScope; label: string; payload: object; jurisdiction?: string | null },
 ): Promise<void> {
   requirePermission(actor, 'org:defaults', null)
+
+  // B-413. One default per scope, so one state per lien-bearing scope.
+  // ponytail: a portfolio in two states keeps one org ladder and one org
+  // timeline, for one of them; key the row on (scope, jurisdiction) when an
+  // owner asks for a default per state.
+  const jurisdiction = isLienBearing(input.scope) ? normalizeJurisdiction(input.jurisdiction) : null
+  if (isLienBearing(input.scope) && !jurisdiction) throw new MissingJurisdictionError(input.scope)
 
   const staffId = actor.kind === 'staff' ? actor.staffUserId : null
   const before = await prisma.orgDefault.findUnique({ where: { scope: input.scope } })
@@ -70,11 +93,13 @@ export async function saveOrgDefault(
       scope: input.scope,
       label: input.label.trim() || input.scope,
       payload: input.payload as Prisma.InputJsonValue,
+      jurisdiction,
       updatedByStaffId: staffId,
     },
     update: {
       label: input.label.trim() || input.scope,
       payload: input.payload as Prisma.InputJsonValue,
+      jurisdiction,
       updatedByStaffId: staffId,
     },
   })
@@ -87,8 +112,10 @@ export async function saveOrgDefault(
     // Saving the default changes nothing at any facility until it is pushed,
     // so the log has to carry the payload itself — otherwise "what did the
     // default say when we pushed it in March" has no answer anywhere.
-    before: before ? { label: before.label, payload: before.payload } : undefined,
-    after: { label: input.label, payload: input.payload },
+    before: before
+      ? { label: before.label, payload: before.payload, jurisdiction: before.jurisdiction }
+      : undefined,
+    after: { label: input.label, payload: input.payload, jurisdiction },
   })
 }
 
@@ -97,9 +124,14 @@ export async function saveOrgDefault(
 export type FacilityComparison = {
   facilityId: string
   facilityName: string
+  facilityState: string
   report: OverrideReport
   /// False when the actor may look at this facility but not push to it.
   canPush: boolean
+  /// B-413. False when the default was written for another state. The report
+  /// is then a comparison against rules that do not govern this facility, and
+  /// the screen says so instead of calling the site overridden.
+  applies: boolean
 }
 
 /// One row per facility the actor can see, saying whether it matches the
@@ -114,7 +146,7 @@ export async function compareFacilities(
   const facilities = await prisma.facility.findMany({
     where: facilityFilter(actor),
     orderBy: { name: 'asc' },
-    select: { id: true, name: true },
+    select: { id: true, name: true, state: true },
   })
   if (facilities.length === 0) return []
 
@@ -127,8 +159,10 @@ export async function compareFacilities(
   return facilities.map((facility) => ({
     facilityId: facility.id,
     facilityName: facility.name,
+    facilityState: facility.state,
     report: reports.get(facility.id) ?? { matches: true, differences: [], missing: [] },
     canPush: can(actor, 'facility:settings', facility.id),
+    applies: defaultAppliesTo(scope, record.jurisdiction, facility.state),
   }))
 }
 
@@ -223,7 +257,7 @@ async function reportFor(
 export type PushResult = {
   facilityId: string
   facilityName: string
-  outcome: 'pushed' | 'already_matched' | 'forbidden' | 'invalid'
+  outcome: 'pushed' | 'already_matched' | 'forbidden' | 'invalid' | 'wrong_state'
   detail?: string
 }
 
@@ -250,7 +284,7 @@ export async function pushOrgDefault(
 
   const facilities = await prisma.facility.findMany({
     where: { id: { in: input.facilityIds } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, state: true },
   })
 
   const results: PushResult[] = []
@@ -263,6 +297,20 @@ export async function pushOrgDefault(
     // hold no assignment for by adding its id to the POST.
     if (!can(actor, 'facility:settings', facility.id)) {
       results.push({ ...base, outcome: 'forbidden' })
+      continue
+    }
+
+    // B-413. Before the comparison, not after: a facility in another state
+    // that happens to hold the same numbers has not "already matched" a default
+    // that was never written for it. `createFacility` pushes through here too,
+    // so a site created in a state with no default gets no ladder and no
+    // timeline, and `facilityReadiness` names the gap.
+    if (!defaultAppliesTo(input.scope, record.jurisdiction, facility.state)) {
+      results.push({
+        ...base,
+        outcome: 'wrong_state',
+        detail: `this default is written for ${record.jurisdiction ?? 'no state'} and the facility is in ${facility.state}`,
+      })
       continue
     }
 
@@ -323,6 +371,9 @@ async function pushOne(
         percentBasisPoints: rule.percentBasisPoints,
         basis: rule.basis as never,
         capCents: rule.capCents,
+        // B-413. `pushOrgDefault` has already refused a facility in any other
+        // state, so this is the facility's state as much as the default's.
+        jurisdiction: record.jurisdiction ?? undefined,
         effectiveFrom,
       })),
       skipDuplicates: true,

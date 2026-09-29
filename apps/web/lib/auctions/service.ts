@@ -210,8 +210,18 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
       // B-274 / D-131. Readiness now asks where this facility sells, so an
       // online facility with no site set refuses instead of serving a notice
       // that says "sold online" and names nowhere.
-      facility: { select: { auctionSaleManner: true, auctionSaleVenue: true } },
-      timeline: { select: { label: true, version: true, steps: true, minDaysNoticeToSale: true } },
+      // B-413. And which state it is in today, against the state the case's
+      // timeline was written for.
+      facility: { select: { auctionSaleManner: true, auctionSaleVenue: true, state: true } },
+      timeline: {
+        select: {
+          label: true,
+          version: true,
+          steps: true,
+          minDaysNoticeToSale: true,
+          jurisdiction: true,
+        },
+      },
       advertisements: { orderBy: { runDate: 'asc' } },
       lease: {
         select: {
@@ -326,6 +336,8 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
   const outstandingCents = ledger._sum.amountCents ?? 0
   const readiness = auctionReadiness({
     timelineConfigured: Boolean(row.timeline),
+    timelineJurisdiction: row.timeline?.jurisdiction ?? null,
+    facilityState: row.facility.state,
     steps,
     containsVehicle: row.containsVehicle,
     lienNoticeServed: Boolean(servedLienNotice),

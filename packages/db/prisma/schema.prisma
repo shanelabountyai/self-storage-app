@@ -1041,6 +1041,11 @@ model LateFeeRule {
   /// The most this step may ever charge. Null means uncapped, which is a real
   /// operator choice for a flat fee and a dangerous one for a percentage.
   capCents           Int?
+  /// B-413. The two-letter state this step was written for: the facility's
+  /// state on the day the row was written. A guard, not a claim of compliance
+  /// (US-29, D-10). The default is D-10's and exists for rows older than the
+  /// column; every writer in the app stamps its own.
+  jurisdiction       String       @default("TX")
   effectiveFrom      DateTime     @db.Timestamptz(6)
   createdAt          DateTime     @default(now()) @db.Timestamptz(6)
 
@@ -2941,6 +2946,12 @@ model DelinquencyTimeline {
   active              Boolean  @default(false)
   /// What the operator called this revision: "after the 2026 attorney review".
   label               String
+  /// B-413. The two-letter state this version was written for: the facility's
+  /// state on the day it was saved. `auctionReadiness` refuses a sale when it
+  /// differs from the state the facility is in today. A guard, not a claim of
+  /// compliance (US-29, D-10). The default is D-10's and exists for rows older
+  /// than the column; `saveTimeline` stamps its own.
+  jurisdiction        String   @default("TX")
   /// US-25's AC: paying this halts the pipeline.
   qualifyingAmount    String   @default("full_balance")
   /// D-92 (B-161). Days of grace a reversal-re-opened arrear gets before the
@@ -4637,6 +4648,11 @@ model OrgDefault {
   label            String
   /// The default itself, in the shape packages/core/org/defaults.ts defines.
   payload          Json
+  /// B-413. The two-letter state a lien-bearing default (`late_fee_ladder`,
+  /// `delinquency_timeline`) was written for. It is pushed to facilities in
+  /// that state and to no others. Null on `fee_schedule`, which is not bound to
+  /// a state.
+  jurisdiction     String?
   updatedByStaffId String?
   createdAt        DateTime        @default(now()) @db.Timestamptz(6)
   updatedAt        DateTime        @updatedAt @db.Timestamptz(6)

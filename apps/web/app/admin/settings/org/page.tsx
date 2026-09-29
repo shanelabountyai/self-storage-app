@@ -156,7 +156,13 @@ export default async function OrgDefaultsPage() {
         {ladderList.length === 0 ? (
           <p className="text-muted-foreground text-sm">No org ladder yet.</p>
         ) : (
-          <ul className="flex flex-col gap-1 text-sm">
+          <ul
+            aria-label={`Org late-fee ladder, written for ${ladder?.jurisdiction ?? 'no state'}`}
+            className="flex flex-col gap-1 text-sm"
+          >
+            <li className="text-muted-foreground">
+              Written for {ladder?.jurisdiction ?? 'no state'}.
+            </li>
             {ladderList.map((rule) => (
               <li key={rule.step}>
                 <span className="font-medium">Step {rule.step}</span> at {rule.daysPastDue} days
@@ -192,12 +198,27 @@ export default async function OrgDefaultsPage() {
             inputMode="decimal"
             hint="Required for anything but a flat amount."
           />
+          <Field
+            name="jurisdiction"
+            label="State"
+            type="text"
+            maxLength={2}
+            autoCapitalize="characters"
+            defaultValue={ladder?.jurisdiction ?? ''}
+            required
+            hint="The 2-letter state the whole ladder is written for. It is pushed only to facilities in that state. Changing it re-marks every step."
+          />
           <div className="flex items-end sm:col-span-3">
             <Button type="submit">Set ladder step</Button>
           </div>
         </AdminForm>
 
-        <PushPanel scope="late_fee_ladder" rows={ladderRows} configured={ladderList.length > 0} />
+        <PushPanel
+          scope="late_fee_ladder"
+          rows={ladderRows}
+          configured={ladderList.length > 0}
+          jurisdiction={ladder?.jurisdiction ?? null}
+        />
       </section>
 
       {/* ----------------------------------------------------- timeline -- */}
@@ -208,7 +229,7 @@ export default async function OrgDefaultsPage() {
 
         <p className="text-muted-foreground max-w-prose text-sm text-pretty">
           {timeline
-            ? `The org default is "${timeline.label}".`
+            ? `The org default is "${timeline.label}", written for ${timeline.jurisdiction ?? 'no state'}.`
             : 'No org default timeline yet.'}{' '}
           Timelines are built on a facility&apos;s own{' '}
           <Link href="/admin/settings/delinquency" className="underline underline-offset-2">
@@ -237,14 +258,17 @@ export default async function OrgDefaultsPage() {
 
         <p className="text-muted-foreground max-w-prose text-xs text-pretty">
           A pushed timeline is re-validated against each receiving facility&apos;s own notice
-          templates, and refused there if a step names one that site has not written. Nothing about
-          a timeline is legal advice.
+          templates, and refused there if a step names one that site has not written. A ladder or a
+          timeline is pushed only to facilities in the state it is written for. That is a guard
+          against the wrong state&apos;s rules, not a statement that the rules are right: nothing
+          about a timeline is legal advice.
         </p>
 
         <PushPanel
           scope="delinquency_timeline"
           rows={timelineRows}
           configured={timeline !== null}
+          jurisdiction={timeline?.jurisdiction ?? null}
         />
       </section>
 
@@ -291,10 +315,13 @@ function PushPanel({
   scope,
   rows,
   configured,
+  jurisdiction = null,
 }: {
   scope: string
   rows: FacilityComparison[]
   configured: boolean
+  /// B-413. The state a lien-bearing default is written for.
+  jurisdiction?: string | null
 }) {
   if (!configured) return null
 
@@ -314,18 +341,24 @@ function PushPanel({
               type="checkbox"
               name="facilityIds"
               value={row.facilityId}
-              disabled={!row.canPush}
+              disabled={!row.canPush || !row.applies}
               className="mt-1"
             />
             <span>
               {row.facilityName}{' '}
-              <span
-                className={
-                  row.report.matches ? 'text-muted-foreground' : 'font-medium text-warning-fg'
-                }
-              >
-                — {describe(row.report)}
-              </span>
+              {row.applies ? (
+                <span
+                  className={
+                    row.report.matches ? 'text-muted-foreground' : 'font-medium text-warning-fg'
+                  }
+                >
+                  — {describe(row.report)}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  — in {row.facilityState}; this default is written for {jurisdiction ?? 'no state'}
+                </span>
+              )}
               {!row.canPush && (
                 <span className="text-muted-foreground"> (you cannot change this site)</span>
               )}

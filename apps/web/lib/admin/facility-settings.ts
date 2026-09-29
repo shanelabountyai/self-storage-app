@@ -29,6 +29,8 @@ export type FacilitySettingsView = {
     percentBasisPoints: number;
     basis: string;
     capCents: number | null;
+    /// B-413. The state the step was written for.
+    jurisdiction: string;
     effectiveFrom: Date;
   }[];
   lateFeeHistory: Awaited<ReturnType<typeof prisma.lateFeeRule.findMany>>;
@@ -569,8 +571,13 @@ export async function addLateFeeStep(
 ): Promise<void> {
   requirePermission(actor, "facility:settings", facilityId);
 
+  // B-413. Stamped with the state the facility is in as the step is written.
+  const { state } = await prisma.facility.findUniqueOrThrow({
+    where: { id: facilityId },
+    select: { state: true },
+  });
   const created = await prisma.lateFeeRule.create({
-    data: { facilityId, ...input },
+    data: { facilityId, ...input, jurisdiction: state.trim().toUpperCase() },
   });
 
   await recordAudit({
@@ -579,7 +586,11 @@ export async function addLateFeeStep(
     entityType: "LateFeeRule",
     entityId: created.id,
     facilityId,
-    context: { ...input, effectiveFrom: input.effectiveFrom.toISOString() },
+    context: {
+      ...input,
+      jurisdiction: created.jurisdiction,
+      effectiveFrom: input.effectiveFrom.toISOString(),
+    },
   });
 }
 

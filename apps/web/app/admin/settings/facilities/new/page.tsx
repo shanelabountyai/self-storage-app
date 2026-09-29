@@ -49,9 +49,17 @@ export default async function NewFacilityPage() {
           {configured.length > 0 ? (
             <>
               Your org defaults are copied in as the new site&apos;s own effective-dated settings:{' '}
-              {configured.map((scope) => ORG_DEFAULT_SCOPE_LABELS[scope].toLowerCase()).join(', ')}.
-              They are ordinary rows from that moment on, so changing one here later does not change
-              them anywhere else.
+              {configured
+                .map((scope) => {
+                  // B-413. A ladder or a timeline is for one state, and a site
+                  // in any other starts without it.
+                  const state = defaults[ORG_DEFAULT_SCOPES.indexOf(scope)]?.jurisdiction
+                  const label = ORG_DEFAULT_SCOPE_LABELS[scope].toLowerCase()
+                  return state ? `${label} (only if the site is in ${state})` : label
+                })
+                .join(', ')}
+              . They are ordinary rows from that moment on, so changing one here later does not
+              change them anywhere else.
             </>
           ) : (
             <>No org default is set yet, so the new site starts with nothing configured.</>

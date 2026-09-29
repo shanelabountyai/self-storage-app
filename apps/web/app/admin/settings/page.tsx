@@ -760,6 +760,9 @@ export default async function AdminSettingsPage() {
                     Cap
                   </th>
                   <th scope="col" className="pb-1 font-normal">
+                    Written for
+                  </th>
+                  <th scope="col" className="pb-1 font-normal">
                     Since
                   </th>
                 </tr>
@@ -777,6 +780,7 @@ export default async function AdminSettingsPage() {
                         ? "none"
                         : formatCents(row.capCents)}
                     </td>
+                    <td className="py-1">{row.jurisdiction}</td>
                     <td className="py-1 tabular-nums">
                       {row.effectiveFrom.toISOString().slice(0, 10)}
                     </td>

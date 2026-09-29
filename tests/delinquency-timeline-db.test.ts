@@ -127,6 +127,36 @@ describeDb('the delinquency timeline', () => {
     expect(active?.version).toBe(1)
     expect(active?.label).toBe('First pass')
     expect(active?.createdByName).toContain('Mo')
+    // B-413. Written for the state the facility is in as it is saved.
+    expect(active?.jurisdiction).toBe('TX')
+  })
+
+  it('stamps a version with the state the facility is in, and leaves earlier ones as they were (B-413)', async () => {
+    await saveTimeline(actor(), facilityId, {
+      label: 'While in Texas',
+      qualifyingAmount: 'full_balance',
+      steps: [step({ dayOffset: 1 })],
+    })
+    await prisma.facility.update({ where: { id: facilityId }, data: { state: 'ok' } })
+    try {
+      await saveTimeline(actor(), facilityId, {
+        label: 'After the move',
+        qualifyingAmount: 'full_balance',
+        steps: [step({ dayOffset: 1 })],
+      })
+    } finally {
+      await prisma.facility.update({ where: { id: facilityId }, data: { state: 'TX' } })
+    }
+
+    const versions = await prisma.delinquencyTimeline.findMany({
+      where: { facilityId, label: { in: ['While in Texas', 'After the move'] } },
+      orderBy: { version: 'asc' },
+      select: { label: true, jurisdiction: true },
+    })
+    expect(versions).toEqual([
+      { label: 'While in Texas', jurisdiction: 'TX' },
+      { label: 'After the move', jurisdiction: 'OK' },
+    ])
   })
 
   it('supersedes rather than edits — the old version survives intact', async () => {

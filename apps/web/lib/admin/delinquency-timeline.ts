@@ -26,6 +26,8 @@ export type TimelineVersion = {
   version: number
   active: boolean
   label: string
+  /// B-413. The two-letter state this version was written for.
+  jurisdiction: string
   qualifyingAmount: QualifyingAmount
   /// D-92 (B-161). Grace after a returned payment re-opens an arrear, and
   /// whether the ladder resumes at the stage reached or restarts at day one.
@@ -59,6 +61,7 @@ export async function timelinesFor(actor: Actor, facilityId: string): Promise<Ti
     version: row.version,
     active: row.active,
     label: row.label,
+    jurisdiction: row.jurisdiction,
     qualifyingAmount: row.qualifyingAmount as QualifyingAmount,
     reversalGraceDays: row.reversalGraceDays,
     reversalResumes: row.reversalResumes,
@@ -94,6 +97,7 @@ export async function activeTimeline(facilityId: string): Promise<TimelineVersio
     version: row.version,
     active: row.active,
     label: row.label,
+    jurisdiction: row.jurisdiction,
     qualifyingAmount: row.qualifyingAmount as QualifyingAmount,
     reversalGraceDays: row.reversalGraceDays,
     reversalResumes: row.reversalResumes,
@@ -175,12 +179,18 @@ export async function saveTimeline(
   }
   if (problems.length > 0) return { ok: false, problems }
 
-  const latest = await prisma.delinquencyTimeline.findFirst({
-    where: { facilityId },
-    orderBy: { version: 'desc' },
-    select: { version: true },
-  })
+  const [latest, facility] = await Promise.all([
+    prisma.delinquencyTimeline.findFirst({
+      where: { facilityId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    }),
+    prisma.facility.findUniqueOrThrow({ where: { id: facilityId }, select: { state: true } }),
+  ])
   const version = (latest?.version ?? 0) + 1
+  // B-413. Stamped with the state the facility is in as this version is saved.
+  // An org default arrives here only at a facility in its own state.
+  const jurisdiction = facility.state.trim().toUpperCase()
 
   await prisma.$transaction(async (tx) => {
     await tx.delinquencyTimeline.updateMany({ where: { facilityId }, data: { active: false } })
@@ -190,6 +200,7 @@ export async function saveTimeline(
         version,
         active: true,
         label: input.label.trim() || `Version ${version}`,
+        jurisdiction,
         qualifyingAmount: input.qualifyingAmount,
         reversalGraceDays,
         reversalResumes,
@@ -209,6 +220,7 @@ export async function saveTimeline(
         context: {
           version,
           label: input.label.trim(),
+          jurisdiction,
           qualifyingAmount: input.qualifyingAmount,
           reversalGraceDays,
           reversalResumes,

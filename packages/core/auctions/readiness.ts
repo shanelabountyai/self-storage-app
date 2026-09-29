@@ -8,10 +8,13 @@
 // under time pressure clicking past a yellow banner — there is no banner, and
 // there is no override.
 
+import { normalizeJurisdiction, sameJurisdiction } from '../org/defaults.ts'
+
 export type BlockerKind =
   | 'on_hold'
   | 'contains_vehicle'
   | 'no_timeline'
+  | 'timeline_for_another_state'
   | 'step_not_executed'
   | 'step_lacks_proof'
   | 'no_lien_notice_served'
@@ -50,6 +53,14 @@ export type ReadinessInput = {
   /// somebody's belongings on a schedule nobody configured is not a thing this
   /// system will do.
   timelineConfigured: boolean
+  /// B-413. The state the case's timeline was written for, and the state the
+  /// facility is in TODAY. Read at every call rather than snapshotted, so a
+  /// facility whose state is edited blocks its pending cases from that moment.
+  ///
+  /// Required rather than optional, like `saleManner`: a new caller that
+  /// leaves them out must fail to compile, not fail open.
+  timelineJurisdiction: string | null
+  facilityState: string
   steps: readonly StepEvidence[]
   /// US-28's vehicle carve-out. Titled property follows a different notice and
   /// sale route; running one through here is "a wrongful sale by construction".
@@ -178,6 +189,21 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
       message:
         'This facility has no delinquency timeline configured, so there is no record of what was ' +
         'required or whether it happened.',
+    })
+  } else if (!sameJurisdiction(input.timelineJurisdiction, input.facilityState)) {
+    // B-413. Every step below may have run, on time and with proof, and the
+    // sale is still one a court can undo: the days between the notices and the
+    // sale were another state's. More paperwork does not resolve it, because
+    // the paperwork is what is wrong.
+    const written = normalizeJurisdiction(input.timelineJurisdiction) ?? 'an unrecorded state'
+    const here = normalizeJurisdiction(input.facilityState) ?? 'an unrecorded state'
+    blockers.push({
+      kind: 'timeline_for_another_state',
+      message:
+        `This case ran on a delinquency timeline written for ${written}, and the facility is in ` +
+        `${here}. Notice periods and sale rules are set by each state, so a sale on this timeline ` +
+        `cannot be defended. Save a timeline written for ${here} under Settings → Delinquency, ` +
+        'then cancel this case and let a new one run on it. What the tenant owes is unchanged.',
     })
   }
 
