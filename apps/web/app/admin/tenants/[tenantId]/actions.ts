@@ -8,6 +8,7 @@ import {
   addTenantNote,
   flagTenantAddressReturned,
   logTenantDocument,
+  setTenantDoNotRent,
   setTenantNotePinned,
   updateTenantActiveDuty,
   updateTenantAddress,
@@ -102,6 +103,32 @@ export async function updateActiveDutyAction(
     heldLeases === 0
       ? "Recorded as active-duty. An SCRA hold was already in force on every current lease."
       : `Recorded as active-duty. An SCRA hold was placed on ${heldLeases} lease${heldLeases === 1 ? "" : "s"}.`,
+  );
+}
+
+/// B-415 / PRD 02 US-32. `flag` is `set` or `clear`; anything else clears
+/// nothing and sets nothing, because only `set` flags.
+export async function setDoNotRentAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor();
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const flagged = formData.get("flag") === "set";
+
+  const result = await setTenantDoNotRent(
+    actor,
+    tenantId,
+    flagged,
+    String(formData.get("reason") ?? ""),
+  );
+  if (!result.ok) return fieldError({ reason: "Give a reason." });
+
+  revalidateProfile(tenantId);
+  return success(
+    flagged
+      ? "Marked do not rent. A move-in for this person now stops until a manager overrides it."
+      : "Do-not-rent flag cleared.",
   );
 }
 

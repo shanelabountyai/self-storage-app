@@ -61,6 +61,13 @@ export async function loadSystemPermissions(): Promise<void> {
   )
 }
 
+/// The actor's highest role rank at one facility; 0 for anybody who is not
+/// staff there. Compare it with `MANAGER_RANK` (`@storage/core/pos`).
+export function rankAt(actor: Actor, facilityId: string): number {
+  if (actor.kind !== 'staff') return 0
+  return Math.max(0, ...assignmentsFor(actor, facilityId).map((assignment) => assignment.rank))
+}
+
 /// "Does this actor hold this permission at ANY facility they're assigned to"
 /// — for UI decisions that aren't yet scoped to one facility, like which nav
 /// items to show. Deliberately distinct from `can()`: it never gates an actual

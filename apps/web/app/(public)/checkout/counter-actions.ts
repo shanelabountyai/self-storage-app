@@ -5,7 +5,16 @@ import type { CounterMethod } from '@storage/core/pos'
 import { requireStaffActor } from '@/lib/rbac/session'
 import { takeCounterMoveInPayment } from '@/lib/checkout/counter-tender'
 import { sessionByToken } from '@/lib/checkout/session'
+import {
+  overrideRentalStops,
+  rentalStopsFor,
+  rentalStopsOverridden,
+} from '@/lib/checkout/details'
+import { rankAt } from '@/lib/rbac/authorize'
+import { MANAGER_RANK } from '@storage/core/pos'
+import { formatCents } from '@/lib/format'
 import { fieldError, type FormState } from '@/lib/admin/form-state'
+import { submitDetailsAction } from './actions'
 
 // PRD 02 §4.8 US-32 (B-230). The counter's tender on a public checkout.
 //
@@ -71,6 +80,83 @@ export async function takeCounterMoveInAction(
     status: 'success',
     message: `Move-in complete. Receipt #${result.receiptNumber} for $${(result.amountCents / 100).toFixed(2)}.${change}`,
   }
+}
+
+/// B-415 / PRD 02 US-32. The details step as the COUNTER submits it.
+///
+/// `submitDetailsAction` stops a renter who matches a tenant owing money on an
+/// ended lease, or flagged do not rent, and tells them only to call. Staff
+/// need the other half: who matched, how much, and where. That is shown here,
+/// behind `requireStaffActor`, because a walk-in session can be resumed from
+/// the renter's own phone and the session's `walk_in` stamp is not authority
+/// to read somebody's balance.
+///
+/// A manager's override stamps the session and writes one audit row; the
+/// shared action then runs as it does for everybody.
+export async function submitCounterDetailsAction(
+  prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const session = await sessionByToken(String(formData.get('token') ?? ''))
+
+  const stops = session
+    ? await rentalStopsFor({
+        email: String(formData.get('email') ?? ''),
+        phone: String(formData.get('phone') ?? ''),
+        lastName: String(formData.get('lastName') ?? ''),
+        postalCode: String(formData.get('postalCode') ?? ''),
+      })
+    : []
+
+  if (session && stops.length > 0 && !rentalStopsOverridden(session.data, stops)) {
+    const echo = stops.map((stop) => ({
+      label: stop.name,
+      value: [
+        ...stop.owed.map((row) => `Owes ${formatCents(row.balanceCents)} at ${row.facilityName}`),
+        ...(stop.doNotRentReason ? [`Do not rent: ${stop.doNotRentReason}`] : []),
+      ].join('. '),
+    }))
+
+    if (rankAt(actor, session.facilityId) < MANAGER_RANK) {
+      return {
+        status: 'error',
+        message: `This renter matches ${echo
+          .map((row) => `${row.label} (${row.value})`)
+          .join('; ')}. A manager has to approve this move-in. Ask one to sign in and continue it.`,
+        fieldErrors: {},
+      }
+    }
+
+    if (formData.get('confirmed') !== 'override') {
+      return {
+        status: 'confirm',
+        message:
+          'This renter matches a tenant who owes money or is marked do not rent. To rent to them anyway, give a reason below.',
+        echo,
+        confirmLabel: 'Override and continue',
+        confirmValue: 'override',
+        cancel: { label: 'Stop here', message: 'Nothing was saved. The move-in has not continued.' },
+      }
+    }
+
+    const overridden = await overrideRentalStops(
+      actor,
+      session,
+      stops,
+      String(formData.get('overrideReason') ?? ''),
+    )
+    if (!overridden.ok) {
+      return fieldError({
+        overrideReason:
+          overridden.problem === 'reason_required'
+            ? 'Give the reason for renting to them anyway.'
+            : 'A manager has to approve this move-in.',
+      })
+    }
+  }
+
+  return submitDetailsAction(prev, formData)
 }
 
 const COUNTER_MOVE_IN_COPY: Record<string, string> = {

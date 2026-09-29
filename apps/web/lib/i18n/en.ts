@@ -816,6 +816,10 @@ export const en = {
   // portal sign-in, which the paragraph two lines above says neither will
   // have. The yes-path is "correct the name below", not a button.
   'details.sharedEmailConfirm': 'No — different person, rent to {renting}',
+  // B-415 (PRD 02 US-32). Shown when the renter's details match a tenant who
+  // owes money on an ended lease or is flagged do not rent. It must never say
+  // why: no balance, no flag, no "account". It names the next action (3.3.3).
+  'details.callOffice': 'Please call the office at {phone} to finish renting.',
   'details.phone': 'Mobile number',
   'details.address1': 'Street address',
   'details.address2': 'Flat, suite or unit (optional)',

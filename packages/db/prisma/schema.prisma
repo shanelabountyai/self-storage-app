@@ -1271,6 +1271,12 @@ model Tenant {
   /// `upsertTenantForCheckout` applies to every other field it touches. A send
   /// resolves null to `en`.
   preferredLocale              String?
+  /// B-415 (PRD 02 US-32). Do not rent to this person again. Null means not
+  /// flagged; a value is the flag AND the reason staff gave, so a flag can
+  /// never exist without one. Who set or cleared it, and when, is in the audit
+  /// log (`tenant.do_not_rent_set` / `_cleared`). Read by the move-in's details
+  /// step (`rentalStopsFor`); shown to staff only, never to the renter.
+  doNotRentReason              String?
   /// Stripe Customer for this tenant. A reference, never card data (master
   /// PRD §7.4 keeps us in SAQ-A: the browser talks to Stripe directly and we
   /// only ever hold tokens).

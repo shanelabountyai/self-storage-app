@@ -242,9 +242,17 @@ export default async function CheckoutPage({
   // a staffer from another site helping with a link is not the person with a
   // drawer open here, and the server action re-checks both regardless of what
   // this renders.
-  const viewer = session.step === 'payment' ? await currentActor() : null
+  // B-415. The details step asks the same question, for a counter-started
+  // session only: staff see who the renter matched, a renter never does.
+  const counterSession = emailOptionalFor(session.data)
+  const viewer =
+    session.step === 'payment' || (session.step === 'details' && counterSession)
+      ? await currentActor()
+      : null
   const counterTender =
     viewer?.kind === 'staff' && can(viewer, 'payments:take', session.facilityId)
+  const counterDetails =
+    counterSession && viewer?.kind === 'staff' && can(viewer, 'leases:move_in', session.facilityId)
 
   // US-501 step 7: code, address, hours. `code` is null whenever there is
   // nothing to reveal yet (no encryption key configured, or the synchronous
@@ -649,6 +657,7 @@ export default async function CheckoutPage({
               // so the field that renders optional is the field the rule
               // accepts blank.
               emailOptional={emailOptionalFor(session.data)}
+              counter={counterDetails}
               dict={dict}
               locale={locale}
             />

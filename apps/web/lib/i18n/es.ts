@@ -724,6 +724,8 @@ export const es: Dictionary = {
   // B-308. Ver la nota en `en.ts`: la etiqueta nombra la RAMA que toma y no
   // empieza con «Sí», que responde la pregunta al revés. Sin «cuenta».
   'details.sharedEmailConfirm': 'No — es otra persona, rente a {renting}',
+  // B-415. Ver la nota en `en.ts`: nunca dice el motivo.
+  'details.callOffice': 'Llame a la oficina al {phone} para terminar de rentar.',
   'details.phone': 'Número de celular',
   'details.address1': 'Dirección',
   'details.address2': 'Departamento, suite o unidad (opcional)',

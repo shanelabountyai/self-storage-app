@@ -1,5 +1,10 @@
-import { prisma } from '@storage/db'
+import { prisma, type Prisma } from '@storage/db'
+import { recordAudit } from '@storage/core/audit'
+import { MANAGER_RANK } from '@storage/core/pos'
 import type { KeyedFieldErrors } from '@/lib/admin/form-state'
+import type { Actor } from '@/lib/rbac/actor'
+import { toAuditActor } from '@/lib/rbac/audit-actor'
+import { rankAt } from '@/lib/rbac/authorize'
 import { localityForZip } from '@/lib/geo/geocode'
 import type { Locale } from '@/lib/i18n'
 
@@ -188,6 +193,136 @@ export async function otherTenantOnEmail(
     return null
   }
   return existing
+}
+
+// ── B-415 / PRD 02 US-32: money owed elsewhere is seen before the keys ───────
+
+/// One existing tenant the renter's details match, who either owes money on an
+/// ended lease or is flagged do not rent. For staff eyes only: nothing in here
+/// may reach copy the renter reads.
+export type RentalStop = {
+  tenantId: string
+  name: string
+  /// Null when the stop is a balance alone.
+  doNotRentReason: string | null
+  /// Ended leases that still owe, summed per facility.
+  owed: { facilityName: string; balanceCents: number }[]
+}
+
+/// Matches across the whole portfolio, by email, by phone, or by last name plus
+/// postal code. Any one key is enough: a renter who left owing money changes
+/// the email first.
+///
+/// The phone is compared on its last ten digits, because the column holds what
+/// was typed. A blank key matches nothing (`= NULL` is never true).
+export async function rentalStopsFor(
+  input: Pick<DetailsInput, 'email' | 'phone' | 'lastName' | 'postalCode'>,
+): Promise<RentalStop[]> {
+  const email = input.email.trim().toLowerCase() || null
+  const digits = (input.phone.match(PHONE_DIGITS) ?? []).join('')
+  const phone = digits.length >= 10 ? digits.slice(-10) : null
+  const lastName = input.lastName.trim().toLowerCase() || null
+  const zip = input.postalCode.trim().slice(0, 5) || null
+
+  // ponytail: reads every tenant row, because the phone has to be stripped to
+  // digits before it can be compared. Add an expression index on those digits
+  // when the tenant table is large enough for the details step to feel it.
+  const matched = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "tenant"
+    WHERE lower("email") = ${email}
+       OR right(regexp_replace("phone", '[^0-9]', '', 'g'), 10) = ${phone}
+       OR (lower("lastName") = ${lastName} AND left("postalCode", 5) = ${zip})
+  `
+  if (matched.length === 0) return []
+  const tenantIds = matched.map((row) => row.id)
+
+  const [tenants, leases] = await Promise.all([
+    prisma.tenant.findMany({
+      where: { id: { in: tenantIds } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, firstName: true, lastName: true, doNotRentReason: true },
+    }),
+    prisma.lease.findMany({
+      where: { tenantId: { in: tenantIds }, status: 'ended' },
+      select: { id: true, tenantId: true, facility: { select: { name: true } } },
+    }),
+  ])
+  // The same sum `formerTenantDebts` reads, so the two cannot disagree.
+  const balances = await prisma.ledgerEntry.groupBy({
+    by: ['leaseId'],
+    where: { leaseId: { in: leases.map((lease) => lease.id) } },
+    _sum: { amountCents: true },
+  })
+  const byLease = new Map(balances.map((row) => [row.leaseId, row._sum.amountCents ?? 0]))
+
+  return tenants
+    .map((tenant) => {
+      const owed = new Map<string, number>()
+      for (const lease of leases) {
+        const balanceCents = byLease.get(lease.id) ?? 0
+        if (lease.tenantId !== tenant.id || balanceCents <= 0) continue
+        owed.set(lease.facility.name, (owed.get(lease.facility.name) ?? 0) + balanceCents)
+      }
+      return {
+        tenantId: tenant.id,
+        name: `${tenant.firstName} ${tenant.lastName}`.trim(),
+        doNotRentReason: tenant.doNotRentReason,
+        owed: [...owed].map(([facilityName, balanceCents]) => ({ facilityName, balanceCents })),
+      }
+    })
+    .filter((stop) => stop.doNotRentReason !== null || stop.owed.length > 0)
+}
+
+/// Whether a manager has already let this session past every one of `stops`.
+///
+/// The stamp names tenants rather than saying "overridden", so details edited
+/// after the override to match somebody else are stopped again.
+export function rentalStopsOverridden(data: unknown, stops: readonly RentalStop[]): boolean {
+  const stamp = (data as { rentalOverride?: { tenantIds?: unknown } } | null)?.rentalOverride
+  const allowed = Array.isArray(stamp?.tenantIds) ? stamp.tenantIds : []
+  return stops.every((stop) => allowed.includes(stop.tenantId))
+}
+
+/// The counter's override: a manager or above at the session's facility, with
+/// a reason, writes the stamp `rentalStopsOverridden` reads and ONE audit row.
+export async function overrideRentalStops(
+  actor: Actor,
+  session: { id: string; facilityId: string; data: Record<string, unknown> },
+  stops: readonly RentalStop[],
+  reason: string,
+): Promise<{ ok: true } | { ok: false; problem: 'needs_manager' | 'reason_required' }> {
+  if (rankAt(actor, session.facilityId) < MANAGER_RANK) {
+    return { ok: false, problem: 'needs_manager' }
+  }
+  if (reason.trim() === '') return { ok: false, problem: 'reason_required' }
+
+  const tenantIds = stops.map((stop) => stop.tenantId)
+  await prisma.$transaction(async (tx) => {
+    await tx.checkoutSession.update({
+      where: { id: session.id },
+      data: { data: { ...session.data, rentalOverride: { tenantIds } } as Prisma.InputJsonValue },
+    })
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        action: 'checkout.rental_stop_overridden',
+        entityType: 'CheckoutSession',
+        entityId: session.id,
+        facilityId: session.facilityId,
+        reasonCode: reason,
+        context: {
+          tenantIds,
+          owedCents: stops.reduce(
+            (sum, stop) => sum + stop.owed.reduce((owed, row) => owed + row.balanceCents, 0),
+            0,
+          ),
+          doNotRent: stops.some((stop) => stop.doNotRentReason !== null),
+        },
+      },
+      tx,
+    )
+  })
+  return { ok: true }
 }
 
 /// Creates or links the tenant this checkout belongs to.

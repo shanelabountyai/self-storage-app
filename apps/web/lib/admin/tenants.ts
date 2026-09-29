@@ -412,6 +412,8 @@ export type TenantProfile = {
   /// which is a different fact from "asked and said no", and the profile shows
   /// it as such rather than collapsing both into an unticked box.
   activeDutyMilitary: boolean | null;
+  /// B-415. Null means not flagged; a value is the flag and its reason.
+  doNotRentReason: string | null;
   address: Awaited<ReturnType<typeof currentAddress>>;
   addressHistory: Awaited<ReturnType<typeof addressHistory>>;
   leases: TenantLeaseSummary[];
@@ -539,6 +541,7 @@ export async function tenantProfile(
           altContactPhone: true,
           altContactEmail: true,
           activeDutyMilitary: true,
+          doNotRentReason: true,
           emailUndeliverableAt: true,
           preferredLocale: true,
         },
@@ -826,6 +829,7 @@ export async function tenantProfile(
     altContactPhone: tenant.altContactPhone,
     altContactEmail: tenant.altContactEmail,
     activeDutyMilitary: tenant.activeDutyMilitary,
+    doNotRentReason: tenant.doNotRentReason,
     address,
     addressHistory: history,
     leases: leaseSummaries,
@@ -996,6 +1000,55 @@ export async function updateTenantActiveDuty(
   if (!activeDutyMilitary) return { heldLeases: 0 };
   const { placed } = await syncActiveDutyHolds(tenantId, "staff");
   return { heldLeases: placed.length };
+}
+
+/// B-415 / PRD 02 US-32. Sets or clears the do-not-rent flag the move-in's
+/// details step reads (`rentalStopsFor`). A reason is required both ways and
+/// is what the audit row carries; on setting, it is also what the counter
+/// shows the next staffer who meets this person.
+///
+/// `tenants:edit`, which is the permission every other write on this screen
+/// takes. The backlog row says `tenants:manage`; the catalog has no such key.
+export async function setTenantDoNotRent(
+  actor: Actor,
+  tenantId: string,
+  flagged: boolean,
+  reason: string,
+): Promise<{ ok: true } | { ok: false; problem: "reason_required" }> {
+  const [facilityId] = await assertTenantAccess(
+    actor,
+    tenantId,
+    "tenants:edit",
+  );
+  const why = reason.trim();
+  if (why === "") return { ok: false, problem: "reason_required" };
+
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { doNotRentReason: true },
+    });
+    await tx.tenant.update({
+      where: { id: tenantId },
+      data: { doNotRentReason: flagged ? why : null },
+    });
+    await recordAudit(
+      {
+        actor: toAuditActor(actor),
+        facilityId,
+        action: flagged
+          ? "tenant.do_not_rent_set"
+          : "tenant.do_not_rent_cleared",
+        entityType: "Tenant",
+        entityId: tenantId,
+        before: { doNotRent: before.doNotRentReason !== null },
+        after: { doNotRent: flagged },
+        reasonCode: why,
+      },
+      tx,
+    );
+  });
+  return { ok: true };
 }
 
 export type AddressChangeResult =

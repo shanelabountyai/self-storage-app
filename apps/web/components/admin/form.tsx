@@ -21,6 +21,12 @@ import { useAnnounceOutside } from '@/components/admin/announce'
 
 const FormStateContext = createContext<FormState>(IDLE_FORM_STATE)
 
+/// B-415. What the enclosing `AdminForm`'s action last returned, for a control
+/// that only exists in one state (the counter's override reason).
+export function useFormState(): FormState {
+  return useContext(FormStateContext)
+}
+
 /// B-213 / WCAG 3.3.1 A, 3.3.3 AA. The id of the enclosing `FieldSet`'s error
 /// message, so a `Field` inside a refused group can describe itself with it.
 ///

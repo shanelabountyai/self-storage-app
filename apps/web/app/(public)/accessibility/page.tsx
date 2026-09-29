@@ -3005,6 +3005,16 @@ function reviewedOn(locale: Locale): string {
 // row and the page lists it; it is not scanned and not measured for layout.
 // The at-rest page's scan is unchanged. No other claim on this page changes.
 // `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-09-29, at B-415. Checkout step 1 gains one refusal, "Please
+// call the office at {phone} to finish renting.", in English and Spanish. It
+// is `AdminForm`'s error summary, the same markup as the step's other
+// refusals: `role="alert"`, and focus moves to it.
+// `e2e/checkout-rental-stop.spec.ts` asserts the focus and the wording and
+// runs axe on the state. It makes no `SCANNED_STATES` claim, so the state is
+// not measured at 320px, 200% zoom or forced text spacing on its own; the
+// refused step already is. The counter's override is staff-only. No claim on
+// this page changes. `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

@@ -170,6 +170,27 @@ export const AUDIT_ACTIONS = [
     label: "Active-duty military status recorded",
     requiresReason: false,
   },
+  /// B-415 (PRD 02 US-32). Two actions, so the log answers "who let this
+  /// person rent again" without reading a before/after. The reason is the
+  /// sentence staff typed, as on `fee.charged`.
+  {
+    action: "tenant.do_not_rent_set",
+    label: "Tenant marked do not rent",
+    requiresReason: true,
+  },
+  {
+    action: "tenant.do_not_rent_cleared",
+    label: "Do-not-rent flag cleared",
+    requiresReason: true,
+  },
+  /// B-415. A manager let a move-in continue for a renter who matched a tenant
+  /// owing money on an ended lease, or flagged do not rent. One row per
+  /// override, on the checkout session; the matched tenants are in the context.
+  {
+    action: "checkout.rental_stop_overridden",
+    label: "Move-in allowed despite money owed or a do-not-rent flag",
+    requiresReason: true,
+  },
   {
     action: "tenant.note_added",
     label: "Note added to tenant",

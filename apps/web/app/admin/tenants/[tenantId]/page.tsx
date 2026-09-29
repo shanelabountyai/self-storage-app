@@ -24,6 +24,7 @@ import {
   logDocumentAction,
   setNoticeGivenAction,
   setNotePinnedAction,
+  setDoNotRentAction,
   updateActiveDutyAction,
   updateAddressAction,
   liftHoldAction,
@@ -2148,6 +2149,57 @@ export default async function TenantProfilePage({
                 className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
               >
                 Save military service
+              </button>
+            </AdminForm>
+          </div>
+        </details>
+
+        {/* B-415 / PRD 02 US-32. Open while the flag is set, so nobody reads
+            this profile without seeing it. */}
+        <details
+          open={profile.doNotRentReason !== null}
+          className="border-input rounded-lg border p-4"
+        >
+          <summary className="cursor-pointer font-medium">
+            Do not rent{profile.doNotRentReason !== null ? " — flagged" : ""}
+          </summary>
+          <div className="mt-3 flex flex-col gap-3">
+            <p className="max-w-prose text-sm text-pretty">
+              {profile.doNotRentReason !== null
+                ? `Flagged: ${profile.doNotRentReason}`
+                : "Not flagged."}{" "}
+              A flagged person who tries to rent, online or at any counter, is
+              told to call the office; a manager can override it at the
+              counter. The renter is never shown the reason.
+            </p>
+            <AdminForm
+              action={setDoNotRentAction}
+              label="Do not rent"
+              className="flex max-w-lg flex-col gap-3"
+            >
+              <input type="hidden" name="tenantId" value={tenantId} />
+              <input
+                type="hidden"
+                name="flag"
+                value={profile.doNotRentReason !== null ? "clear" : "set"}
+              />
+              <Field
+                name="reason"
+                label={
+                  profile.doNotRentReason !== null
+                    ? "Reason for clearing the flag"
+                    : "Reason for the flag"
+                }
+                required
+                hint="Recorded in the audit log with your name."
+              />
+              <button
+                type="submit"
+                className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+              >
+                {profile.doNotRentReason !== null
+                  ? "Clear the flag"
+                  : "Mark do not rent"}
               </button>
             </AdminForm>
           </div>

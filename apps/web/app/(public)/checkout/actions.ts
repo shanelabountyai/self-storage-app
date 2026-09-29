@@ -16,6 +16,8 @@ import {
   localityFor,
   recordLeaseDeclarations,
   otherTenantOnEmail,
+  rentalStopsFor,
+  rentalStopsOverridden,
   upsertTenantForCheckout,
   validateDeclarations,
   validateDetails,
@@ -25,6 +27,7 @@ import { prisma } from '@storage/db'
 import { paymentAdvanced } from '@/lib/checkout/payment'
 import { formatRate } from '@/lib/format'
 import { labelForStep } from '@/components/checkout/stepper'
+import { phoneFor } from '@/components/marketing/call-link'
 import { isLocale, translateSegments, type Locale, type MessageKey } from '@/lib/i18n'
 import { getLocale, messages } from '@/lib/i18n/server'
 import {
@@ -129,6 +132,28 @@ export async function submitDetailsAction(
   // disclosure and typed them. `validateDetails` has already refused the case
   // where neither is available, so this is present.
   const locality = localityFor(input)!
+
+  // ── B-415 / PRD 02 US-32: money owed elsewhere is seen before the keys ─────
+  //
+  // Before anything is written, so a stopped renter leaves no tenant, no
+  // consent row and no lease behind. It runs for EVERY session, the counter's
+  // included: the only way past is the stamp `overrideRentalStops` writes,
+  // which takes a manager. The counter's own action shows staff the match
+  // first; this one tells whoever is looking only to call.
+  const stops = await rentalStopsFor(input)
+  if (stops.length > 0 && !rentalStopsOverridden(session?.data, stops)) {
+    const facility = session
+      ? await prisma.facility.findUnique({
+          where: { id: session.facilityId },
+          select: { phone: true },
+        })
+      : null
+    return {
+      status: 'error',
+      message: t('details.callOffice', { phone: phoneFor(facility?.phone ?? null).display }),
+      fieldErrors: {},
+    }
+  }
 
   // ── B-271 / D-111: the counter says so at the moment it creates the second
   // account ─────────────────────────────────────────────────────────────────

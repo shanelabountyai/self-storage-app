@@ -1,5 +1,7 @@
 import { AdminForm, Field } from '@/components/admin/form'
 import { submitDetailsAction } from '@/app/(public)/checkout/actions'
+import { submitCounterDetailsAction } from '@/app/(public)/checkout/counter-actions'
+import { OverrideReason } from '@/components/checkout/override-reason'
 import { type DetailsInput } from '@/lib/checkout/details'
 import {
   MARKETING_EMAIL_CHECKOUT_CONSENT,
@@ -44,11 +46,17 @@ export function DetailsStep({
   prefill,
   manualLocality = false,
   emailOptional = false,
+  counter = false,
   dict,
   locale,
 }: {
   token: string
   prefill: Partial<DetailsInput>
+  /// B-415. True when a signed-in staffer is looking at a counter-started
+  /// session. The form then posts to the counter's action, which shows staff
+  /// who the renter matched and takes a manager's override. Defaults false, so
+  /// the public site posts to the action that only ever says "call the office".
+  counter?: boolean
   /// D-111 / B-238. True only on a counter-started session
   /// (`emailOptionalFor`), where the renter in front of staff may genuinely
   /// have no address. Defaults false, so the public site is unchanged.
@@ -70,11 +78,12 @@ export function DetailsStep({
 
   return (
     <AdminForm
-      action={submitDetailsAction}
+      action={counter ? submitCounterDetailsAction : submitDetailsAction}
       label={t('details.formLabel')}
       className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2"
     >
       <input type="hidden" name="token" value={token} />
+      {counter && <OverrideReason />}
       {/* B-259. Which language these disclosures were RENDERED in, carried to
           the action so the consent rows are stamped with the words that were
           actually on screen. Reading the cookie again at submit time would get
