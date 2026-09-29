@@ -3015,6 +3015,21 @@ function reviewedOn(locale: Locale): string {
 // not measured at 320px, 200% zoom or forced text spacing on its own; the
 // refused step already is. The counter's override is staff-only. No claim on
 // this page changes. `LAST_REVIEWED` is not bumped (D-115).
+//
+// Corrected 2026-09-29, at B-416. The first "where we fall short" entry said
+// the whole checkout works with JavaScript off. Run with JavaScript off against
+// a production build, it stops at step 1: `AdminForm` has wrapped its action in
+// a client callback since B-124 (2026-08-14), so the server renders a form
+// with nothing to post to. The same is true of sign-in, password reset and
+// every change form in the account; the card forms need Stripe's script. Every
+// entry above that re-read this list and called the entry "still true" was
+// reading it, not running it. The entry now names what was measured: search,
+// the filters, the promo code and Rent now post; the rest do not. The checkout
+// carries a `<noscript>` line with the facility's number.
+// `e2e/checkout-no-js.spec.ts` asserts both halves, so the entry fails a test
+// when B-442 makes the forms post. The hold countdown is dropped from the
+// entry: nobody without JavaScript reaches the lease step it warned about.
+// `LAST_REVIEWED` is not bumped (D-115): the other two entries were not re-run.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

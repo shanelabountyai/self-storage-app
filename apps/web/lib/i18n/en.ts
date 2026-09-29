@@ -490,6 +490,8 @@ export const en = {
   'checkout.smaller': 'smaller',
   'checkout.trade': '{area}, {money}',
   'checkout.emailedTo': 'Your unit is yours. We have emailed your lease and receipt to',
+  'checkout.needsJs':
+    'The forms on this page need JavaScript, and it is turned off in this browser. Turn it on and reload this page to carry on here.',
   'checkout.didntArrive': "Didn't arrive? Check your spam folder, or",
   'checkout.didntArriveAfter': 'and we will send it again.',
   'checkout.yourGateCode': 'Your gate code',
@@ -1860,9 +1862,9 @@ export const en = {
   'a11y.short.heading': 'Where we fall short today',
   'a11y.short.intro':
     'This site is under active construction. These are the problems we know about, as of {date}. If one of them blocks you, tell us and we will help you finish what you were doing by phone or email in the meantime.',
-  'a11y.short.js.term': 'Renting online without JavaScript.',
+  'a11y.short.js.term': 'Using this site without JavaScript.',
   'a11y.short.js.body':
-    'The whole checkout works with JavaScript turned off, but the countdown on the 30-minute hold does not: it shows the time left when the page was drawn and does not tick down, so if you are reading the lease when it runs out, the expiry can be the first you hear of it. With JavaScript on you are warned five minutes out and can extend the hold in one press.',
+    'With JavaScript turned off you can search, compare sizes and prices, and press Rent now, which holds the unit. You cannot finish renting, sign in, reset a password, change anything in your account or pay by card: those forms do not send without JavaScript. The checkout says so and gives the number to call.',
   'a11y.short.staff.term': 'Our staff-facing screens',
   'a11y.short.staff.body':
     'have known problems. Long lists on Tasks, Leads, Delinquency and Support sessions are not paginated. No customer uses them, but we are not going to describe them as done.',

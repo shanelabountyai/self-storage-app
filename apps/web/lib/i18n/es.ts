@@ -449,6 +449,8 @@ export const es: Dictionary = {
   'checkout.trade': '{area}, {money}',
   'checkout.emailedTo':
     'La unidad es suya. Le enviamos por correo su contrato y su recibo a',
+  'checkout.needsJs':
+    'Los formularios de esta página necesitan JavaScript, y está apagado en este navegador. Enciéndalo y vuelva a cargar esta página para seguir aquí.',
   'checkout.didntArrive': '¿No llegó? Revise su carpeta de correo no deseado, o',
   'checkout.didntArriveAfter': 'y se lo mandamos otra vez.',
   'checkout.yourGateCode': 'Su código de la puerta',
@@ -1770,9 +1772,9 @@ export const es: Dictionary = {
   'a11y.short.heading': 'En qué nos quedamos cortos hoy',
   'a11y.short.intro':
     'Este sitio está en construcción activa. Estos son los problemas que conocemos, al {date}. Si alguno le impide seguir, díganos y le ayudamos a terminar lo que estaba haciendo por teléfono o por correo mientras tanto.',
-  'a11y.short.js.term': 'Rentar en línea sin JavaScript.',
+  'a11y.short.js.term': 'Usar este sitio sin JavaScript.',
   'a11y.short.js.body':
-    'Todo el proceso de renta funciona con JavaScript apagado, pero la cuenta regresiva del apartado de 30 minutos no: muestra el tiempo que quedaba cuando se dibujó la página y no va bajando, así que si usted está leyendo el contrato cuando se acaba, el vencimiento puede ser lo primero que sepa. Con JavaScript encendido le avisamos cinco minutos antes y puede extender el apartado con un solo toque.',
+    'Con JavaScript apagado usted puede buscar, comparar tamaños y precios, y oprimir Rentar ahora, que aparta la unidad. No puede terminar de rentar, iniciar sesión, restablecer una contraseña, cambiar nada en su cuenta ni pagar con tarjeta: esos formularios no se envían sin JavaScript. El proceso de renta lo dice y da el número para llamar.',
   'a11y.short.staff.term': 'Nuestras pantallas para el personal',
   'a11y.short.staff.body':
     'tienen problemas conocidos. Las listas largas de Tareas, Prospectos, Morosidad y Sesiones de soporte no están paginadas. Ningún cliente las usa, pero no vamos a describirlas como terminadas.',

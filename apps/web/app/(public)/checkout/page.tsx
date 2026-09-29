@@ -645,6 +645,25 @@ export default async function CheckoutPage({
             {labelForStep(session.step, dict)}
           </h2>
 
+          {/* B-416. `AdminForm` renders no usable `action` on the server, so
+              with JavaScript off no step below can be sent. Said here, once,
+              above whichever step it is, with the number this page already
+              shows. Remove it when the forms post on their own (B-442). */}
+          {session.step !== 'provisioned' && (
+            <noscript>
+              <p className="border-input mt-3 rounded-lg border p-4 text-pretty">
+                {t('checkout.needsJs')}{' '}
+                <a
+                  href={`tel:${lostPhone.href}`}
+                  className="font-medium underline underline-offset-4"
+                >
+                  {t('facility.callPhone', { phone: lostPhone.display })}
+                </a>{' '}
+                {t('pay.cardsUnavailableAfter')}
+              </p>
+            </noscript>
+          )}
+
           {/* Session data wins over the reservation prefill: if the renter has
               already corrected something on this step, their correction is what
               comes back when they return to it. */}
