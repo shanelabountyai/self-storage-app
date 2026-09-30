@@ -93,7 +93,21 @@ export default async function RootLayout({
       lang={locale}
       className={`${archivo.variable} ${sourceSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {/* B-442. A press on an `AdminForm` before hydration is queued here
+            by its form element and replayed by the form once it mounts
+            (`components/admin/form.tsx`), the way React replays its own
+            `javascript:` forms. A hydrated form's press is prevented by React
+            before it reaches the document, so this sees only the early ones;
+            without JavaScript the script never runs and the form posts. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'addEventListener("submit",function(e){var f=e.target;if(e.defaultPrevented||!f.hasAttribute("data-admin-form"))return;e.preventDefault();(window.__adminFormReplay||(window.__adminFormReplay=new Map)).set(f,new FormData(f,e.submitter))})',
+          }}
+        />
+        {children}
+      </body>
     </html>
   )
 }

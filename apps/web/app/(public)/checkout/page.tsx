@@ -645,11 +645,10 @@ export default async function CheckoutPage({
             {labelForStep(session.step, dict)}
           </h2>
 
-          {/* B-416. `AdminForm` renders no usable `action` on the server, so
-              with JavaScript off no step below can be sent. Said here, once,
-              above whichever step it is, with the number this page already
-              shows. Remove it when the forms post on their own (B-442). */}
-          {session.step !== 'provisioned' && (
+          {/* B-416 / B-442. Every step's form posts without JavaScript since
+              B-442, except the card form, which is Stripe's and cannot. Said
+              on that step only, with the number this page already shows. */}
+          {session.step === 'payment' && (
             <noscript>
               <p className="border-input mt-3 rounded-lg border p-4 text-pretty">
                 {t('checkout.needsJs')}{' '}

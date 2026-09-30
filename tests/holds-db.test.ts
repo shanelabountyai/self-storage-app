@@ -283,9 +283,14 @@ describeDb('lease holds', () => {
         },
       })
 
+      // Dated, not defaulted: `placeHold` starts a hold at the wall clock, and
+      // this assessment runs at a fixed instant. From 2026-09-30 the default
+      // put the hold's start AFTER the instant it was meant to cover, and the
+      // fee was charged.
       await placeHold(actor(managerId, 20), leaseId, {
         type: 'payment_plan',
         reason: 'Agreed $50/week until clear.',
+        effectiveFrom: d('2026-09-02'),
       })
       await assessLateFees(facilityId, d('2026-09-30'), recordItem)
 

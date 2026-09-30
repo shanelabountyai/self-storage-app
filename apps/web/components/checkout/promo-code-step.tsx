@@ -52,42 +52,48 @@ export function PromoCodeStep({
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
   return (
-    <details className="border-input mt-4 rounded-lg border p-3">
-      {/* Collapsed by default, and a <details> rather than a JS disclosure so
-          it works with the bundle off like the rest of the public path. Most
-          renters have no code, and an open field asking for one reads as a
-          discount everybody else is getting — which is its own reason to
-          abandon a checkout. */}
-      <summary className="cursor-pointer text-sm font-medium">{t('promo.haveACode')}</summary>
+    // B-442. The disclosure is INSIDE the form, so `AdminForm`'s status line
+    // and error box sit above it and stay visible whatever the disclosure is
+    // doing. It wrapped the form until B-442: once a press before hydration
+    // (or with JavaScript off) became a real page post, the result came back
+    // inside a <details> the reload had closed, and the renter was told
+    // nothing.
+    <AdminForm action={action} label={t('promo.formLabel')} className="mt-4 flex flex-col gap-2">
+      <input type="hidden" name="token" value={token} />
+      <details className="border-input rounded-lg border p-3">
+        {/* Collapsed by default, and a <details> rather than a JS disclosure so
+            it works with the bundle off like the rest of the public path. Most
+            renters have no code, and an open field asking for one reads as a
+            discount everybody else is getting — which is its own reason to
+            abandon a checkout. */}
+        <summary className="cursor-pointer text-sm font-medium">{t('promo.haveACode')}</summary>
 
-      {appliedTerms && appliedTerms.length > 0 && (
-        <p className="text-muted-foreground mt-2 text-sm">
-          <MessageSegments
-            segments={translateSegments(dict, 'promo.currentlyApplied', { terms: appliedTerms })}
-          />
-        </p>
-      )}
+        {appliedTerms && appliedTerms.length > 0 && (
+          <p className="text-muted-foreground mt-2 text-sm">
+            <MessageSegments
+              segments={translateSegments(dict, 'promo.currentlyApplied', { terms: appliedTerms })}
+            />
+          </p>
+        )}
 
-      {/* The FORM's name, which must not repeat the field's. Both were "Promo
-          code", so a screen reader announced "Promo code, form — Promo code,
-          edit text" and neither said what the form was for. */}
-      <AdminForm action={action} label={t('promo.formLabel')} className="mt-2 flex flex-col gap-2">
-        <input type="hidden" name="token" value={token} />
+        {/* The FORM's name, which must not repeat the field's. Both were "Promo
+            code", so a screen reader announced "Promo code, form — Promo code,
+            edit text" and neither said what the form was for. */}
         <Field
           name="promo"
           label={t('promo.field')}
           autoCapitalize="characters"
           autoComplete="off"
           placeholder={t('promo.placeholder')}
-          className="flex flex-col gap-1 text-sm"
+          className="mt-2 flex flex-col gap-1 text-sm"
         />
         <button
           type="submit"
-          className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+          className="border-input hover:bg-accent mt-2 inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
         >
           {t('promo.apply')}
         </button>
-      </AdminForm>
-    </details>
+      </details>
+    </AdminForm>
   )
 }

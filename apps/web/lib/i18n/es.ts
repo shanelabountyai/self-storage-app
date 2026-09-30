@@ -450,7 +450,7 @@ export const es: Dictionary = {
   'checkout.emailedTo':
     'La unidad es suya. Le enviamos por correo su contrato y su recibo a',
   'checkout.needsJs':
-    'Los formularios de esta página necesitan JavaScript, y está apagado en este navegador. Enciéndalo y vuelva a cargar esta página para seguir aquí.',
+    'Pagar con tarjeta necesita JavaScript, y está apagado en este navegador. Enciéndalo y vuelva a cargar esta página para pagar aquí.',
   'checkout.didntArrive': '¿No llegó? Revise su carpeta de correo no deseado, o',
   'checkout.didntArriveAfter': 'y se lo mandamos otra vez.',
   'checkout.yourGateCode': 'Su código de la puerta',
@@ -1774,7 +1774,7 @@ export const es: Dictionary = {
     'Este sitio está en construcción activa. Estos son los problemas que conocemos, al {date}. Si alguno le impide seguir, díganos y le ayudamos a terminar lo que estaba haciendo por teléfono o por correo mientras tanto.',
   'a11y.short.js.term': 'Usar este sitio sin JavaScript.',
   'a11y.short.js.body':
-    'Con JavaScript apagado usted puede buscar, comparar tamaños y precios, y oprimir Rentar ahora, que aparta la unidad. No puede terminar de rentar, iniciar sesión, restablecer una contraseña, cambiar nada en su cuenta ni pagar con tarjeta: esos formularios no se envían sin JavaScript. El proceso de renta lo dice y da el número para llamar.',
+    'Con JavaScript apagado usted puede buscar, rentar una unidad hasta el paso de pago, iniciar sesión, restablecer una contraseña y cambiar cualquier cosa en su cuenta. Dos cosas no funcionan: el formulario de tarjeta, que necesita JavaScript (el paso de pago lo dice y da el número para llamar), y la cuenta regresiva del apartado de 30 minutos, que muestra el tiempo que quedaba cuando se dibujó la página y no avanza, así que si está leyendo el contrato cuando se vence, el vencimiento puede ser lo primero que sepa. Cuando un formulario rechaza lo que escribió, vuelve con los campos vacíos y las razones arriba.',
   'a11y.short.staff.term': 'Nuestras pantallas para el personal',
   'a11y.short.staff.body':
     'tienen problemas conocidos. Las listas largas de Tareas, Prospectos, Morosidad y Sesiones de soporte no están paginadas. Ningún cliente las usa, pero no vamos a describirlas como terminadas.',

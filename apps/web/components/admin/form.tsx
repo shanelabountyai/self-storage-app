@@ -9,6 +9,7 @@ import {
   useId,
   useRef,
   useState,
+  startTransition,
 } from 'react'
 import { MessageSegments } from '@/components/message-segments'
 import { IDLE_FORM_STATE, type FormState } from '@/lib/admin/form-state'
@@ -106,7 +107,35 @@ export function AdminForm({
     [action, announce, announceOutside],
   )
 
-  const [actionState, formAction] = useActionState(rememberSubmission, IDLE_FORM_STATE)
+  // B-442. The SERVER render gets the server action itself, so the form
+  // carries a real `action` and posts without JavaScript, and the action's
+  // returned state reaches the re-rendered page through React's own postback
+  // key. `rememberSubmission` is a client closure — handing it to
+  // `useActionState` on the server rendered `action="javascript:throw …"` on
+  // every form in the product for six weeks (checkout, sign-in, the portal's
+  // change forms). The client gets the closure from its first render, hydration
+  // included: React never compares the function, and the queue then runs the
+  // closure from the first press rather than after a later effect swaps it in.
+  // Without JavaScript a refusal comes back with the fields emptied, and the
+  // summary still names each one.
+  const [actionState, formAction] = useActionState(
+    typeof window === 'undefined' ? action : rememberSubmission,
+    IDLE_FORM_STATE,
+  )
+
+  // B-442. A press BEFORE hydration. React replays one only on a form whose
+  // action is its `javascript:` placeholder; a form with a real action posts
+  // the page instead, which is right without JavaScript and wrong with it —
+  // a full reload, and the fields emptied on a refusal (B-124). The script in
+  // `app/layout.tsx` queues that press by its form element; this runs it
+  // through the same dispatch a hydrated press uses.
+  useEffect(() => {
+    const form = formRef.current
+    const queued = form && window.__adminFormReplay?.get(form)
+    if (!queued) return
+    window.__adminFormReplay!.delete(form)
+    startTransition(() => formAction(queued))
+  }, [formAction])
 
   // B-346. A Cancel on the confirm step posts nothing, so there is no new
   // action state to move to; it remembers WHICH confirm it dismissed instead.
@@ -170,7 +199,14 @@ export function AdminForm({
 
   return (
     <FormStateContext.Provider value={state}>
-      <form ref={formRef} id={id} action={formAction} className={className} aria-label={label}>
+      <form
+        ref={formRef}
+        id={id}
+        action={formAction}
+        className={className}
+        aria-label={label}
+        data-admin-form=""
+      >
         {/* Rendered unconditionally and empty, then written into. A live region
             inserted into the DOM already populated is unreliably announced by
             VoiceOver and routinely missed by NVDA — the region has to pre-exist

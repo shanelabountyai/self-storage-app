@@ -3030,6 +3030,19 @@ function reviewedOn(locale: Locale): string {
 // when B-442 makes the forms post. The hold countdown is dropped from the
 // entry: nobody without JavaScript reaches the lease step it warned about.
 // `LAST_REVIEWED` is not bumped (D-115): the other two entries were not re-run.
+//
+// Corrected 2026-09-30, at B-442. `AdminForm` hands `useActionState` the
+// server action itself until hydration, so every form in the product posts
+// without JavaScript and a refusal comes back on the same page with the
+// fields emptied and the summary at the top. Run with JavaScript off against
+// a production build, the checkout reaches the payment step
+// (`e2e/checkout-no-js.spec.ts` walks it and asserts sign-in's form is a real
+// POST). The entry now says so, names the card form as the one form that
+// needs JavaScript, and takes the hold-countdown caveat back: with the lease
+// step reachable again, the countdown that does not tick is once more the
+// thing a renter without JavaScript can be bitten by. The `<noscript>` line
+// moved from every step to the payment step. `LAST_REVIEWED` is not bumped
+// (D-115): the other two entries were not re-run.
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()
