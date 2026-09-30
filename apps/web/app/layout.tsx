@@ -99,11 +99,14 @@ export default async function RootLayout({
             (`components/admin/form.tsx`), the way React replays its own
             `javascript:` forms. A hydrated form's press is prevented by React
             before it reaches the document, so this sees only the early ones;
-            without JavaScript the script never runs and the form posts. */}
+            without JavaScript the script never runs and the form posts. A
+            submitter with its own `formaction` (the `formMethod="get"` "Show
+            me what it costs" buttons) is a navigation React leaves to the
+            browser, hydrated or not, and so does this. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              'addEventListener("submit",function(e){var f=e.target;if(e.defaultPrevented||!f.hasAttribute("data-admin-form"))return;e.preventDefault();(window.__adminFormReplay||(window.__adminFormReplay=new Map)).set(f,new FormData(f,e.submitter))})',
+              'addEventListener("submit",function(e){var f=e.target,s=e.submitter;if(e.defaultPrevented||!f.hasAttribute("data-admin-form")||(s&&s.hasAttribute("formaction")))return;e.preventDefault();(window.__adminFormReplay||(window.__adminFormReplay=new Map)).set(f,new FormData(f,s))})',
           }}
         />
         {children}
