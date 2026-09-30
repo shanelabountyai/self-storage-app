@@ -118,3 +118,21 @@ describe('the shipped defaults', () => {
     expect(DEFAULT_LATE_FEE_STEPS.map((s) => s.daysPastDue)).toEqual([5, 30])
   })
 })
+
+// B-417. The facility page lists every step of the ladder, in order, with the
+// amounts and days the billing engine charges.
+describe('lateFeeLines', () => {
+  it('renders every step, in step order, from config', async () => {
+    const { lateFeeLines } = await import('../apps/web/lib/billing/late-fees')
+    const { dictionaryFor } = await import('../apps/web/lib/i18n')
+    const steps = [
+      step({ step: 2, daysPastDue: 31, amountCents: 2_500, basis: 'flat' }),
+      step({ step: 1, daysPastDue: 6, amountCents: 2_000, basis: 'flat' }),
+    ].sort((a, b) => a.step - b.step)
+    expect(lateFeeLines(steps, dictionaryFor('en'))).toEqual([
+      '$20, once rent is 6 days past due',
+      '$25, once rent is 31 days past due',
+    ])
+    expect(lateFeeLines([], dictionaryFor('en'))).toEqual([])
+  })
+})

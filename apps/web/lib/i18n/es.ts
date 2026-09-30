@@ -223,7 +223,7 @@ export const es: Dictionary = {
   'facility.terms.noticeNone': 'No hace falta aviso',
   'facility.terms.noticeDays': 'Aviso de {days} días',
   'facility.terms.protectionRange': 'Los planes cuestan {range}, o muestre su propia cobertura.',
-  'facility.terms.gateCodeFuture': 'Su código de acceso se crea en cuanto se confirma el pago y no se retiene hasta su fecha de mudanza.',
+  'facility.terms.gateCodeFuture': 'Su código de acceso se crea en cuanto se confirma el pago, aunque su fecha de mudanza sea más adelante.',
   'facility.feature.climate': 'Clima controlado',
   'facility.feature.driveUp': 'Acceso para vehículo — llegue en carro hasta la puerta',
   'facility.feature.power': 'Toma de corriente',

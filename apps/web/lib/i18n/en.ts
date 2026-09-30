@@ -225,7 +225,7 @@ export const en = {
   'facility.terms.noticeNone': 'No notice needed',
   'facility.terms.noticeDays': '{days} days notice',
   'facility.terms.protectionRange': 'Plans cost {range}, or show your own cover.',
-  'facility.terms.gateCodeFuture': 'Your gate code is created as soon as your payment clears, and it is not held back until your move-in date.',
+  'facility.terms.gateCodeFuture': 'Your gate code is created as soon as your payment clears, even when your move-in date is still ahead.',
   'facility.feature.climate': 'Climate controlled',
   'facility.feature.driveUp': 'Drive-up — pull your car right to the door',
   'facility.feature.power': 'Power outlet',

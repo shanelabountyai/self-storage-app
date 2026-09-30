@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { MapPin, Phone } from 'lucide-react'
 import { DAYS_OF_WEEK, type WeeklySchedule } from '@storage/core/facility-settings'
 import { formatRate } from '@/lib/format'
+import { lateFeeLines } from '@/lib/billing/late-fees'
 import { SITE } from '@/lib/site-config'
 import {
   directionsUrl,
@@ -217,25 +219,19 @@ function protectionRange({ min, max }: { min: number; max: number }, dict: Dicti
 /// B-397. "If you pay late / If you leave": every figure is read from the
 /// configuration the engines run on (`FacilityTerms`), never typed here.
 function LateAndLeaveTerms({ terms, dict }: { terms: FacilityTerms; dict: Dictionary }) {
-  const first = terms.lateFeeSteps[0]
-  const lateFee = first
-    ? translate(
-        dict,
-        first.basis === 'flat'
-          ? 'facility.terms.lateFeeFlat'
-          : first.basis === 'percent'
-            ? 'facility.terms.lateFeePercent'
-            : first.basis === 'greater'
-              ? 'facility.terms.lateFeeGreater'
-              : 'facility.terms.lateFeeLesser',
-        {
-          amount: formatRate(first.amountCents),
-          percent: first.percentBasisPoints / 100,
-          days: first.daysPastDue,
-        },
-      )
-    : translate(dict, 'facility.terms.lateFeeNone')
-  const rows: [string, string][] = [
+  // B-417: every step of the ladder, not only the first.
+  const lines = lateFeeLines(terms.lateFeeSteps, dict)
+  const lateFee =
+    lines.length === 0 ? (
+      translate(dict, 'facility.terms.lateFeeNone')
+    ) : (
+      <ul className="flex flex-col gap-1">
+        {lines.map((line, index) => (
+          <li key={index}>{line}</li>
+        ))}
+      </ul>
+    )
+  const rows: [string, ReactNode][] = [
     [
       translate(dict, 'facility.terms.rentDue'),
       translate(
@@ -252,7 +248,7 @@ function LateAndLeaveTerms({ terms, dict }: { terms: FacilityTerms; dict: Dictio
           [
             translate(dict, 'facility.terms.gate'),
             translate(dict, 'facility.terms.gateDay', { days: terms.suspendAccessDay }),
-          ] as [string, string],
+          ] as [string, ReactNode],
         ]),
     [translate(dict, 'facility.terms.sold'), translate(dict, 'facility.terms.soldWrite')],
     [

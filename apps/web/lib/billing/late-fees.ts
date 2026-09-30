@@ -1,6 +1,8 @@
 import { prisma } from '@storage/db'
 
 import { creditByTenant } from '@/lib/billing/credit'
+import { formatRate } from '@/lib/format'
+import { translate, type Dictionary } from '@/lib/i18n'
 import { effectiveByGroup } from '@storage/core/facility-settings'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { daysPastDue, outstandingCents } from '@storage/core/metrics'
@@ -92,6 +94,24 @@ export function lateFeeSentence(
   })
   const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`
   return `If your rent is not paid on time we charge ${list}.`
+}
+
+/// B-417. The facility page's late-fee list, one line per step of the same
+/// ladder `assessLateFees` charges, in step order. Empty means no late fee.
+export function lateFeeLines(steps: readonly LateFeeStep[], dict: Dictionary): string[] {
+  const key = {
+    flat: 'facility.terms.lateFeeFlat',
+    percent: 'facility.terms.lateFeePercent',
+    greater: 'facility.terms.lateFeeGreater',
+    lesser: 'facility.terms.lateFeeLesser',
+  } as const
+  return steps.map((step) =>
+    translate(dict, key[step.basis], {
+      amount: formatRate(step.amountCents),
+      percent: step.percentBasisPoints / 100,
+      days: step.daysPastDue,
+    }),
+  )
 }
 
 export type AssessResult = { charged: number; skipped: number }
