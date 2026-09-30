@@ -55,7 +55,7 @@ export default async function DocumentsPage() {
                 className="border-input flex flex-wrap items-center justify-between gap-2 rounded-lg border p-4"
               >
                 <span className="text-sm">
-                  <span className="font-medium">{document.title}</span>
+                  <span className="font-medium">{document.title || t('docs.rateNotice')}</span>
                   {document.unitNumber && (
                     <span className="text-muted-foreground">
                       {" "}

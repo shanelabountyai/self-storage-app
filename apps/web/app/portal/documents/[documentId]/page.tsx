@@ -50,11 +50,17 @@ export default async function DocumentPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">{document.title}</h1>
-      <article
-        className="prose prose-sm max-w-none"
-        dangerouslySetInnerHTML={{ __html: document.content }}
-      />
+      <h1 className="text-xl font-semibold">{document.title || t('docs.rateNotice')}</h1>
+      {/* B-419. A notice email is stored as text (`Message.bodySnapshot`), so
+          it is rendered as text: it never goes through the HTML path above. */}
+      {document.format === 'text' ? (
+        <article className="whitespace-pre-wrap text-sm">{document.content}</article>
+      ) : (
+        <article
+          className="prose prose-sm max-w-none"
+          dangerouslySetInnerHTML={{ __html: document.content }}
+        />
+      )}
       <Link href="/portal/documents" className="text-sm underline underline-offset-4">
         {t('doc.backToDocuments')}
       </Link>

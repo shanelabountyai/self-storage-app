@@ -135,6 +135,12 @@ export type PortalLeaseSummary = {
   /// comment makes the same point).
   pendingMoveOutDate: Date | null
   pendingTransfer: { toUnitNumber: string; transferDate: Date; expiresAt: Date } | null
+  /// B-419 / US-702. The noticed rate change this unit is waiting on, if any.
+  /// `notice_sent` only: an approved increase nobody has been told about is not
+  /// a fact the tenant holds yet, and `applied`, cancelled and `notice_failed`
+  /// rows are no longer pending. Figures come from the row's snapshots, the
+  /// same ones the notice email quoted, so the screen and the letter agree.
+  rateChange: { fromCents: number; toCents: number; effectiveDate: Date } | null
   /// B-256. The business account this unit is billed to, when it is on one.
   ///
   /// Two different cards come out of it, because two different people read it.
@@ -252,7 +258,7 @@ export async function portalDashboardForTenant(
 
   return Promise.all(
     leases.map(async (lease) => {
-      const [balance, invoices, grant, gateCode, settling, transferHold, plan] = await Promise.all([
+      const [balance, invoices, grant, gateCode, settling, transferHold, plan, rateChange] = await Promise.all([
         prisma.ledgerEntry.aggregate({ where: { leaseId: lease.id }, _sum: { amountCents: true } }),
         prisma.invoice.findMany({
           where: { leaseId: lease.id, status: { in: ['open', 'partially_paid'] } },
@@ -284,6 +290,13 @@ export async function portalDashboardForTenant(
           select: { moveInDate: true, expiresAt: true, unit: { select: { number: true } } },
         }),
         paymentPlanForLease(lease.id, now),
+        // B-419. Soonest first: a re-noticed increase (B-166) cancels the row
+        // it replaces in the same transaction, so at most one is pending.
+        prisma.tenantRateIncrease.findFirst({
+          where: { leaseId: lease.id, status: 'notice_sent' },
+          orderBy: { effectiveDate: 'asc' },
+          select: { currentRateCents: true, newRateCents: true, effectiveDate: true },
+        }),
       ])
 
       return {
@@ -334,6 +347,13 @@ export async function portalDashboardForTenant(
                 expiresAt: transferHold.expiresAt,
               }
             : null,
+        rateChange: rateChange
+          ? {
+              fromCents: rateChange.currentRateCents,
+              toCents: rateChange.newRateCents,
+              effectiveDate: rateChange.effectiveDate,
+            }
+          : null,
         paymentPlan:
           plan &&
           (plan.status === 'active' || plan.status === 'broken') &&

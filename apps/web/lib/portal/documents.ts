@@ -11,7 +11,8 @@ import { OCCUPYING_LEASE_STATUSES } from "@storage/core/inventory";
 export type PortalDocument = {
   id: string;
   title: string;
-  kind: "lease" | "receipt" | "other";
+  /// B-419: `notice` is a rate-change notice email, read from `Message`.
+  kind: "lease" | "receipt" | "notice" | "other";
   createdAt: Date;
   unitNumber: string | null;
   /// Generated documents are HTML (B-023's decision — see lib/documents/
@@ -67,22 +68,71 @@ export async function portalDocuments(
     },
   });
 
-  return documents.map((document) => ({
-    id: document.id,
-    title: document.title,
-    kind:
-      document.type === "lease"
-        ? "lease"
-        : document.type === "receipt"
-          ? "receipt"
-          : "other",
-    createdAt: document.createdAt,
-    unitNumber: leases.get(document.subjectId) ?? null,
-    viewable: Boolean(document.content),
-    // An uploaded file, served through the authenticated download route rather
-    // than rendered — its bytes are not ours and never go near the HTML path.
-    downloadable: Boolean(document.storageRef),
-  }));
+  const notices = await rateNoticeMessages(tenantId, leases);
+
+  return [
+    ...documents.map((document): PortalDocument => ({
+      id: document.id,
+      title: document.title,
+      kind:
+        document.type === "lease"
+          ? "lease"
+          : document.type === "receipt"
+            ? "receipt"
+            : "other",
+      createdAt: document.createdAt,
+      unitNumber: leases.get(document.subjectId) ?? null,
+      viewable: Boolean(document.content),
+      // An uploaded file, served through the authenticated download route rather
+      // than rendered — its bytes are not ours and never go near the HTML path.
+      downloadable: Boolean(document.storageRef),
+    })),
+    ...notices.map((notice): PortalDocument => ({
+      id: notice.id,
+      title: notice.subjectSnapshot ?? "",
+      kind: "notice",
+      createdAt: notice.sentAt ?? notice.createdAt,
+      unitNumber: leases.get(notice.leaseId) ?? null,
+      viewable: true,
+      downloadable: false,
+    })),
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+/// B-419 / US-702. The rate-change notice emails this tenant was sent, as the
+/// rendered copy `Message.bodySnapshot` already keeps (D-37: the email IS the
+/// notice). Joined through `TenantRateIncrease.noticeEventId`, and only for an
+/// increase still standing — `notice_sent` or `applied`. A cancelled or
+/// `notice_failed` row drops its notice with it: the first was withdrawn and
+/// the second never arrived, and listing either would read as notice served.
+/// `sent` only, for the same reason.
+async function rateNoticeMessages(
+  tenantId: string,
+  leases: Map<string, string>,
+): Promise<
+  { id: string; leaseId: string; subjectSnapshot: string | null; sentAt: Date | null; createdAt: Date }[]
+> {
+  const increases = await prisma.tenantRateIncrease.findMany({
+    where: {
+      leaseId: { in: [...leases.keys()] },
+      status: { in: ["notice_sent", "applied"] },
+      noticeEventId: { not: null },
+    },
+    select: { leaseId: true, noticeEventId: true },
+  });
+  if (increases.length === 0) return [];
+  const leaseByEvent = new Map(increases.map((row) => [row.noticeEventId!, row.leaseId]));
+
+  const messages = await prisma.message.findMany({
+    where: {
+      eventId: { in: [...leaseByEvent.keys()] },
+      recipientTenantId: tenantId,
+      channel: "email",
+      status: "sent",
+    },
+    select: { id: true, eventId: true, subjectSnapshot: true, sentAt: true, createdAt: true },
+  });
+  return messages.map((message) => ({ ...message, leaseId: leaseByEvent.get(message.eventId)! }));
 }
 
 /// One document, only if it belongs to this tenant.
@@ -90,10 +140,14 @@ export async function portalDocuments(
 /// The scoping is a join back through the tenant's own leases rather than a
 /// field on the document, because `Document.subjectId` is a loose string by
 /// design (B-023) and cannot be constrained to a tenant any other way.
+///
+/// B-419: the id may instead name a rate-change notice `Message` (see
+/// `rateNoticeMessages`). Its body is plain text, never markup, so the caller
+/// gets `format` and must not render a `text` one as HTML.
 export async function portalDocument(
   tenantId: string,
   documentId: string,
-): Promise<{ title: string; content: string } | null> {
+): Promise<{ title: string; content: string; format: "html" | "text" } | null> {
   const document = await prisma.document.findFirst({
     where: {
       id: documentId,
@@ -103,7 +157,8 @@ export async function portalDocument(
     },
     select: { title: true, content: true, subjectId: true },
   });
-  if (!document?.content) return null;
+  if (!document) return rateNoticeDocument(tenantId, documentId);
+  if (!document.content) return null;
 
   const owns = await prisma.lease.findFirst({
     where: { id: document.subjectId, tenantId },
@@ -111,7 +166,30 @@ export async function portalDocument(
   });
   if (!owns) return null;
 
-  return { title: document.title, content: document.content };
+  return { title: document.title, content: document.content, format: "html" };
+}
+
+async function rateNoticeDocument(
+  tenantId: string,
+  messageId: string,
+): Promise<{ title: string; content: string; format: "text" } | null> {
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, recipientTenantId: tenantId, channel: "email", status: "sent" },
+    select: { eventId: true, subjectSnapshot: true, bodySnapshot: true },
+  });
+  if (!message) return null;
+  // The same standing test the list applies, scoped through the tenant's own
+  // leases as every read in this file is.
+  const increase = await prisma.tenantRateIncrease.findFirst({
+    where: {
+      noticeEventId: message.eventId,
+      status: { in: ["notice_sent", "applied"] },
+      lease: { tenantId },
+    },
+    select: { id: true },
+  });
+  if (!increase) return null;
+  return { title: message.subjectSnapshot ?? "", content: message.bodySnapshot, format: "text" };
 }
 
 export type PortalReceipt = {

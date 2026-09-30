@@ -310,6 +310,38 @@ describeDb('portalDashboardForTenant', () => {
     // rest of the facility.
   })
 
+  // B-419 / US-702. Only a noticed increase is a fact the tenant holds.
+  it('states a noticed rate change from the row’s own figures, and nothing for a cancelled one', async () => {
+    const lease = await prisma.lease.create({
+      data: { facilityId, tenantId, unitId, status: 'active', startDate: new Date(), monthlyRateCents: 12_900, billingDay: 10 },
+    })
+    const increase = (status: 'notice_sent' | 'cancelled' | 'approved') =>
+      prisma.tenantRateIncrease.create({
+        data: {
+          facilityId,
+          leaseId: lease.id,
+          currentRateCents: 12_900,
+          newRateCents: 13_900,
+          effectiveDate: new Date(Date.UTC(2027, 0, 1)),
+          noticeDate: new Date(Date.UTC(2026, 11, 1)),
+          noticeDays: 30,
+          status,
+        },
+      })
+
+    await increase('cancelled')
+    await increase('approved')
+    expect((await portalDashboardForTenant(tenantId))[0].rateChange).toBeNull()
+
+    await increase('notice_sent')
+    expect((await portalDashboardForTenant(tenantId))[0].rateChange).toEqual({
+      fromCents: 12_900,
+      toCents: 13_900,
+      effectiveDate: new Date(Date.UTC(2027, 0, 1)),
+    })
+    // The rows cascade with the lease in `afterEach`.
+  })
+
   // B-191 / PRD 05 CN-24. The card used to be populated only while the plan
   // was `active`, and to call the first not-yet-paid installment "your next
   // installment". Both were wrong in the same direction: a tenant was told

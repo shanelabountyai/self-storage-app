@@ -418,6 +418,24 @@ function LeaseCard({
           </p>
         </div>
       )}
+      {/* B-419 / US-702. A noticed rate change, in words (1.4.1), with the
+          year: the effective date can be in the next one. Page content, not a
+          status region, for the reason the plan card gives (B-245). */}
+      {lease.rateChange && (
+        <div className="border-input rounded-md border p-3 text-sm text-pretty">
+          <p>
+            {t('dash.rateChange', {
+              from: formatRate(lease.rateChange.fromCents),
+              to: formatRate(lease.rateChange.toCents),
+              date: formatCalendarDate(lease.rateChange.effectiveDate, undefined, tag),
+            })}{' '}
+            <Link href="/portal/documents" className="underline underline-offset-4">
+              {t('dash.rateChangeNotice')}
+            </Link>
+            .
+          </p>
+        </div>
+      )}
 
       {/* B-367 (D-146): "Money is mono and always two decimals in ledgers" —
           the kit's convention, applied to the two figures this card states as

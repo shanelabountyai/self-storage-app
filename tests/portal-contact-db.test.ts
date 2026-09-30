@@ -404,5 +404,64 @@ describeDb('portal contact, email and documents', () => {
       )
       expect(await portalDocument(tenantId, evidence.id)).toBeNull()
     })
+
+    // B-419 / US-702. The notice email is the rendered copy (D-37).
+    it('lists a sent rate-change notice as text, and drops it with a cancelled increase', async () => {
+      const increase = (status: 'notice_sent' | 'cancelled', leaseFor: string) =>
+        prisma.tenantRateIncrease.create({
+          data: {
+            facilityId,
+            leaseId: leaseFor,
+            currentRateCents: 12_900,
+            newRateCents: 13_900,
+            effectiveDate: new Date(Date.UTC(2027, 0, 1)),
+            noticeDate: new Date(Date.UTC(2026, 11, 1)),
+            noticeDays: 30,
+            status,
+            noticeEventId: `evt-${status}-${suffix}`,
+          },
+        })
+      const message = (eventId: string, recipient: string) =>
+        prisma.message.create({
+          data: {
+            idempotencyKey: `b419-${eventId}-${recipient}`,
+            eventId,
+            ruleId: 'rule',
+            templateKey: 'rate_increase_notice',
+            templateVersion: 1,
+            classification: 'transactional',
+            channel: 'email',
+            recipientTenantId: recipient,
+            facilityId,
+            toAddress: `b419-${suffix}@example.com`,
+            subjectSnapshot: 'Your rent for unit A-1 changes on January 1, 2027',
+            bodySnapshot: 'Hi Ada,\n\nNow: $129.00 per month\nFrom January 1, 2027: $139.00 per month',
+            status: 'sent',
+            sentAt: new Date(),
+          },
+        })
+
+      const standing = await increase('notice_sent', leaseId)
+      const withdrawn = await increase('cancelled', leaseId)
+      const notice = await message(standing.noticeEventId!, tenantId)
+      const withdrawnNotice = await message(withdrawn.noticeEventId!, tenantId)
+
+      const listed = await portalDocuments(tenantId)
+      const row = listed.find((d) => d.id === notice.id)
+      expect(row).toMatchObject({ kind: 'notice', title: notice.subjectSnapshot, viewable: true })
+      expect(listed.map((d) => d.id)).not.toContain(withdrawnNotice.id)
+
+      expect(await portalDocument(tenantId, notice.id)).toEqual({
+        title: notice.subjectSnapshot,
+        content: notice.bodySnapshot,
+        format: 'text',
+      })
+      expect(await portalDocument(tenantId, withdrawnNotice.id)).toBeNull()
+      // Another tenant's session cannot read it by id.
+      expect(await portalDocument(otherTenantId, notice.id)).toBeNull()
+
+      await prisma.message.deleteMany({ where: { id: { in: [notice.id, withdrawnNotice.id] } } })
+      await prisma.tenantRateIncrease.deleteMany({ where: { id: { in: [standing.id, withdrawn.id] } } })
+    })
   })
 })
