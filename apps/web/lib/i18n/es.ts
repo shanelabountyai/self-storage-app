@@ -1481,6 +1481,22 @@ export const es: Dictionary = {
   'acc.mobileKeyOff':
     'Este teléfono ya no puede abrir la puerta. Su código de la puerta no cambió y sigue funcionando en el teclado.',
 
+  // --- Su código de la puerta (B-418) --------------------------------------
+  'acc.yourCode': 'Su código de la puerta',
+  'acc.ownCodeNotReady': 'Su código de la puerta aún no está listo. Llame a la oficina y le abriremos.',
+  'acc.newCodeWhy':
+    '¿Cree que alguien más conoce su código? Pida uno nuevo. El código anterior deja de funcionar de inmediato; las personas de su lista conservan sus propios códigos.',
+  'acc.newCode': 'Pedir un código nuevo',
+  'acc.newCodeAt': 'Pedir un código nuevo de la puerta en {facility}',
+  'acc.newCodeConfirm': 'Su código actual dejará de funcionar en cuanto confirme.',
+  'acc.newCodeSite': 'Sitio',
+  'acc.newCodeYes': 'Sí, quiero un código nuevo',
+  'acc.newCodeKeep': 'Conservar mi código',
+  'acc.newCodeKept': 'Su código no cambió.',
+  'acc.newCodeReady':
+    'Su código nuevo de la puerta está listo — pulse «Ver el código de la puerta» arriba para verlo. El código anterior ya no funciona.',
+  'dash.newCodeLink': '¿Cree que alguien más lo conoce? Pida un código nuevo.',
+
   // --- Move-out (US-707, B-164/B-173/B-174, D-85) -----------------------
   'mo.title': 'Solicitar desocupar',
   'mo.noUnits': 'No vemos una unidad activa en esta cuenta.',

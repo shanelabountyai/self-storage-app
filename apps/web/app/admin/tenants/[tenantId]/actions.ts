@@ -34,7 +34,10 @@ import { refundPayment } from "@/lib/billing/refunds";
 import { returnPayment, waiveFeeFromForm } from "@/lib/billing/reversals";
 import { parseScaled } from "@/lib/admin/form-state";
 import { setExtendedHours } from "@/lib/access/time-windows";
-import { requirePermission } from "@/lib/rbac/authorize";
+import { NoActiveCodeError, replaceGateCode } from "@/lib/access/replace-code";
+import { can, requirePermission } from "@/lib/rbac/authorize";
+import { recordAudit } from "@storage/core/audit";
+import { toAuditActor } from "@/lib/rbac/audit-actor";
 import {
   NOTICE_PROBLEM_COPY,
   parseNoticeGivenAt,
@@ -880,6 +883,63 @@ export async function setExtendedHoursAction(
 
   await setExtendedHours(grantId, formData.get("extendedHours") === "on");
   revalidatePath(`/admin/tenants/${tenantId}`);
+}
+
+/// B-418. The counter's version of the tenant's "Get a new code".
+///
+/// The new digits are shown to the staffer only with `access:view_codes` —
+/// the same permission SR-2 puts on revealing an existing one — so a tenant on
+/// the phone can be read their code, and a role without it sends them to the
+/// portal instead.
+export async function replaceGateCodeByStaffAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor();
+  const tenantId = String(formData.get("tenantId") ?? "");
+  const facilityId = String(formData.get("facilityId") ?? "");
+  const facilityName = String(formData.get("facilityName") ?? "");
+  requirePermission(actor, "access:manage_grants", facilityId);
+
+  if (formData.get("confirmed") !== "yes") {
+    return {
+      status: "confirm",
+      message: "The tenant's current code stops working as soon as you confirm.",
+      echo: [{ label: "Site", value: facilityName }],
+      confirmLabel: "Yes, issue a new code",
+      cancel: { label: "Keep the current code", message: "The code was not changed." },
+    };
+  }
+
+  let issued;
+  try {
+    issued = await replaceGateCode(actor, tenantId, facilityId);
+  } catch (error) {
+    if (error instanceof NoActiveCodeError) {
+      return { status: "error", message: "This tenant has no active gate code at this site.", fieldErrors: {} };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/admin/tenants/${tenantId}`);
+  if (!can(actor, "access:view_codes", facilityId)) {
+    return success(
+      `New gate code issued at ${facilityName}. The old one no longer works. The tenant can see it in their portal under Who can get in.`,
+    );
+  }
+  // SR-2: seeing the digits is its own audited act, whoever minted them.
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: "access.code_viewed",
+    entityType: "AccessCredential",
+    entityId: issued.credentialId,
+    facilityId,
+    reasonCode: "code_replaced",
+  });
+  return success(
+    `New gate code issued at ${facilityName}. The old one no longer works. Read this to the tenant; it is also in their portal.`,
+    [issued.code],
+  );
 }
 
 /// B-225. Put a tenant's credit on account against one of their invoices.

@@ -31,6 +31,7 @@ import {
   placeHoldAction,
   cancelPaymentPlanAction,
   refundAction,
+  replaceGateCodeByStaffAction,
   returnPaymentAction,
   setExtendedHoursAction,
   updateContactAction,
@@ -2258,6 +2259,45 @@ export default async function TenantProfilePage({
                 to the gate controller — it is not instant if the controller is
                 offline.
               </p>
+            </div>
+          </details>
+        )}
+
+        {/* B-418. Only grants that can hold a code: a revoked one is a
+            moved-out tenant, and the action refuses it anyway. */}
+        {profile.gateAccess.some((grant) => grant.state !== "revoked") && (
+          <details className="border-input rounded-lg border p-4">
+            <summary className="cursor-pointer font-medium">
+              Gate code — issue a new one
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <p className="max-w-prose text-sm text-pretty">
+                For a tenant who thinks somebody else knows their code. The
+                current code stops working at once; people on their
+                authorized-access list keep their own codes. The tenant can
+                also do this themselves in the portal.
+              </p>
+              {profile.gateAccess
+                .filter((grant) => grant.state !== "revoked")
+                .map((grant) => (
+                  <AdminForm
+                    key={grant.grantId}
+                    action={replaceGateCodeByStaffAction}
+                    label={`Issue a new gate code at ${grant.facilityName}`}
+                    className="border-input flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+                  >
+                    <input type="hidden" name="tenantId" value={profile.tenantId} />
+                    <input type="hidden" name="facilityId" value={grant.facilityId} />
+                    <input type="hidden" name="facilityName" value={grant.facilityName} />
+                    <span className="font-medium">{grant.facilityName}</span>
+                    <button
+                      type="submit"
+                      className="border-input hover:bg-accent inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+                    >
+                      Issue a new gate code
+                    </button>
+                  </AdminForm>
+                ))}
             </div>
           </details>
         )}

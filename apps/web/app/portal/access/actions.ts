@@ -16,6 +16,7 @@ import {
   revokeMobileKey,
   unlockWithMobileKey,
 } from '@/lib/access/mobile-key'
+import { NoActiveCodeError, replaceGateCode } from '@/lib/access/replace-code'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 import { messages } from '@/lib/i18n/server'
@@ -181,4 +182,40 @@ export async function revokeMobileKeyAction(_prev: FormState, formData: FormData
 
   revalidatePath('/portal/access')
   return success(t('acc.mobileKeyOff'))
+}
+
+// PRD 03 US-1 (B-418). "Somebody knows my code."
+//
+// Refused during impersonation for the same reason the code itself is
+// withheld: a support session that could mint a code would be a support
+// session that knows one.
+export async function replaceGateCodeAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireTenantActor()
+  const blocked = await refuseDuringImpersonation()
+  if (blocked) return blocked
+
+  const facilityId = String(formData.get('facilityId') ?? '')
+  const facilityName = String(formData.get('facilityName') ?? '')
+  const { t } = await messages()
+
+  if (formData.get('confirmed') !== 'yes') {
+    return {
+      status: 'confirm',
+      message: t('acc.newCodeConfirm'),
+      echo: [{ label: t('acc.newCodeSite'), value: facilityName }],
+      confirmLabel: t('acc.newCodeYes'),
+      cancel: { label: t('acc.newCodeKeep'), message: t('acc.newCodeKept') },
+    }
+  }
+
+  try {
+    await replaceGateCode(actor, actor.tenantId, facilityId)
+  } catch (error) {
+    if (error instanceof NoActiveCodeError) return refusal(error.message)
+    throw error
+  }
+
+  revalidatePath('/portal/access')
+  revalidatePath('/portal')
+  return success(t('acc.newCodeReady'))
 }

@@ -79,9 +79,6 @@ export async function provisionAccessForLease(leaseId: string): Promise<AccessPr
 /// show (no key configured, no credential yet) — the page falls back to the
 /// "texted within 15 minutes" copy either way.
 export async function codeForLease(leaseId: string): Promise<string | null> {
-  const key = accessCodeEncryptionKey()
-  if (!key) return null
-
   // D-54. The code is the tenant's, not the lease's, so this resolves through
   // the lease to the tenant's grant rather than matching on `leaseId`.
   //
@@ -96,6 +93,14 @@ export async function codeForLease(leaseId: string): Promise<string | null> {
     select: { facilityId: true, tenantId: true },
   })
   if (!lease) return null
+  return codeForTenantAt(lease.tenantId, lease.facilityId)
+}
+
+/// The tenant's own current PIN at one facility (B-418: `/portal/access` shows
+/// it beside "Get a new code", keyed on the facility the way the grant is).
+export async function codeForTenantAt(tenantId: string, facilityId: string): Promise<string | null> {
+  const key = accessCodeEncryptionKey()
+  if (!key) return null
 
   // B-086 part 2: `type: 'pin'` is load-bearing, not defensive. A `mobile_key`
   // is a newer active credential on the same grant, so `createdAt desc` would
@@ -106,7 +111,7 @@ export async function codeForLease(leaseId: string): Promise<string | null> {
     where: {
       state: 'active',
       type: 'pin',
-      grant: { facilityId: lease.facilityId, tenantId: lease.tenantId },
+      grant: { facilityId, tenantId },
     },
     orderBy: { createdAt: 'desc' },
     select: { valueRef: true },

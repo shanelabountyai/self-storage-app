@@ -1573,6 +1573,22 @@ export const en = {
   'acc.mobileKeyOff':
     'This phone can no longer open the gate. Your gate code is unchanged and still works at the keypad.',
 
+  // --- Your gate code (B-418) --------------------------------------------
+  'acc.yourCode': 'Your gate code',
+  'acc.ownCodeNotReady': "Your gate code isn't ready yet. Call the office and we'll get you in.",
+  'acc.newCodeWhy':
+    'Think somebody else knows your code? Get a new one. The old code stops working straight away; the people on your list keep their own codes.',
+  'acc.newCode': 'Get a new code',
+  'acc.newCodeAt': 'Get a new gate code at {facility}',
+  'acc.newCodeConfirm': 'Your current code will stop working as soon as you confirm.',
+  'acc.newCodeSite': 'Site',
+  'acc.newCodeYes': 'Yes, give me a new code',
+  'acc.newCodeKeep': 'Keep my code',
+  'acc.newCodeKept': 'Your code was not changed.',
+  'acc.newCodeReady':
+    'Your new gate code is ready — press "Show gate code" above to see it. The old code no longer works.',
+  'dash.newCodeLink': 'Think somebody else knows it? Get a new code.',
+
   // --- Move-out (US-707, B-164/B-173/B-174, D-85) -----------------------
   'mo.title': 'Request a move-out',
   'mo.noUnits': "We don't see an active unit on this account.",

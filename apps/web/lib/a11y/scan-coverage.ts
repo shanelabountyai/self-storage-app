@@ -740,6 +740,17 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layoutException:
       "A button and a sentence inside the portal container the portal route loop already measures at all three widths.",
   },
+  // B-418. "Get a new code" pressed once: the confirm step, with its echo and
+  // Cancel, open. The spec cancels rather than confirms, because the demo
+  // tenant's code is a fixture other specs type at the keypad.
+  {
+    route: '/portal/access',
+    state: 'new-code confirm open',
+    spec: 'e2e/portal.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "A confirm box and two buttons inside the portal container the portal route loop already measures at all three widths.",
+  },
   // B-184 (T3). A refused task completion, added alongside the invalid-submit
   // scan this row required.
   {

@@ -6,11 +6,14 @@ import { authorizedAccessForTenant } from '@/lib/portal/authorized-access'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { SHARED_ACCESS_PRESETS } from '@storage/core/access'
 import { mobileKeysForTenant, type MobileKey } from '@/lib/access/mobile-key'
+import { codeForTenantAt } from '@/lib/access/provision'
 import { UnlockButton } from '@/components/portal/unlock-button'
+import { GateCodePanel } from '@/components/portal/gate-code-panel'
 import { AnnounceRegion } from '@/components/admin/announce'
 import {
   addPersonAction,
   enrollMobileKeyAction,
+  replaceGateCodeAction,
   revokeMobileKeyAction,
   revokePersonAction,
   unlockGateAction,
@@ -45,6 +48,11 @@ export default async function AccessPage() {
   const units = impersonation
     ? loaded.map((unit) => ({ ...unit, people: unit.people.map((p) => ({ ...p, code: null })) }))
     : loaded
+  // B-418. The tenant's own PIN per site, withheld the same way under
+  // impersonation (dropped from the data, never hidden in markup).
+  const ownCodes = impersonation
+    ? mobileKeys.map(() => null)
+    : await Promise.all(mobileKeys.map((key) => codeForTenantAt(actor.tenantId, key.facilityId)))
   const locale = await getLocale()
   const dict = dictionaryFor(locale)
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
@@ -58,6 +66,8 @@ export default async function AccessPage() {
           {t('acc.introBefore')} <strong>{t('acc.own')}</strong> {t('acc.introAfter')}
         </p>
       </header>
+
+      <OwnCodeSection keys={mobileKeys} codes={ownCodes} impersonated={Boolean(impersonation)} dict={dict} />
 
       <PhoneUnlockSection keys={mobileKeys} impersonated={Boolean(impersonation)} dict={dict} />
 
@@ -248,6 +258,68 @@ export default async function AccessPage() {
   )
 }
 
+
+// PRD 03 US-1 (B-418). The tenant's own code, per gate, and the way to replace
+// it. Keyed on the facility like the phone-unlock cards below, for the same
+// D-54 reason: one grant, one code, one button. The code sits behind the same
+// show-tap `/portal` uses (PRD 01 §6.5), so a new one is revealed on purpose,
+// not splashed into the status region.
+function OwnCodeSection({
+  keys,
+  codes,
+  impersonated,
+  dict,
+}: {
+  keys: MobileKey[]
+  codes: (string | null)[]
+  impersonated: boolean
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey, vars?: Record<string, string | number>) =>
+    translate(dict, key, vars)
+  if (keys.length === 0) return null
+
+  return (
+    <section aria-labelledby="your-code" className="flex flex-col gap-4">
+      <h2 id="your-code" className="text-lg font-semibold">
+        {t('acc.yourCode')}
+      </h2>
+      {keys.map((key, index) => {
+        const code = codes[index]
+        return (
+        <div key={key.facilityId} className="border-input flex flex-col gap-3 rounded-lg border p-4">
+          <h3 className="font-medium">{key.facilityName}</h3>
+          {/* Same branches as the /portal card: a suspended tenant is shown why
+              rather than a code that does not work; a support session is
+              shown nothing. */}
+          {key.suspended ? (
+            <p className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg">
+              {t('acc.suspendedHere')}
+            </p>
+          ) : code ? (
+            <GateCodePanel code={code} />
+          ) : (
+            <p className="text-muted-foreground text-sm text-pretty">
+              {impersonated ? t('acc.codesHiddenSupport') : t('acc.ownCodeNotReady')}
+            </p>
+          )}
+          <p className="text-muted-foreground max-w-prose text-sm text-pretty">{t('acc.newCodeWhy')}</p>
+          <AdminForm action={replaceGateCodeAction} label={t('acc.newCodeAt', { facility: key.facilityName })}>
+            <input type="hidden" name="facilityId" value={key.facilityId} />
+            <input type="hidden" name="facilityName" value={key.facilityName} />
+            <button
+              type="submit"
+              className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+            >
+              {t('acc.newCode')}
+            </button>
+          </AdminForm>
+        </div>
+        )
+      })}
+    </section>
+  )
+}
 
 // PRD 03 US-8 AC1/AC4, OQ-2 (B-086 part 2, D-121). Phone unlock, per gate.
 //

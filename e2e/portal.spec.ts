@@ -133,6 +133,39 @@ test.describe('signed in as the demo tenant', () => {
     await assertNoAxeViolations(page)
   })
 
+  // a11y-state: /portal/access | new-code confirm open
+  //
+  // B-418. Pressed once, the button asks; the spec then CANCELS. Confirming
+  // would replace the demo tenant's code, which other specs type at the
+  // keypad — the B-120 rule, kept by never mutating rather than by self-skip.
+  test('getting a new gate code asks first, with focus on the question, and Cancel changes nothing', async ({
+    page,
+  }) => {
+    await page.goto('/portal/access')
+    await expect(page.getByRole('main')).toBeVisible()
+
+    const form = page.getByRole('form', { name: /^Get a new gate code at / }).first()
+    await expect(form).toBeVisible()
+    // The demo tenant is suspended, so the card says why instead of showing a
+    // code — the same branch /portal takes. The button is still offered.
+    await expect(page.getByRole('main').getByText(/switched off while the balance/i).first()).toBeVisible()
+    await expectPreexisting(form.getByRole('status'))
+
+    await form.getByRole('button', { name: 'Get a new code' }).click()
+    // 3.3.4 / 2.4.3: the question is announced from the pre-existing status
+    // region, the echo box (the confirm's own container, B-184 T5) takes
+    // focus, and the commit button names the act.
+    await expectAnnounced(form.getByRole('status'), /will stop working/i)
+    await expect(
+      form.locator('div[tabindex="-1"]:focus').getByRole('button', { name: 'Yes, give me a new code' }),
+    ).toBeVisible()
+    await assertNoAxeViolations(page)
+
+    await form.getByRole('button', { name: 'Keep my code' }).click()
+    await expectAnnounced(form.getByRole('status'), /not changed/i)
+    await expect(form.getByRole('button', { name: 'Get a new code' })).toBeFocused()
+  })
+
   // a11y-state: /portal/access | add-someone disclosure open
   //
   // B-086 part 1. Everything behind a closed <details> is invisible to axe

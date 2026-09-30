@@ -495,7 +495,17 @@ function LeaseCard({
             {t('dash.gateCodeHiddenImpersonation')}
           </p>
         ) : lease.gateCode ? (
-          <GateCodePanel code={lease.gateCode} />
+          <>
+            <GateCodePanel code={lease.gateCode} />
+            {/* B-418. The control lives on /portal/access, keyed on the site
+                (one code, one button); this is how somebody worried about
+                their code finds it from where the code is shown. */}
+            <p className="mt-2 text-sm">
+              <Link href="/portal/access#your-code" className="underline underline-offset-4">
+                {t('dash.newCodeLink')}
+              </Link>
+            </p>
+          </>
         ) : (
           <p className="mt-1 text-sm text-pretty">
             {t('dash.gateCodeNotReady')}{' '}

@@ -397,6 +397,8 @@ export const AUDIT_ACTIONS = [
     label: "Gate code revealed",
     requiresReason: true,
   },
+  // B-418. The old PIN revoked and a new one issued on the same grant.
+  { action: "access.code_replaced", label: "Gate code replaced", requiresReason: false },
 
   // Administration
   {
