@@ -93,6 +93,13 @@ export default async function DelinquencyQueuePage({
         <p className="text-muted-foreground mt-1 max-w-prose text-sm text-pretty">
           Today&apos;s steps from every active timeline, grouped by what they need done.
         </p>
+        {can(actor, 'tenants:edit', selected.facility.id) && (
+          <p className="mt-2 text-sm">
+            <Link href="/admin/delinquency/emergency-hold" className="underline underline-offset-4">
+              Place an emergency hold across facilities
+            </Link>
+          </p>
+        )}
       </div>
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">

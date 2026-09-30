@@ -181,6 +181,12 @@ export default async function AdminSettingsPage() {
             hint="Two-letter code, for example TX."
           />
           <Field
+            name="county"
+            label="County"
+            defaultValue={facility.county ?? ""}
+            hint="Used to place an emergency hold on every site in a county."
+          />
+          <Field
             name="postalCode"
             label="Postal code"
             defaultValue={facility.postalCode}

@@ -37,6 +37,7 @@ function ready(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
     containsVehicle: false,
     lienNoticeServed: true,
     blockedByHold: false,
+    noticeDeadlineInHold: false,
     saleManner: 'online',
     saleVenue: 'StorageTreasures.com',
     approved: true,
@@ -210,6 +211,16 @@ describe('auctionReadiness — the hard blocks', () => {
     expect(blocker.message).toContain('SCRA')
     // Says what to do instead, since "work around it" is the actual risk here.
     expect(blocker.message).toContain('do not work around it')
+  })
+
+  // B-420 / D-10. Open attorney question, so the safe reading blocks.
+  it('blocks a served notice whose deadline fell inside an emergency hold', () => {
+    const result = auctionReadiness(ready({ noticeDeadlineInHold: true }))
+    expect(result.ready).toBe(false)
+    expect(result.blockers.find((one) => one.kind === 'notice_deadline_in_hold')!.message).toContain('Serve a new lien notice')
+    // Nothing to say before a notice is served: that block is already there.
+    const unserved = auctionReadiness(ready({ noticeDeadlineInHold: true, lienNoticeServed: false }))
+    expect(unserved.blockers.map((one) => one.kind)).not.toContain('notice_deadline_in_hold')
   })
 
   it('blocks a unit containing a vehicle, and says why it cannot be worked around', () => {

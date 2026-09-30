@@ -293,6 +293,38 @@ test.describe('announcements, given an owner', () => {
   })
 })
 
+// B-420. The regional emergency hold. Stops at the confirm step for the same
+// reason the announcement above does: a hold placed on every demo lease each
+// run would halt the ladder every portal and delinquency spec asserts against.
+// What the press WRITES is covered in tests/emergency-hold-db.test.ts.
+test.describe('the emergency hold, given an owner', () => {
+  test.beforeEach(async ({ page }) => {
+    await signInAsDemoOwner(page)
+  })
+
+  // a11y-state: /admin/delinquency/emergency-hold | the confirm step
+  test('names the facilities and the window before anything is placed', async ({ page }) => {
+    await page.goto('/admin/delinquency/emergency-hold')
+
+    const form = page.getByRole('form', { name: 'Place an emergency hold' })
+    const status = form.getByRole('status')
+    await expectPreexisting(status)
+
+    await form.getByLabel(/^Demo — Austin South/).check()
+    await form.getByLabel('First day').fill('2030-01-01')
+    await form.getByLabel('Last day').fill('2030-01-10')
+    await form.getByLabel('What is happening').fill('e2e-check — never confirmed')
+    await form.getByRole('button', { name: 'Review the hold' }).click()
+
+    await expect(status).toHaveText(/stops collections tonight/)
+    // The echo, not the checkbox label: the confirm box is what names the site.
+    await expect(form.getByRole('definition').filter({ hasText: 'Demo — Austin South' })).toBeVisible()
+    await expect(form.getByRole('button', { name: 'Yes, hold 1 facility' })).toBeVisible()
+
+    await assertNoAxeViolations(page)
+  })
+})
+
 // B-237. The create-facility flow.
 //
 // NEITHER test presses the commit button, and that is deliberate rather than

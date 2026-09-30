@@ -111,6 +111,8 @@ export type FacilityDetailsInput = {
   addressLine2: string | null;
   city: string;
   state: string;
+  /// B-420. Null clears it; the emergency hold's county match then skips this site.
+  county: string | null;
   postalCode: string;
   timezone: string;
   phone: string | null;

@@ -178,6 +178,8 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/billing',
   '/admin/billing/accounts',
   '/admin/delinquency',
+  // B-420. Staff-only, but a form nobody scans is a form nobody has checked.
+  '/admin/delinquency/emergency-hold',
   '/admin/overlocks',
   '/admin/walkthrough',
   '/admin/maintenance',
@@ -664,6 +666,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
   // B-237. The new-facility form refused, and the same confirm-and-echo step
   // as the tax rate below — reused rather than reinvented, which is what the
   // backlog row asked for and what keeps 3.3.4 one pattern instead of two.
+  // B-420. The echo is where a manager reads which sites a hurricane hold
+  // will reach; the press itself is never made against demo data.
+  {
+    route: '/admin/delinquency/emergency-hold',
+    state: 'the confirm step',
+    spec: 'e2e/admin.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The admin route loop measures this page at all three widths, and the confirm step adds `AdminForm`'s echo list to that same measured container.",
+  },
   {
     route: '/admin/settings/facilities/new',
     state: 'new facility submit refused',

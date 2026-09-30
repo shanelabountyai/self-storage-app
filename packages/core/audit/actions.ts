@@ -225,6 +225,15 @@ export const AUDIT_ACTIONS = [
     label: "Hold lifted from lease",
     requiresReason: true,
   },
+  /// B-420. One row for the ACTION — which facilities, which dates, how many
+  /// leases — beside the `hold.placed` row each lease gets. The per-lease rows
+  /// answer "why is this account halted"; this one answers "who declared the
+  /// emergency", which 800 identical rows cannot.
+  {
+    action: "hold.emergency_placed",
+    label: "Emergency hold placed across facilities",
+    requiresReason: true,
+  },
   /// B-090 part 3. The `payment_plan` hold that halts the pipeline is placed
   /// through the same `hold.placed` entry above — this is the second entry
   /// that records what was actually agreed, since a hold's own reason field

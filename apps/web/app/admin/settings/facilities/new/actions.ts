@@ -113,6 +113,7 @@ export async function createFacilityAction(
       addressLine2: text('addressLine2') || null,
       city: text('city'),
       state: state.toUpperCase(),
+      county: null,
       postalCode,
       timezone,
       phone: text('phone') || null,

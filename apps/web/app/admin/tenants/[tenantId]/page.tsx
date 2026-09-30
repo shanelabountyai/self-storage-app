@@ -64,6 +64,7 @@ const EFFECT_LABELS: Record<HoldEffect, string> = {
   block_auction: "auction",
   suppress_marketing: "marketing",
   halt_autopay: "automatic card payments",
+  pause_lien_clock: "the lien timeline's day count",
 };
 
 /// The reason vocabulary from the audit catalog, narrowed to the ones that

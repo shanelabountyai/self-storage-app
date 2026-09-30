@@ -567,6 +567,15 @@ export const TASK_TYPES = [
         "Record the refund on this tenant’s profile. A note cannot close this, because the money is still owed.",
     },
   },
+  {
+    // B-420. Raised once per facility the night an emergency hold's end date
+    // passes. Collections resume on their own; the task is so a person looks
+    // at the site before the ladder does.
+    type: "emergency_hold_ended",
+    label: "Emergency hold ended — collections resume",
+    requiredProofFields: ["note"],
+    sensitive: false,
+  },
 ] as const satisfies readonly TaskTypeSpec[];
 
 export type TaskType = (typeof TASK_TYPES)[number]["type"];

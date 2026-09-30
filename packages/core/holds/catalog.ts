@@ -40,6 +40,12 @@ export const HOLD_EFFECTS = [
   /// dunning while continuing to help ourselves to the balance would be the
   /// worst of both. Flagged for the same attorney pass as everything else here.
   'halt_autopay',
+  /// B-420. Days under this hold do not count toward the lien ladder: a tenant
+  /// 10 days past due when a two-week emergency hold starts is still 10 days
+  /// past due when it ends, not 24. Without it, lifting the hold would fire
+  /// every step the window covered on one night. Only `emergency` declares it;
+  /// whether the other types should is the same attorney pass (D-10).
+  'pause_lien_clock',
 ] as const
 
 export type HoldEffect = (typeof HOLD_EFFECTS)[number]
@@ -137,6 +143,22 @@ export const HOLD_TYPES = [
     liftRequiresManager: false,
     requiresEstateContact: false,
   },
+  {
+    // B-420 (US-42, "an emergency hold covers a region"). Placed on every
+    // occupying lease at the chosen facilities in one action, with an end
+    // date, by `placeEmergencyHold`. The per-lease row is what every consumer
+    // already reads, so a hurricane needs no new code path in the ladder, the
+    // late-fee run, the gate or the auction screen. Autopay keeps running: a
+    // tenant who set it up still owes rent, and a flood is not a reason to
+    // stop taking a payment they chose to make.
+    type: 'emergency',
+    label: 'Emergency hold',
+    bannerNote:
+      'A regional emergency hold is in force. Collections, late fees, access suspension and sale are stopped until the end date; days under it do not count toward the lien timeline.',
+    effects: ['halt_dunning', 'halt_late_fees', 'halt_access_suspension', 'block_auction', 'pause_lien_clock'],
+    liftRequiresManager: false,
+    requiresEstateContact: false,
+  },
 ] as const satisfies readonly HoldTypeSpec[]
 
 export type HoldType = (typeof HOLD_TYPES)[number]['type']
@@ -185,4 +207,35 @@ export function hasEffect(
   asOf: Date = new Date(),
 ): boolean {
   return effectsOf(holds, asOf).has(effect)
+}
+
+/// B-420. The days in [from, to] a lease spent under a hold declaring
+/// `pause_lien_clock`, counted as UTC calendar days the way `daysPastDue` counts
+/// them. A hold's window ends at its end date OR its lift, whichever came first,
+/// and a lifted hold still counts for the days it ran — the ladder must not
+/// snap forward the morning after. Overlapping holds count a day once.
+export function pausedDays(holds: readonly HoldLike[], from: Date, to: Date): number {
+  const days = new Set<number>()
+  const start = utcDay(from)
+  const end = utcDay(to)
+  for (const hold of holds) {
+    if (!holdTypeSpec(hold.type)?.effects.includes('pause_lien_clock')) continue
+    const ends = [hold.effectiveTo, hold.liftedAt].filter((d): d is Date => d !== null)
+    const holdEnd = ends.length > 0 ? Math.min(...ends.map((d) => d.getTime())) : Infinity
+    const first = Math.max(utcDay(hold.effectiveFrom), start)
+    const last = Math.min(holdEnd === Infinity ? end : utcDay(new Date(holdEnd)), end)
+    // ponytail: one Set entry per day; a window is weeks, not years.
+    for (let day = first; day < last; day += 86_400_000) days.add(day)
+  }
+  return days.size
+}
+
+/// Whether a date-only deadline (a `Notice.deadlineDate`, `@db.Date` at UTC
+/// midnight) fell inside any `pause_lien_clock` window.
+export function dateInsidePausedWindow(holds: readonly HoldLike[], date: Date): boolean {
+  return pausedDays(holds, date, new Date(utcDay(date) + 86_400_000)) > 0
+}
+
+function utcDay(date: Date): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
 }

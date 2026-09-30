@@ -21,6 +21,7 @@ export type BlockerKind =
   | 'notice_names_another_unit'
   | 'notice_names_another_venue'
   | 'sale_before_notice_deadline'
+  | 'notice_deadline_in_hold'
   | 'no_sale_venue'
   | 'not_approved'
   | 'balance_settled'
@@ -85,6 +86,12 @@ export type ReadinessInput = {
   /// looking at one. The engine halting first made the gap invisible: every
   /// case that existed had been opened before the hold was placed.
   blockedByHold: boolean
+  /// B-420 / D-10. Whether the served notice's deadline fell inside an
+  /// emergency-hold window. Whether such a notice must be re-served is an
+  /// attorney question; until answered the sale is blocked, and a manager who
+  /// wants to proceed serves a fresh notice. Required, like `blockedByHold`:
+  /// a caller that forgets it must not fail open.
+  noticeDeadlineInHold: boolean
   /// B-224. The served lien notice's own deadline — the date the notice told
   /// the tenant they had until. Null when no notice is served, in which case
   /// `no_lien_notice_served` is already blocking and this rule has nothing to
@@ -307,6 +314,19 @@ export function auctionReadiness(input: ReadinessInput): Readiness {
           'owes, and how long they have owed it, are unchanged.',
       })
     }
+  }
+
+  // B-420. Only once a notice is served — before that `no_lien_notice_served`
+  // is already blocking and there is no deadline to have fallen anywhere.
+  if (input.lienNoticeServed && input.noticeDeadlineInHold) {
+    blockers.push({
+      kind: 'notice_deadline_in_hold',
+      message:
+        'The deadline in the served lien notice fell inside an emergency hold, when the tenant was ' +
+        'told collections were stopped. Whether that notice still counts is an open legal question, ' +
+        'so this sale is blocked. Serve a new lien notice and let its own deadline run; what the ' +
+        'tenant owes is unchanged.',
+    })
   }
 
   if (!input.approved) {

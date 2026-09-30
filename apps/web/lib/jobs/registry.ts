@@ -21,6 +21,7 @@ import { raiseClosedPeriodDriftTasks } from '@/lib/admin/close-drift'
 import { runDelinquencyTimeline } from '@/lib/delinquency/engine'
 import { emitInstallmentReminders, evaluatePaymentPlanBreaches } from '@/lib/delinquency/payment-plan-breach'
 import { releaseStuckOverlocks } from '@/lib/delinquency/overlock'
+import { liftEndedEmergencyHolds } from '@/lib/admin/emergency-hold'
 import { raiseDailyWalkthrough } from '@/lib/field-ops/walkthrough'
 import { raiseReviewRequests } from '@/lib/reviews/request-job'
 import { raiseLeadDripSteps } from '@/lib/leads/drip-job'
@@ -391,6 +392,19 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, businessDate, recordItem }) => {
       await assessLateFees(facilityId!, businessDate, recordItem)
+    },
+  },
+  {
+    // B-420. Closes emergency holds whose end date has passed and raises one
+    // task per facility. The holds are already inert by then (`holdIsActive`),
+    // so the hour only decides when the task appears: 1am, before the
+    // late-fee run at 2 reads a site that has just resumed.
+    name: 'holds.emergency-ended',
+    label: 'Close ended emergency holds',
+    localHour: 1,
+    scope: 'per_facility',
+    handler: async ({ facilityId, recordItem }) => {
+      await liftEndedEmergencyHolds(facilityId!, new Date(), recordItem)
     },
   },
   {

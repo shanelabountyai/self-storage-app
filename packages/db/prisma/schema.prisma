@@ -509,6 +509,9 @@ model Facility {
   city                     String
   /// Two-letter code. Drives compliance config; Texas is the seeded default (D-10).
   state                    String
+  /// B-420. Free text, as the county calls itself ("Travis"). Only read by the
+  /// emergency hold, which matches it case-insensitively within `state`.
+  county                   String?
   postalCode               String
   country                  String            @default("US")
   latitude                 Float?

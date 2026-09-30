@@ -66,6 +66,7 @@ function newFacility(who: Actor, key: string, state = 'TX') {
     addressLine2: null,
     city: 'Austin',
     state,
+    county: null,
     postalCode: '78704',
     timezone: 'America/Chicago',
     phone: null,

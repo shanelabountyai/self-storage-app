@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   HOLD_TYPES,
+  dateInsidePausedWindow,
   effectsOf,
   hasEffect,
   holdIsActive,
   holdTypeSpec,
+  pausedDays,
 } from '../packages/core/holds'
 
 // PRD 02 §4.4 US-42 (B-096). The catalog and the evaluation.
@@ -139,5 +141,38 @@ describe('hasEffect', () => {
     expect(hasEffect([hold({ type: 'payment_plan' })], 'halt_late_fees', d('2026-09-15'))).toBe(true)
     // `dispute`, not `payment_plan`: B-202 gave the latter `block_auction`.
     expect(hasEffect([hold({ type: 'dispute' })], 'block_auction', d('2026-09-15'))).toBe(false)
+  })
+})
+
+// B-420. The emergency hold pauses the lien clock; nothing else does.
+describe('pausedDays', () => {
+  const emergency = (from: string, to: string | null, lifted: string | null = null) =>
+    hold({ type: 'emergency', effectiveFrom: d(from), effectiveTo: to ? d(to) : null, liftedAt: lifted ? d(lifted) : null })
+
+  it('counts the days of an emergency window inside the range, end date exclusive', () => {
+    expect(pausedDays([emergency('2026-09-10', '2026-09-20')], d('2026-09-01'), d('2026-10-01'))).toBe(10)
+  })
+
+  it('clips a window that starts before the range or runs past it', () => {
+    expect(pausedDays([emergency('2026-08-25', '2026-09-05')], d('2026-09-01'), d('2026-10-01'))).toBe(4)
+    expect(pausedDays([emergency('2026-09-28', null)], d('2026-09-01'), d('2026-10-01'))).toBe(3)
+  })
+
+  it('stops at a lift, and still counts the days before it', () => {
+    expect(pausedDays([emergency('2026-09-10', '2026-09-30', '2026-09-15')], d('2026-09-01'), d('2026-10-01'))).toBe(5)
+  })
+
+  it('counts an overlapping pair once and ignores every other type', () => {
+    expect(
+      pausedDays([emergency('2026-09-10', '2026-09-20'), emergency('2026-09-15', '2026-09-25')], d('2026-09-01'), d('2026-10-01')),
+    ).toBe(15)
+    expect(pausedDays([hold({ type: 'bankruptcy', effectiveTo: d('2026-09-20') })], d('2026-09-01'), d('2026-10-01'))).toBe(0)
+  })
+
+  it('says whether a notice deadline fell inside a window', () => {
+    const holds = [emergency('2026-09-10', '2026-09-20')]
+    expect(dateInsidePausedWindow(holds, d('2026-09-10'))).toBe(true)
+    expect(dateInsidePausedWindow(holds, d('2026-09-19'))).toBe(true)
+    expect(dateInsidePausedWindow(holds, d('2026-09-20'))).toBe(false)
   })
 })

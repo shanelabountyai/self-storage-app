@@ -3,9 +3,11 @@ import { emitEvent } from '@storage/core/events'
 import { currentStage, evaluate, type TimelineStep,
   isOverlockStep,
 } from '@storage/core/delinquency'
-import { daysPastDue, outstandingCents } from '@storage/core/metrics'
+import { daysPastDue, oldestUnpaidDue, outstandingCents } from '@storage/core/metrics'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
+import { pausedDays } from '@storage/core/holds'
 import { effectsByLease } from '@/lib/admin/holds'
+import { emergencyHoldsByLease } from '@/lib/admin/emergency-hold'
 import { activeTimeline } from '@/lib/admin/delinquency-timeline'
 import { createTask } from '@/lib/admin/tasks'
 import { allChainIds, leaseChainIds } from '@/lib/billing/transfer-chain'
@@ -95,6 +97,11 @@ export async function runDelinquencyTimeline(
 
   const leaseIds = leases.map((lease) => lease.id)
   const onHold = await effectsByLease(leaseIds, 'halt_dunning', businessDate)
+  // B-420. Days spent under an emergency hold come off the count, so the
+  // ladder resumes where it stopped rather than firing every step the window
+  // covered on the first night after. Counted per lease from ITS oldest unpaid
+  // due date, the same anchor `daysPastDue` uses.
+  const emergencyHolds = await emergencyHoldsByLease(leaseIds)
 
   // Open episode only. Superseded rows are kept as evidence (US-28) but must
   // not count as executed, or a tenant who cured and fell behind again would
@@ -151,6 +158,11 @@ export async function runDelinquencyTimeline(
 
   for (const lease of leases) {
     const executedDays = executedByLease.get(lease.id) ?? []
+    const daysPastDueNet = Math.max(
+      0,
+      daysPastDue(lease.invoices, businessDate) -
+        pausedDays(emergencyHolds.get(lease.id) ?? [], oldestUnpaidDue(lease.invoices) ?? businessDate, businessDate),
+    )
 
     const rentOutstanding = lease.invoices.reduce(
       (sum, invoice) => sum + outstandingCents(invoice),
@@ -163,7 +175,7 @@ export async function runDelinquencyTimeline(
 
     const decision = evaluate({
       steps,
-      daysPastDue: daysPastDue(lease.invoices, businessDate),
+      daysPastDue: daysPastDueNet,
       qualifyingOutstandingCents,
       leaseEnded: !OCCUPYING_LEASE_STATUSES.includes(lease.status as never),
       onHold: onHold.has(lease.id),
@@ -229,7 +241,7 @@ export async function runDelinquencyTimeline(
         timelineId: lease.delinquencyTimelineId ?? timeline.id,
         businessDate,
         outstandingCents: qualifyingOutstandingCents,
-        daysPastDue: daysPastDue(lease.invoices, businessDate),
+        daysPastDue: daysPastDueNet,
       })
       if (executed) {
         result.stepsExecuted += 1

@@ -62,17 +62,23 @@ export function outstandingCents(invoice: UnpaidInvoice): number {
 /// "no invoices at all" should check the invoice list themselves — this
 /// deliberately does not invent a null to mean two different things.
 export function daysPastDue(invoices: readonly UnpaidInvoice[], asOf: Date): number {
-  const unpaid = invoices.filter((invoice) => outstandingCents(invoice) > 0)
-  if (unpaid.length === 0) return 0
-
-  const oldestDue = unpaid.reduce(
-    (oldest, invoice) => (invoice.dueDate < oldest ? invoice.dueDate : oldest),
-    unpaid[0].dueDate,
-  )
+  const oldestDue = oldestUnpaidDue(invoices)
+  if (!oldestDue) return 0
 
   const MS_PER_DAY = 24 * 60 * 60 * 1000
   const days = Math.floor((startOfUtcDay(asOf).getTime() - startOfUtcDay(oldestDue).getTime()) / MS_PER_DAY)
   return Math.max(0, days)
+}
+
+/// The anchor `daysPastDue` measures from, or null when nothing is unpaid.
+/// Exported for B-420, which subtracts emergency-hold days from the same anchor.
+export function oldestUnpaidDue(invoices: readonly UnpaidInvoice[]): Date | null {
+  const unpaid = invoices.filter((invoice) => outstandingCents(invoice) > 0)
+  if (unpaid.length === 0) return null
+  return unpaid.reduce(
+    (oldest, invoice) => (invoice.dueDate < oldest ? invoice.dueDate : oldest),
+    unpaid[0].dueDate,
+  )
 }
 
 function startOfUtcDay(date: Date): Date {

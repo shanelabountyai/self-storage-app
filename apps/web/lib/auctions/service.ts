@@ -22,6 +22,8 @@ import type { Actor } from '@/lib/rbac/actor'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { releaseOverlock } from '@/lib/delinquency/overlock'
 import { effectsByLease } from '@/lib/admin/holds'
+import { emergencyHoldsByLease } from '@/lib/admin/emergency-hold'
+import { dateInsidePausedWindow } from '@storage/core/holds'
 import { allChainIds, leaseSuccessorIds } from '@/lib/billing/transfer-chain'
 import { storeGeneratedDocument } from '@/lib/documents/store'
 import { formatCents } from '@/lib/format'
@@ -247,7 +249,7 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
       })
     : null
 
-  const [ledger, stepRuns, servedLienNotice, approver, blockedByHold, refusals] = await Promise.all([
+  const [ledger, stepRuns, servedLienNotice, approver, blockedByHold, emergencyHolds, refusals] = await Promise.all([
     prisma.ledgerEntry.aggregate({
       where: { leaseId: { in: claimIds } },
       _sum: { amountCents: true },
@@ -289,6 +291,9 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     // SCRA, bankruptcy, deceased or litigation hold fail open — the one
     // blocker on this list where proceeding is a federal matter.
     effectsByLease(claimIds, 'block_auction').then((leases) => leases.size > 0),
+    // B-420. Read across the chain like the hold above; the notice on file is
+    // the current lease's, but the hold window it fell in may be an earlier one's.
+    emergencyHoldsByLease(claimIds).then((byLease) => [...byLease.values()].flat()),
     // B-306. Across the whole chain, like the balance and the holds: an
     // attempt made before a D-85 transfer is still part of this case's history,
     // and dropping it would reintroduce the gap on exactly the cases that have
@@ -343,6 +348,9 @@ export async function auctionCase(actor: Actor, caseId: string): Promise<Auction
     lienNoticeServed: Boolean(servedLienNotice),
     noticeUnitChanged: goodsMoved && !servedLienNotice,
     blockedByHold,
+    noticeDeadlineInHold: Boolean(
+      servedLienNotice?.deadlineDate && dateInsidePausedWindow(emergencyHolds, servedLienNotice.deadlineDate),
+    ),
     saleManner: row.facility.auctionSaleManner,
     saleVenue: row.facility.auctionSaleVenue,
     // B-276. What the served notice said, against what the facility says now.
