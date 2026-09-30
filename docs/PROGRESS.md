@@ -12150,7 +12150,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **CI on `137f837` failed six e2e tests** (`portal-transfer.spec.ts:59`, `:78` and `admin-move-out.spec.ts:152`, both projects): "Show me what it costs" and "Recalculate" are `formMethod="get"` submitters with their own `formAction` inside an `AdminForm`. React leaves such a press to the browser, hydrated or not, so it reached the replay script, which queued it on a form that had already mounted, and nothing navigated. The script now skips a submitter that has a `formaction`, the check React's own runtime makes (`693a782`). `portal-transfer`, `admin-move-out`, `portal-move-out` and `portal` on both projects: 200 passed, 0 failed.
 
-## B-417 — The facility page lists every step of the late-fee ladder (2026-09-30, `SHA`)
+## B-417 — The facility page lists every step of the late-fee ladder (2026-09-30, `ab5f206`)
 
 **What it built.** PRD 01 US-301 §6.6, PRD 02 US-21. `LateAndLeaveTerms` on the public facility page renders every step of the ladder as a `<ul>` (one `<li>` per step, SC 1.3.1), read through a new `lateFeeLines(steps, dict)` in `lib/billing/late-fees.ts` — the same `lateFeeStepsFor` output `assessLateFees` charges, in step order, through the existing `facility.terms.lateFee{Flat,Percent,Greater,Lesser}` keys in both locales. No steps still reads "No late fee". `facility.terms.gateCodeFuture` is rewritten without the double negative in EN ("… even when your move-in date is still ahead.") and ES ("… aunque su fecha de mudanza sea más adelante."). Unit: `tests/late-fees.test.ts` renders a two-step flat ladder to "$20, once rent is 6 days past due" / "$25, once rent is 31 days past due" and an empty ladder to `[]`.
 
