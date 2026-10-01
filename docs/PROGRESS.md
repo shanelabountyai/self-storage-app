@@ -12244,7 +12244,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** Lint (0 errors) and `npm run typecheck` clean. e2e on desktop-chrome against a production build: the smoke test and the price-breakdown-open scan, 4 passed with setup. The full unit run was not repeated (markup tag only, no test names the element); mobile-chrome was not run. No migration. The accessibility statement makes no claim about headings, so it was not changed.
 
-## B-427 — The reservation page is the move-in day plan (2026-10-01, `SHA`)
+## B-427 — The reservation page is the move-in day plan (2026-10-01, `b16b67d`)
 
 **What it built.** On a live hold, `/reservations` shows the facility address, today's office hours and today's gate hours as two separate lines, "Bring photo ID and a lock", and a directions link that names its destination. A "Change move-in date" form (`changeMoveInDateAction`, `changeMoveInDate` in `lib/reservations/reserve.ts`) moves the same row in place: same token, same unit, expiry recomputed from the new date, rate re-quoted at the current web rate, and the outcome (with or without a changed price) reported in a status region. A hold that is not live (cancelled or expired, not converted) offers "Reserve this size again" and "Search nearby". `todaysGateHours` moved from the checkout page to `lib/facility/public-facility.ts`, with a new `todaysOfficeHours` beside it.
 
