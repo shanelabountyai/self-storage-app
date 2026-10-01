@@ -380,6 +380,25 @@ export const en = {
   // A success, so no `err.` prefix — the checkout styles that branch red. It
   // still carries a refusal's weight (it confirms something irreversible), so
   // `MUST_ALSO_DIFFER` in `tests/i18n.test.ts` names it.
+  // B-427. The day plan and the date change.
+  'res.officeHoursUnknown': 'Office hours: call to confirm before you head over.',
+  'res.officeClosedToday': 'The office is closed today.',
+  'res.officeHoursToday': 'Office hours today: {open}–{close}.',
+  'res.planHeading': 'Getting there',
+  'res.bringId': 'Bring photo ID and a lock, or buy one at the office.',
+  'res.getDirections': 'Get directions',
+  'res.getDirectionsSr': ' to {name}, opens your map app',
+  'res.changeHeading': 'Change your move-in date',
+  'res.changeBody':
+    'Pick a new date up to {days} days ahead. We hold the unit for the new date and check the price again when you change it.',
+  'res.changeHint': 'Any day from {earliest} to {latest}.',
+  'res.changeLabel': 'New move-in date',
+  'res.changeButton': 'Change date',
+  'res.dateChanged': 'Date changed. Your unit is held for the new day and the price is the same.',
+  'res.dateChangedRate':
+    'Date changed. Your unit is held for the new day, and the monthly price is now the one shown above.',
+  'res.reserveAgain': 'Reserve this size again',
+  'res.searchNearby': 'Search nearby',
   'res.cancelled': 'Cancelled. The unit is back available and nothing has been charged.',
 
   // --- The lead form on the facility page (US-8, B-264) ------------------

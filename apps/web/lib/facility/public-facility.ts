@@ -1,7 +1,12 @@
 import { cache } from 'react'
 import { citySlug } from '@storage/core/marketing'
 import { prisma } from '@storage/db'
-import { parseWeeklySchedule, type WeeklySchedule } from '@storage/core/facility-settings'
+import {
+  parseWeeklySchedule,
+  type DayOfWeek,
+  type WeeklySchedule,
+} from '@storage/core/facility-settings'
+import { translate, type Dictionary } from '@/lib/i18n'
 
 // PRD 01 US-103. The public profile half of a facility page — address, hours,
 // amenities, coordinates. Pricing and availability stay in
@@ -187,3 +192,37 @@ export const publicFootprint = cache(async function publicFootprint(): Promise<{
     })),
   }
 })
+
+/// Today's entry in a weekly schedule, by the facility's own calendar day.
+function todayIn(schedule: WeeklySchedule, timezone: string) {
+  // B-284. English on purpose: the weekday is a key into the schedule, never shown.
+  // eslint-disable-next-line no-restricted-syntax
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: timezone })
+    .format(new Date())
+    .toLowerCase() as DayOfWeek
+  return schedule[weekday]
+}
+
+/// The confirmation pages' one line of hours (checkout, B-427's reservation):
+/// what matters right now, to someone about to drive to the unit, not the full
+/// weekly table the facility page shows.
+export function todaysGateHours(facility: PublicFacility, dict: Dictionary): string {
+  if (!facility.gateHours) return translate(dict, 'checkout.gateHoursUnknown')
+  const today = todayIn(facility.gateHours, facility.timezone)
+  if (today.closed) return translate(dict, 'checkout.gateClosedToday')
+  return translate(dict, 'checkout.gateHoursToday', {
+    open: formatTimeOfDay(today.open),
+    close: formatTimeOfDay(today.close),
+  })
+}
+
+/// B-427. The office twin of `todaysGateHours`; the two are never conflated (§6.3).
+export function todaysOfficeHours(facility: PublicFacility, dict: Dictionary): string {
+  if (!facility.officeHours) return translate(dict, 'res.officeHoursUnknown')
+  const today = todayIn(facility.officeHours, facility.timezone)
+  if (today.closed) return translate(dict, 'res.officeClosedToday')
+  return translate(dict, 'res.officeHoursToday', {
+    open: formatTimeOfDay(today.open),
+    close: formatTimeOfDay(today.close),
+  })
+}

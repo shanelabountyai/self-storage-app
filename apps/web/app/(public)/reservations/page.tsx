@@ -1,9 +1,21 @@
 import Link from 'next/link'
 import { formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
-import { reservationByToken } from '@/lib/reservations/reserve'
-import { cancelReservationAction, completeMoveInFromReservationAction } from './actions'
-import { AdminForm } from '@/components/admin/form'
+import { MAX_MOVE_IN_DAYS_AHEAD, moveInWindow, reservationByToken } from '@/lib/reservations/reserve'
+import {
+  changeMoveInDateAction,
+  cancelReservationAction,
+  completeMoveInFromReservationAction,
+} from './actions'
+import { AdminForm, Field } from '@/components/admin/form'
+import {
+  directionsUrl,
+  facilityPath,
+  formatAddress,
+  publicFacilityBySlug,
+  todaysGateHours,
+  todaysOfficeHours,
+} from '@/lib/facility/public-facility'
 import { dictionaryFor, translate, LOCALE_TAG, type Locale, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
@@ -99,6 +111,9 @@ export default async function ReservationPage({
 
   const { facility, unitType } = reservation
   const live = reservation.status === 'held'
+  // Null for an inactive facility; the plan block is then simply absent.
+  const publicFacility = await publicFacilityBySlug(facility.slug)
+  const window = moveInWindow(facility.timezone)
 
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-12">
@@ -115,6 +130,16 @@ export default async function ReservationPage({
       {!live && (
         <p role="status" className="border-input mt-4 rounded-md border p-3 text-pretty">
           {t(endedKey(reservation.status))}
+        </p>
+      )}
+      {!live && reservation.status !== 'converted' && (
+        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+          <Link href={facilityPath(facility)} className="font-medium underline underline-offset-4">
+            {t('res.reserveAgain')}
+          </Link>
+          <Link href="/storage/search" className="underline underline-offset-4">
+            {t('res.searchNearby')}
+          </Link>
         </p>
       )}
 
@@ -174,6 +199,28 @@ export default async function ReservationPage({
         {t('res.reassureAfter')}
       </p>
 
+      {live && publicFacility && (
+        <section aria-labelledby="plan" className="mt-8">
+          <h2 id="plan" className="text-xl font-medium">
+            {t('res.planHeading')}
+          </h2>
+          <div className="mt-2 text-sm text-pretty">
+            <address className="not-italic">{formatAddress(publicFacility)}</address>
+            <p className="mt-1">{todaysOfficeHours(publicFacility, dict)}</p>
+            <p className="mt-1">{todaysGateHours(publicFacility, dict)}</p>
+            <p className="mt-1">{t('res.bringId')}</p>
+            <p className="mt-1">
+              <a href={directionsUrl(publicFacility)} className="underline underline-offset-4">
+                {t('res.getDirections')}
+                <span className="sr-only">
+                  {t('res.getDirectionsSr', { name: facility.name })}
+                </span>
+              </a>
+            </p>
+          </div>
+        </section>
+      )}
+
       {live && (
         <section aria-labelledby="continue" className="mt-10">
           <h2 id="continue" className="text-xl font-medium">
@@ -191,6 +238,47 @@ export default async function ReservationPage({
               className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
             >
               {t('res.completeMoveIn')}
+            </button>
+          </AdminForm>
+        </section>
+      )}
+
+      {live && (
+        <section aria-labelledby="change" className="mt-10">
+          <h2 id="change" className="text-xl font-medium">
+            {t('res.changeHeading')}
+          </h2>
+          <p className="text-muted-foreground mt-2 text-sm text-pretty">
+            {t('res.changeBody', { days: MAX_MOVE_IN_DAYS_AHEAD })}
+          </p>
+          <AdminForm
+            action={changeMoveInDateAction}
+            label={t('res.changeButton')}
+            className="mt-3 flex flex-col gap-3"
+          >
+            <input type="hidden" name="token" value={token} />
+            <Field
+              name="moveInDate"
+              label={t('res.changeLabel')}
+              type="date"
+              defaultValue={
+                reservation.moveInDate
+                  ? // eslint-disable-next-line no-restricted-syntax -- an input value, not display text
+                    new Intl.DateTimeFormat('en-CA', { timeZone: facility.timezone }).format(
+                      reservation.moveInDate,
+                    )
+                  : window.min
+              }
+              min={window.min}
+              max={window.max}
+              hint={t('res.changeHint', { earliest: window.min, latest: window.max })}
+              className="flex flex-col gap-1 text-sm"
+            />
+            <button
+              type="submit"
+              className="border-input hover:bg-accent inline-flex min-h-11 w-full items-center justify-center rounded-md border px-4 text-sm font-medium sm:w-auto"
+            >
+              {t('res.changeButton')}
             </button>
           </AdminForm>
         </section>

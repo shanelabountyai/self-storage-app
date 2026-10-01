@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import {
   cancelReservation,
+  changeMoveInDate,
   createReservation,
   expireReservations,
   hashReservationToken,
@@ -331,6 +332,65 @@ describeDb('reservation service', () => {
     tooFar.setDate(tooFar.getDate() + MAX_MOVE_IN_DAYS_AHEAD + 1)
     const result = await createReservation({ ...input(`far-${suffix}@example.com`), moveInDate: tooFar })
     expect(result).toMatchObject({ ok: false, reason: 'move_in_too_far_out' })
+  })
+
+  describe('changeMoveInDate (B-427)', () => {
+    const dayOffset = (days: number) => {
+      const date = new Date()
+      date.setUTCDate(date.getUTCDate() + days)
+      return date.toISOString().slice(0, 10)
+    }
+    const hold = async (label: string) => {
+      const result = await createReservation(input(`${label}-${suffix}@example.com`))
+      if (!result.ok || !result.token) throw new Error('unreachable')
+      return { id: result.reservationId, token: result.token }
+    }
+
+    it('moves the same row, re-quotes the rate and recomputes the expiry', async () => {
+      const { id, token } = await hold('chg')
+      const before = await prisma.reservation.findUniqueOrThrow({ where: { id } })
+      const result = await changeMoveInDate(token, dayOffset(5), async () => 13_900)
+
+      expect(result).toMatchObject({ ok: true, rateChanged: true })
+      const after = await prisma.reservation.findUniqueOrThrow({ where: { id } })
+      expect(after.unitId).toBe(before.unitId)
+      expect(after.quotedRateCents).toBe(13_900)
+      expect(after.expiresAt.getTime()).toBeGreaterThan(before.expiresAt.getTime())
+      expect(await prisma.reservation.count({ where: { facilityId } })).toBe(1)
+    })
+
+    it('keeps the old rate when the size is no longer listed', async () => {
+      const { id, token } = await hold('norate')
+      const result = await changeMoveInDate(token, dayOffset(2), async () => null)
+      expect(result).toMatchObject({ ok: true, rateChanged: false })
+      expect((await prisma.reservation.findUniqueOrThrow({ where: { id } })).quotedRateCents).toBe(
+        12_900,
+      )
+    })
+
+    it('refuses a date outside the window, before today and past the maximum', async () => {
+      const { id, token } = await hold('win')
+      const before = await prisma.reservation.findUniqueOrThrow({ where: { id } })
+      for (const raw of [dayOffset(-1), dayOffset(MAX_MOVE_IN_DAYS_AHEAD + 2), 'nonsense']) {
+        expect(await changeMoveInDate(token, raw, async () => 1), raw).toMatchObject({
+          ok: false,
+          reason: 'out_of_window',
+        })
+      }
+      const after = await prisma.reservation.findUniqueOrThrow({ where: { id } })
+      expect(after.expiresAt).toEqual(before.expiresAt)
+    })
+
+    it('refuses an ended hold and an unknown token', async () => {
+      const { token } = await hold('end')
+      await cancelReservation(token)
+      expect(await changeMoveInDate(token, dayOffset(2), async () => 1)).toMatchObject({
+        reason: 'not_held',
+      })
+      expect(await changeMoveInDate('nope', dayOffset(2), async () => 1)).toMatchObject({
+        reason: 'not_found',
+      })
+    })
   })
 
   it('stores only the token hash', async () => {

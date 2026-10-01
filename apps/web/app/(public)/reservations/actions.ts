@@ -2,7 +2,12 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { cancelReservation, reservationByToken } from '@/lib/reservations/reserve'
+import {
+  cancelReservation,
+  changeMoveInDate,
+  reservationByToken,
+} from '@/lib/reservations/reserve'
+import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { offerFor } from '@/lib/promotions/service'
 import { startCheckout } from '@/lib/checkout/session'
 import type { FormState } from '@/lib/admin/form-state'
@@ -89,4 +94,38 @@ export async function completeMoveInFromReservationAction(
   }
 
   redirect(`/checkout?token=${encodeURIComponent(started.token)}`)
+}
+
+/// B-427. Moves the hold to another move-in date, in place. The rate is
+/// re-quoted from the server's current web rate for that size, never from the
+/// form, and the success sentence says whether it moved.
+export async function changeMoveInDateAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const { t } = await messages()
+  const token = String(formData.get('token') ?? '')
+  const view = await reservationByToken(token)
+  const inventory = view ? await publicInventoryForFacility(view.facility.slug) : null
+
+  const result = await changeMoveInDate(
+    token,
+    String(formData.get('moveInDate') ?? ''),
+    async (_facilityId, unitTypeId) =>
+      inventory?.unitTypes.find((type) => type.unitTypeId === unitTypeId)?.webRateCents ?? null,
+  )
+
+  if (!result.ok) {
+    const message =
+      result.reason === 'out_of_window'
+        ? t('err.reserveMoveInTooFar', { days: result.maxDays })
+        : t('err.reservationNotLive')
+    return { status: 'error', message, fieldErrors: {} }
+  }
+
+  revalidatePath('/reservations')
+  return {
+    status: 'success',
+    message: t(result.rateChanged ? 'res.dateChangedRate' : 'res.dateChanged'),
+  }
 }

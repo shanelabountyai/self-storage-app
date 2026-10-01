@@ -47,16 +47,14 @@ import {
   formatAddress,
   formatTimeOfDay,
   publicFacilityBySlug,
-  type PublicFacility,
+  todaysGateHours,
 } from '@/lib/facility/public-facility'
-import type { DayOfWeek } from '@storage/core/facility-settings'
 import { advanceAction, applyPromoCodeAction, relockAction, relockAtSizeAction } from './actions'
 import { PromoCodeStep } from '@/components/checkout/promo-code-step'
 import {
   dictionaryFor,
   LOCALE_TAG,
   translate,
-  type Dictionary,
   type MessageKey,
 } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
@@ -83,27 +81,6 @@ export async function generateMetadata() {
 
 function minutesLeft(lockExpiresAt: Date): number {
   return Math.max(0, Math.round((lockExpiresAt.getTime() - Date.now()) / 60_000))
-}
-
-/// The confirmation page's one line of hours: what matters right now, to
-/// someone about to drive to the unit they just paid for — not the full
-/// weekly table the facility page shows.
-function todaysGateHours(facility: PublicFacility, dict: Dictionary): string {
-  if (!facility.gateHours) return translate(dict, 'checkout.gateHoursUnknown')
-  // B-284. English on purpose: the weekday is a key into `gateHours`, never shown.
-  // eslint-disable-next-line no-restricted-syntax
-  const weekday = new Intl.DateTimeFormat('en-US', {
-    weekday: 'long',
-    timeZone: facility.timezone,
-  })
-    .format(new Date())
-    .toLowerCase() as DayOfWeek
-  const today = facility.gateHours[weekday]
-  if (today.closed) return translate(dict, 'checkout.gateClosedToday')
-  return translate(dict, 'checkout.gateHoursToday', {
-    open: formatTimeOfDay(today.open),
-    close: formatTimeOfDay(today.close),
-  })
 }
 
 export default async function CheckoutPage({

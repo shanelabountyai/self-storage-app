@@ -350,6 +350,25 @@ export const es: Dictionary = {
   'res.cancelBody':
     'Esto libera la unidad de inmediato y otra persona puede tomarla. No se puede deshacer, pero siempre puede reservar de nuevo si todavía está libre.',
   'res.cancelButton': 'Cancelar esta reserva',
+  // B-427.
+  'res.officeHoursUnknown': 'Horario de la oficina: llame para confirmar antes de ir.',
+  'res.officeClosedToday': 'Hoy la oficina está cerrada.',
+  'res.officeHoursToday': 'Horario de la oficina hoy: {open}–{close}.',
+  'res.planHeading': 'Cómo llegar',
+  'res.bringId': 'Traiga una identificación con foto y un candado, o compre uno en la oficina.',
+  'res.getDirections': 'Cómo llegar',
+  'res.getDirectionsSr': ' a {name}, abre su aplicación de mapas',
+  'res.changeHeading': 'Cambie su fecha de mudanza',
+  'res.changeBody':
+    'Elija una fecha nueva con hasta {days} días de anticipación. Reservamos la unidad para esa fecha y revisamos el precio de nuevo al cambiarla.',
+  'res.changeHint': 'Cualquier día del {earliest} al {latest}.',
+  'res.changeLabel': 'Nueva fecha de mudanza',
+  'res.changeButton': 'Cambiar fecha',
+  'res.dateChanged': 'Fecha cambiada. Su unidad está reservada para el nuevo día y el precio es el mismo.',
+  'res.dateChangedRate':
+    'Fecha cambiada. Su unidad está reservada para el nuevo día, y el precio mensual ahora es el que aparece arriba.',
+  'res.reserveAgain': 'Reservar este tamaño otra vez',
+  'res.searchNearby': 'Buscar cerca',
   'res.cancelled': 'Cancelada. La unidad volvió a estar disponible y no le hemos cobrado nada.',
 
   // --- The lead form on the facility page (US-8, B-264) ------------------

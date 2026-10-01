@@ -1007,6 +1007,17 @@ test('reserving a unit holds it, for free, with no account', async ({ page }) =>
   // a11y-state: /reservations | live hold confirmation
   await assertNoAxeViolations(page, { state: 'live hold confirmation' })
 
+  // B-427. The day plan, and the date change reported in a status region.
+  await expect(page.getByRole('link', { name: /Get directions/ })).toBeVisible()
+  await expect(page.getByRole('main')).toContainText('Bring photo ID and a lock')
+  await expect(page.getByRole('main')).toContainText('Gate hours')
+  const newDate = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10)
+  await page.getByLabel('New move-in date').fill(newDate)
+  await page.getByRole('button', { name: 'Change date' }).click()
+  await expect(
+    page.getByRole('main').getByRole('status').filter({ hasText: 'Date changed' }),
+  ).toBeVisible()
+
   // Give the unit back. Unlike every other test in this suite these hold real
   // inventory, and the demo facility has a finite number of lockers — a test
   // that keeps what it takes quietly sells the size out after a few runs and
@@ -1061,6 +1072,9 @@ test('the cancel link shows the hold before releasing it', async ({ page }) => {
     'back available',
   )
   await expect(page.getByRole('button', { name: 'Cancel this reservation' })).toHaveCount(0)
+  // B-427. An ended hold offers somewhere to go.
+  await expect(page.getByRole('link', { name: 'Reserve this size again' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Search nearby' })).toBeVisible()
 })
 
 test('a reservation link that is not real says so without leaking why', async ({ page }) => {

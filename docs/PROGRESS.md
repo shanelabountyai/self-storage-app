@@ -12243,3 +12243,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** Nothing. The existing "price breakdown open" scan covers the open state and still passes.
 
 **Verification.** Lint (0 errors) and `npm run typecheck` clean. e2e on desktop-chrome against a production build: the smoke test and the price-breakdown-open scan, 4 passed with setup. The full unit run was not repeated (markup tag only, no test names the element); mobile-chrome was not run. No migration. The accessibility statement makes no claim about headings, so it was not changed.
+
+## B-427 — The reservation page is the move-in day plan (2026-10-01, `SHA`)
+
+**What it built.** On a live hold, `/reservations` shows the facility address, today's office hours and today's gate hours as two separate lines, "Bring photo ID and a lock", and a directions link that names its destination. A "Change move-in date" form (`changeMoveInDateAction`, `changeMoveInDate` in `lib/reservations/reserve.ts`) moves the same row in place: same token, same unit, expiry recomputed from the new date, rate re-quoted at the current web rate, and the outcome (with or without a changed price) reported in a status region. A hold that is not live (cancelled or expired, not converted) offers "Reserve this size again" and "Search nearby". `todaysGateHours` moved from the checkout page to `lib/facility/public-facility.ts`, with a new `todaysOfficeHours` beside it.
+
+**What it decided.** (1) The window is judged by `judgeStartDate` over `moveInWindow(timezone)`, in the facility's calendar, so the page's `min`/`max` and the action cannot disagree; a date before today is refused, because it would end the hold at once. (2) An unlisted size keeps its old rate rather than inventing one. (3) A hold past `expiresAt` that the sweep has not reached is treated as over. (4) The 14-day window did not grow (open owner call 8). (5) The new action does not emit an event; `createReservation`'s in-place update does not either.
+
+**What it left behind.** (1) An expired hold's page (the "Reserve again" branch) has no e2e of its own; the cancelled state is asserted and shares the branch. (2) `createReservation` still judges its window in the server's zone, not the facility's. (3) The changed-date state has no axe scan. No row for either.
+
+**Verification.** `npm run typecheck` (tests included) and lint clean. `reserve-db` 39 passed alone (two older tests timed out in a combined run at load ~50 to 150 and passed on rerun). e2e on desktop-chrome against a production build: the reserve and cancel specs, 3 passed with setup. The full `npm test` and mobile-chrome were not run. No migration.

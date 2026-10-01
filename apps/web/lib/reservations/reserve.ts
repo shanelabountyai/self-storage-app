@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { Prisma, prisma } from '@storage/db'
 import { emitEvent } from '@storage/core/events'
+import { isoDate, judgeStartDate, startDateWindow } from '@storage/core/checkout'
+import { businessDateFor } from '@storage/core/jobs'
 import { OCCUPYING_LEASE_STATUSES, TRANSFER_HOLD_SOURCE } from '@storage/core/inventory'
 import { recomputeUnitStatus } from '@/lib/admin/units'
 import { cancelOpenTask } from '@/lib/admin/tasks'
@@ -453,6 +455,59 @@ export async function reservationByToken(token: string): Promise<ReservationView
   })
   if (!reservation) return null
   return reservation as unknown as ReservationView
+}
+
+/// B-427. The dates a renter may move the hold to, as `YYYY-MM-DD` in the
+/// facility's own calendar: today through `MAX_MOVE_IN_DAYS_AHEAD`. One
+/// function for the page's `min`/`max` and the action's check, so the two
+/// cannot disagree about the edge.
+export function moveInWindow(timezone: string, now: Date = new Date()) {
+  const window = startDateWindow(isoDate(businessDateFor(now, timezone)), MAX_MOVE_IN_DAYS_AHEAD)
+  return { window, min: isoDate(window.earliest), max: isoDate(window.latest) }
+}
+
+export type ChangeDateResult =
+  | { ok: true; expiresAt: Date; rateChanged: boolean }
+  | { ok: false; reason: 'not_found' | 'not_held' | 'out_of_window'; maxDays: number }
+
+/// B-427. Moves a live hold to another move-in date, in place: same token, same
+/// unit. The hold's end follows the date (`holdExpiryFor`), and the rate is
+/// re-quoted at today's web rate because the date is a new promise about when
+/// the renter arrives. `currentRateCents` is null when the size is no longer
+/// listed; the old rate then stands rather than being invented.
+export async function changeMoveInDate(
+  token: string,
+  moveInRaw: string,
+  currentRateCents: (facilityId: string, unitTypeId: string) => Promise<number | null>,
+): Promise<ChangeDateResult> {
+  const reservation = await prisma.reservation.findUnique({
+    where: { tokenHash: hashReservationToken(token) },
+    include: { facility: { select: { timezone: true, reservationHoldGraceDays: true } } },
+  })
+  if (!reservation) return { ok: false, reason: 'not_found', maxDays: MAX_MOVE_IN_DAYS_AHEAD }
+  const now = new Date()
+  // An expired hold whose sweep has not run yet is over; moving it would
+  // resurrect a unit the job is about to hand back.
+  if (reservation.status !== 'held' || reservation.expiresAt <= now) {
+    return { ok: false, reason: 'not_held', maxDays: MAX_MOVE_IN_DAYS_AHEAD }
+  }
+
+  const { timezone, reservationHoldGraceDays } = reservation.facility
+  const verdict = judgeStartDate(moveInRaw, moveInWindow(timezone, now).window)
+  if (!verdict.ok) return { ok: false, reason: 'out_of_window', maxDays: verdict.maxDays }
+
+  // Noon UTC of the chosen calendar day, so formatting it in any facility zone
+  // lands on the same date.
+  const moveInDate = new Date(`${isoDate(verdict.startDate)}T12:00:00.000Z`)
+  const expiresAt = holdExpiryFor(moveInDate, timezone, reservationHoldGraceDays)
+  const rate = await currentRateCents(reservation.facilityId, reservation.unitTypeId)
+  const quotedRateCents = rate ?? reservation.quotedRateCents
+
+  await prisma.reservation.update({
+    where: { id: reservation.id },
+    data: { moveInDate, expiresAt, quotedRateCents },
+  })
+  return { ok: true, expiresAt, rateChanged: quotedRateCents !== reservation.quotedRateCents }
 }
 
 export type CancelResult = { ok: true } | { ok: false; reason: 'not_found' | 'not_held' }
