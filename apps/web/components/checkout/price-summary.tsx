@@ -59,6 +59,9 @@ export type PriceSummaryProps = {
   /// §6.4: a total that moves without an explicit cause is a defect, so the
   /// cause is stated rather than left to be inferred from a changed number.
   changeNote?: string
+  /// B-425. The checkout is over and the money has moved: the same figure,
+  /// said in the past tense.
+  paid?: boolean
   dict: Dictionary
 }
 
@@ -71,6 +74,7 @@ export function PriceSummary({
   promoDiscountCents,
   promoTerms,
   changeNote,
+  paid = false,
   dict,
 }: PriceSummaryProps) {
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
@@ -115,7 +119,7 @@ export function PriceSummary({
       <details className="group">
         <summary className="flex cursor-pointer flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <span className="font-medium">
-            {t('summary.dueToday')} <span className="font-mono tabular-nums">{formatRate(dueToday)}</span>
+            {t(paid ? 'summary.paidToday' : 'summary.dueToday')} <span className="font-mono tabular-nums">{formatRate(dueToday)}</span>
           </span>
           <span className="text-muted-foreground text-sm">
             {t('summary.then')} <span className="font-mono tabular-nums">{formatRate(monthly)}</span>
@@ -192,7 +196,7 @@ export function PriceSummary({
             </Fragment>
           ))}
           <div className="flex justify-between gap-4 border-t pt-2 font-medium">
-            <dt>{t('summary.totalDueToday')}</dt>
+            <dt>{t(paid ? 'summary.totalPaidToday' : 'summary.totalDueToday')}</dt>
             <dd className="font-mono tabular-nums">{formatRate(dueToday)}</dd>
           </div>
         </dl>

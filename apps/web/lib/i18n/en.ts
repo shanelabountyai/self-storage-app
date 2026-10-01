@@ -496,6 +496,8 @@ export const en = {
   'checkout.didntArriveAfter': 'and we will send it again.',
   'checkout.yourGateCode': 'Your gate code',
   'checkout.unitNumber': 'Unit {number}',
+  'checkout.unitNumbers': 'Your units: {numbers}',
+  'checkout.savedAtOffice': 'Your lease is saved at the office.',
   'checkout.codeComing': 'Your gate code will be texted to you within 15 minutes. If it has not arrived:',
   'checkout.codeComingAfter': 'and we will read it to you — you can move in either way.',
   'checkout.nextPaymentBefore': 'Your next payment is',
@@ -758,6 +760,8 @@ export const en = {
   'summary.ownCover': 'your own cover',
   'summary.perUnitTimes': '{each} × {count} units',
   'summary.totalDueToday': 'Total due today',
+  'summary.paidToday': 'Paid today',
+  'summary.totalPaidToday': 'Total paid today',
 
   // --- Unit step (US-501 step 2, B-106) ---------------------------------
   'unit.oneAt': 'Your unit at {facility}.',

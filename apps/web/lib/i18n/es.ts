@@ -455,6 +455,8 @@ export const es: Dictionary = {
   'checkout.didntArriveAfter': 'y se lo mandamos otra vez.',
   'checkout.yourGateCode': 'Su código de la puerta',
   'checkout.unitNumber': 'Unidad {number}',
+  'checkout.unitNumbers': 'Sus unidades: {numbers}',
+  'checkout.savedAtOffice': 'Su contrato está guardado en la oficina.',
   'checkout.codeComing':
     'Le enviaremos su código de la puerta por mensaje de texto en 15 minutos. Si no le llega:',
   'checkout.codeComingAfter': 'y se lo leemos — de cualquier forma puede mudarse.',
@@ -682,6 +684,8 @@ export const es: Dictionary = {
   'summary.ownCover': 'su propia cobertura',
   'summary.perUnitTimes': '{each} × {count} unidades',
   'summary.totalDueToday': 'Total a pagar hoy',
+  'summary.paidToday': 'Pagado hoy',
+  'summary.totalPaidToday': 'Total pagado hoy',
 
   // --- Unit step (US-501 step 2, B-106) ---------------------------------
   'unit.oneAt': 'Su unidad en {facility}.',

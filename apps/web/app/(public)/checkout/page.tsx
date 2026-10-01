@@ -341,6 +341,18 @@ export default async function CheckoutPage({
     }
   })
 
+  // B-425. The claimed unit numbers, shown outside the code box.
+  const confirmedUnitNumbers = [
+    ...new Set(
+      session.units.flatMap((line) => {
+        const n = line.unitId ? numberByUnitId.get(line.unitId) : null
+        return n ? [n] : []
+      }),
+    ),
+  ]
+  if (confirmedUnitNumbers.length === 0 && reservation?.unit?.number)
+    confirmedUnitNumbers.push(reservation.unit.number)
+
   const remaining = minutesLeft(session.lockExpiresAt)
   const lockedPromo = promoDiscountOn(session)
 
@@ -783,18 +795,32 @@ export default async function CheckoutPage({
 
           {session.step === 'provisioned' && (
             <div className="mt-4">
-              <p className="text-pretty">
-                {t('checkout.emailedTo')} <strong>{session.email}</strong>.
-              </p>
+              {/* B-425. A counter session may have no email; never announce one. */}
+              {session.email ? (
+                <p className="text-pretty">
+                  {t('checkout.emailedTo')} <strong>{session.email}</strong>.
+                </p>
+              ) : (
+                <p className="text-pretty">{t('checkout.savedAtOffice')}</p>
+              )}
+              {confirmedUnitNumbers.length > 0 && (
+                <p className="mt-2 font-medium">
+                  {confirmedUnitNumbers.length === 1
+                    ? t('checkout.unitNumber', { number: confirmedUnitNumbers[0] })
+                    : t('checkout.unitNumbers', { numbers: confirmedUnitNumbers.join(', ') })}
+                </p>
+              )}
               {/* B-239. The email is the only copy of the lease the renter has,
                   and "it never arrived" is the commonest first support call
                   after a move-in. One sentence, beside the claim it qualifies,
                   rather than a support page to find. */}
+              {session.email && (
               <p className="text-muted-foreground mt-1 text-sm text-pretty">
                 {t('checkout.didntArrive')}{' '}
                 <CallLink phone={lostPhone} className="underline underline-offset-4" />{' '}
                 {t('checkout.didntArriveAfter')}
               </p>
+              )}
 
               {/* US-501 step 7. `confirmationCode` is null whenever there is
                   nothing to reveal yet (no encryption key configured, or
@@ -806,11 +832,6 @@ export default async function CheckoutPage({
                   <p className="mt-1 text-4xl font-semibold tracking-widest tabular-nums select-all">
                     {confirmationCode}
                   </p>
-                  {reservation?.unit?.number && (
-                    <p className="text-muted-foreground mt-2 text-sm">
-                      {t('checkout.unitNumber', { number: reservation.unit.number })}
-                    </p>
-                  )}
                 </div>
               ) : (
                 <p className="border-input mt-4 rounded-lg border p-4 text-pretty">
@@ -848,6 +869,7 @@ export default async function CheckoutPage({
                   name says where it goes (SC 2.4.4). Signed-out visits to
                   /portal land on /login, which sends a sign-in link to the
                   address above — no password to invent at the counter. */}
+              {session.email && (
               <p className="mt-4">
                 <Link
                   href="/portal"
@@ -856,6 +878,7 @@ export default async function CheckoutPage({
                   {t('checkout.goToAccount')}
                 </Link>
               </p>
+              )}
 
               {/* B-239. The top post-move-in call, and the one thing that stops
                   a renter driving back. Not a link: whether this facility sells
@@ -948,6 +971,7 @@ export default async function CheckoutPage({
             // US-301 names, and the reason the summary takes the lines rather
             // than a pre-summed total.
             units={summaryUnits}
+            paid={session.step === 'provisioned'}
             dict={dict}
             facilityName={inventory!.facility.name}
             // Per unit, as D-52 has it. The summary multiplies by the basket
