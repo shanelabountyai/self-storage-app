@@ -13,6 +13,7 @@ import { allChainIds, leaseChainIds } from '@/lib/billing/transfer-chain'
 import { leasesWithSettlingPayment } from './allocation'
 import { raiseFeeInvoice } from '@/lib/billing/fee-invoice'
 import { checkMonetaryAuthority } from '@/lib/rbac/authorize'
+import { answerChargeQuestion, CHARGE_QUESTION_TASK } from '@/lib/portal/charge-question'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 
@@ -456,6 +457,26 @@ export async function waiveFeeInvoice(
     // `void`, not `paid`: nobody paid it. The distinction is what makes the
     // revenue report able to tell forgiven money from collected money.
     await tx.invoice.update({ where: { id: invoice.id }, data: { status: 'void' } })
+
+    // B-421. A tenant who asked about this fee gets their answer from the
+    // waiver itself, the way `refundPayment` closes `move_out_refund_due`.
+    const lines = await tx.invoiceLineItem.findMany({ where: { invoiceId: invoice.id }, select: { id: true } })
+    const asked = await tx.task.findMany({
+      where: { type: CHARGE_QUESTION_TASK, status: 'open', entityId: { in: lines.map((line) => line.id) } },
+      select: { id: true, entityId: true },
+    })
+    for (const task of asked) {
+      await tx.task.update({
+        where: { id: task.id },
+        data: {
+          status: 'completed',
+          proof: { outcome: 'waived', note: 'Fee waived.' },
+          completedByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
+          completedAt: new Date(),
+        },
+      })
+      await answerChargeQuestion(tx, task, { kind: 'waived' })
+    }
 
     await recordAudit(
       {

@@ -33,6 +33,9 @@ export type BreakdownLine = {
   /// Signed cents, the ledger's own convention: charges positive, payments and
   /// credits negative.
   amountCents: number
+  /// B-421. The invoice line this came from, for "Ask about this charge".
+  /// Null for a ledger row with no invoice line behind it.
+  lineItemId: string | null
   /// A charge a tenant might reasonably want to argue with — a late fee, a
   /// lien-preparation fee, a lock cut. The screen puts the office's phone
   /// number on these lines rather than only at the foot of the page (2.4.4).
@@ -90,7 +93,7 @@ export async function balanceBreakdownFor(
         select: {
           number: true,
           lineItems: {
-            select: { type: true, description: true, amountCents: true },
+            select: { id: true, type: true, description: true, amountCents: true },
             orderBy: { createdAt: 'asc' },
           },
         },
@@ -139,6 +142,7 @@ export async function balanceBreakdownFor(
           lateFee: LATE_FEE_LINE.test(line.description),
           on,
           amountCents: line.amountCents,
+          lineItemId: line.id,
           disputable: line.type === 'fee',
         })
       }
@@ -150,6 +154,7 @@ export async function balanceBreakdownFor(
       lateFee: false,
       on,
       amountCents: item.amountCents,
+      lineItemId: null,
       disputable: false,
     })
   }

@@ -177,6 +177,13 @@ export const EVENT_NAMES = [
   /// `entityId`, and `sourceEventId`) has something to show. Nothing consumes
   /// it as a comms rule — replying is a person's job, which is the point.
   "sms.inbound_received",
+  /// B-421 (D-83). A tenant asked about one invoice line from the portal. The
+  /// payload carries the words; the `charge_question` task points here.
+  "charge.question_asked",
+  /// B-421. Staff kept the charge with a note, or waived it. On the Lease so
+  /// the comms rule finds its tenant; the payload says which and carries the
+  /// note. The one message a question gets (D-78: no thread).
+  "charge_question.answered",
 
   // Access control (PRD 03 FR-1)
   "access.granted",

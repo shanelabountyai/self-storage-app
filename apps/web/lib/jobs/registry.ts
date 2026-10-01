@@ -104,6 +104,8 @@ export const CONSUMERS: readonly Consumer[] = [
       'lease.moved_out',
       // B-414. The refund a move-out left owing has been recorded.
       'refund.sent',
+      // B-421. A tenant's question about a charge was answered.
+      'charge_question.answered',
       'payment.succeeded',
       'payment.failed',
       'invoice.created',

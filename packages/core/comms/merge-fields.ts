@@ -103,6 +103,13 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     { field: 'refund.method', description: 'How the refund was sent', sample: 'By check number 1042' },
     { field: 'refund.date', description: 'The date the refund was recorded', sample: 'September 29, 2026' },
   ],
+  // B-421. The answer to "Ask about this charge".
+  'charge_question.answered': [
+    { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
+    { field: 'charge.description', description: 'The charge the tenant asked about', sample: 'Late fee (step 1) — 5+ days past due' },
+    { field: 'charge.amount', description: 'Its amount', sample: '$20.00' },
+    { field: 'charge.answer', description: 'What staff decided — the note, or that it was waived', sample: 'We removed this charge from your balance.' },
+  ],
   // CN-21. The two fields the sender types on the announcements screen. They
   // are merge fields rather than a free-composed body so the greeting, the
   // sign-off and the facility's own identity stay the template's — editable

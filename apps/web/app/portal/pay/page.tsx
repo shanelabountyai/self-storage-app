@@ -13,13 +13,16 @@ import {
   AMOUNT_PROBLEM_KEYS,
 } from '@/lib/portal/payment'
 import { balanceBreakdownFor, reconciles } from '@/lib/portal/balance-breakdown'
+import { chargeQuestionsFor, CHARGE_QUESTION_MAX, type ChargeQuestion } from '@/lib/portal/charge-question'
+import { askAboutChargeAction } from './actions'
+import { AdminForm } from '@/components/admin/form'
 import { restoreShortfallCents } from '@storage/core/access'
 import { formatCents, formatRate } from '@/lib/format'
 import { SITE } from '@/lib/site-config'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 import { PortalPayment } from '@/components/portal/portal-payment'
 import { PayAmountForm } from '@/components/portal/pay-amount-form'
-import { dictionaryFor, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
+import { dictionaryFor, LOCALE_TAG, translate, type Dictionary, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -55,7 +58,8 @@ export default async function PortalPayPage({
 }) {
   const { lease: leaseId, account: accountId, amount } = await searchParams
   const actor = await requireTenantActor()
-  const dict = dictionaryFor(await getLocale())
+  const locale = await getLocale()
+  const dict = dictionaryFor(locale)
   const t = (key: MessageKey, vars?: Record<string, string | number>) =>
     translate(dict, key, vars)
 
@@ -154,7 +158,7 @@ export default async function PortalPayPage({
   // the field by.
   const amountProblemId =
     !checked.ok && checked.problem !== 'nothing_owed' ? 'amount-problem' : undefined
-  const [setup, breakdown] = await Promise.all([
+  const [setup, breakdown, questions] = await Promise.all([
     startPortalPayment(actor.tenantId, lease, amountCents),
     // An account's bill is its units, not one lease's ledger — itemising the
     // anchor lease would print one unit's charges under a total covering
@@ -162,7 +166,10 @@ export default async function PortalPayPage({
     lease.account
       ? Promise.resolve({ lines: [], totalCents: 0 })
       : balanceBreakdownFor(lease.leaseId, lease.facilityTimezone),
+    // B-421. Every "Ask about this charge" on this lease, open or answered.
+    lease.account ? Promise.resolve([] as ChargeQuestion[]) : chargeQuestionsFor(lease.leaseId),
   ])
+  const questionByLine = new Map(questions.map((question) => [question.lineItemId, question]))
 
   // B-232. The itemisation comes off the same ledger read as the total, so this
   // holds by construction. It is checked anyway, and the lines are dropped
@@ -175,6 +182,23 @@ export default async function PortalPayPage({
     restoreAtOrBelowCents: lease.restoreAtOrBelowCents,
   })
   const telHref = `tel:${phone.replace(/[^0-9+]/g, '')}`
+  // B-421. A waived (or since-paid) line is no longer on the bill, so its
+  // answer is listed under the table rather than lost with the line.
+  const shownLines = new Set(itemised.map((line) => line.lineItemId))
+  const answeredElsewhere = questions.filter((q) => q.status !== 'open' && !shownLines.has(q.lineItemId))
+  const dayOf = (date: Date) =>
+    new Intl.DateTimeFormat(LOCALE_TAG[locale], {
+      timeZone: lease.facilityTimezone,
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(date)
+  const answerText = (q: ChargeQuestion) =>
+    q.status === 'open'
+      ? t('paypg.askedOn', { on: dayOf(q.askedAt) })
+      : q.status === 'waived'
+        ? t('paypg.askWaived')
+        : t('paypg.askAnswer', { note: q.note })
 
   return (
     <div className="flex flex-col gap-6">
@@ -270,6 +294,50 @@ export default async function PortalPayPage({
                         </a>
                       </>
                     )}
+                    {/* B-421. One question per line. The state replaces the
+                        control once asked: open, kept with the note, waived.
+                        `<details>` so it works with JavaScript off (B-442);
+                        the summary names its line (2.4.6). */}
+                    {line.lineItemId && (
+                      questionByLine.has(line.lineItemId) ? (
+                        <p className="text-muted-foreground mt-1 text-xs text-pretty">
+                          {answerText(questionByLine.get(line.lineItemId)!)}
+                        </p>
+                      ) : (
+                        <details className="mt-1 text-xs">
+                          <summary className="text-muted-foreground cursor-pointer underline underline-offset-4">
+                            {t('paypg.askAbout', {
+                              charge: line.lateFee ? t('paypg.lateFeeAssessed', { on: line.on }) : (line.label ?? ''),
+                            })}
+                          </summary>
+                          <AdminForm
+                            action={askAboutChargeAction}
+                            label={t('paypg.askAbout', {
+                              charge: line.lateFee ? t('paypg.lateFeeAssessed', { on: line.on }) : (line.label ?? ''),
+                            })}
+                            className="mt-2 flex flex-col gap-2"
+                          >
+                            <input type="hidden" name="lineItemId" value={line.lineItemId} />
+                            <label className="flex flex-col gap-1">
+                              {t('paypg.askLabel')}
+                              <textarea
+                                name="question"
+                                rows={3}
+                                required
+                                maxLength={CHARGE_QUESTION_MAX}
+                                className="border-input bg-background rounded-md border p-2 text-sm"
+                              />
+                            </label>
+                            <button
+                              type="submit"
+                              className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
+                            >
+                              {t('paypg.askSend')}
+                            </button>
+                          </AdminForm>
+                        </details>
+                      )
+                    )}
                   </td>
                   <td className="text-muted-foreground px-4 py-2 whitespace-nowrap">{line.on}</td>
                   <td className="px-4 py-2 text-right font-mono tabular-nums">
@@ -299,6 +367,22 @@ export default async function PortalPayPage({
           </tfoot>
         </table>
       </ScrollRegion>
+
+      {/* B-421. Answers whose line is no longer on the bill. */}
+      {answeredElsewhere.length > 0 && (
+        <section aria-labelledby="charge-answers" className="border-input rounded-lg border p-4 text-sm">
+          <h2 id="charge-answers" className="font-medium">
+            {t('paypg.askAnswersHeading')}
+          </h2>
+          <ul className="mt-2 flex flex-col gap-2">
+            {answeredElsewhere.map((q) => (
+              <li key={q.lineItemId} className="text-pretty">
+                {q.description} · {formatCents(q.amountCents)} — {answerText(q)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* B-232 / D-16. What paying this buys, on the screen where the amount is
           chosen. Not a live region: it is server-rendered and present at load,

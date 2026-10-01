@@ -271,7 +271,12 @@ export default async function TasksPage({
                 <TaskCompleteForm
                   taskId={task.id}
                   subjectLabel={`${task.label}, ${task.subject.label}`}
-                  notePlaceholder="What did you do?"
+                  notePlaceholder={
+                    // B-421. For this type the note is sent to the tenant.
+                    task.type === 'charge_question'
+                      ? 'Your answer — the tenant reads this. To waive the fee instead, use the ledger.'
+                      : 'What did you do?'
+                  }
                   buttonLabel="Complete"
                   requiredProofFields={task.requiredProofFields}
                 />

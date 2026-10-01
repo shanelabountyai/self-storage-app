@@ -999,6 +999,18 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
     }
   },
 
+  // B-421. The charge and the answer, from the payload the completion wrote.
+  // The note is sent as typed: it is the staffer's one reply (D-78).
+  'charge_question.answered': async (event, recipient) => {
+    const payload = (event.payload ?? {}) as { description?: string; amountCents?: number; outcome?: string; note?: string | null }
+    const tag = LOCALE_TAG[recipient.locale]
+    return {
+      'charge.description': payload.description ?? '',
+      'charge.amount': formatCents(payload.amountCents ?? 0, tag),
+      'charge.answer': payload.outcome === 'waived' ? proseFor(recipient.locale).chargeWaived : (payload.note ?? ''),
+    }
+  },
+
   // PRD 01 US-707. The date, from the request itself — not re-read off the
   // lease, which a cancel-and-re-request between send and this render could
   // have already changed to a different one.

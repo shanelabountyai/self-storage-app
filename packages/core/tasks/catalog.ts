@@ -158,6 +158,17 @@ export const TASK_TYPES = [
     sensitive: false,
   },
   {
+    // B-421 (PRD 01 US-705). A tenant pressed "Ask about this charge" on one
+    // invoice line in the portal. The note that completes this IS the answer:
+    // it is shown on the line and emailed once. Waiving the fee from the
+    // ledger completes it instead, as "waived". Same reasons as
+    // `inbound_sms_review` for `high` and for not being sensitive.
+    type: "charge_question",
+    label: "A tenant asked about a charge — answer or waive it",
+    requiredProofFields: ["note"],
+    sensitive: false,
+  },
+  {
     // PRD 05 CN-19 / FR-15. A hard bounce means we can no longer reach this
     // tenant by email, and every notice this system sends is email-only until
     // B-074. Somebody has to get a working address by another route.

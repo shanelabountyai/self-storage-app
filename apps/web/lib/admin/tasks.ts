@@ -1,4 +1,5 @@
 import { prisma, type Prisma } from '@storage/db'
+import { answerChargeQuestion, CHARGE_QUESTION_TASK } from '@/lib/portal/charge-question'
 import { recordAudit } from '@storage/core/audit'
 import { businessDateFor } from '@storage/core/jobs'
 import {
@@ -460,6 +461,11 @@ export async function completeTask(
     }
     if (task.type === 'overlock_remove') {
       await confirmOverlockRemoved(actor, task.entityId, tx)
+    }
+
+    // B-421. The note IS the tenant's answer: shown on the line, sent once.
+    if (task.type === CHARGE_QUESTION_TASK) {
+      await answerChargeQuestion(tx, task, { kind: 'kept', note: String(proof.note ?? '') })
     }
 
     if (taskTypeIsSensitive(task.type)) {

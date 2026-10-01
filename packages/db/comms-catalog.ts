@@ -203,6 +203,44 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
   // method nor a date. This is the message that states both, and it is sent
   // only when staff have recorded the refund (US-23). Email only: it is a
   // record to keep.
+  // ── B-421: the one-way answer to "Ask about this charge" ─────────────────
+  {
+    key: 'charge_question_answered',
+    classification: 'transactional',
+    subject: 'About the charge you asked about at {{facility.name}}',
+    bodyText: [
+      'Hi {{tenant.first_name}},',
+      '',
+      'You asked about this charge on unit {{unit.number}}:',
+      '{{charge.description}} — {{charge.amount}}',
+      '',
+      '{{charge.answer}}',
+      '',
+      'Questions? Call {{facility.phone}}.',
+    ].join('\n'),
+    es: {
+      subject: 'Sobre el cargo que consultó en {{facility.name}}',
+      bodyText: [
+        'Hola {{tenant.first_name}}:',
+        '',
+        'Usted preguntó por este cargo de la unidad {{unit.number}}:',
+        '{{charge.description}} — {{charge.amount}}',
+        '',
+        '{{charge.answer}}',
+        '',
+        '¿Preguntas? Llame al {{facility.phone}}.',
+      ].join('\n'),
+    },
+    requiredMergeFields: [
+      'tenant.first_name',
+      'unit.number',
+      'facility.name',
+      'charge.description',
+      'charge.amount',
+      'charge.answer',
+      'facility.phone',
+    ],
+  },
   {
     key: 'refund_sent',
     classification: 'transactional',
@@ -2221,6 +2259,12 @@ export const COMMS_RULES: readonly CommsRuleSeed[] = [
     // definition, and a refund is not something to opt out of hearing about.
     event: 'refund.sent',
     templateKey: 'refund_sent',
+    classification: 'transactional',
+  },
+  {
+    // B-421. The tenant asked; this is the one reply (D-78).
+    event: 'charge_question.answered',
+    templateKey: 'charge_question_answered',
     classification: 'transactional',
   },
 

@@ -91,6 +91,39 @@ export async function resolveTaskSubjects(
     }
   }
 
+  // B-421. A charge question points at one invoice line; its lease is the
+  // subject, same as `Invoice` above.
+  const lineIds = byType.get("InvoiceLineItem");
+  if (lineIds) {
+    const lines = await prisma.invoiceLineItem.findMany({
+      where: { id: { in: [...lineIds] } },
+      select: {
+        id: true,
+        invoice: {
+          select: {
+            lease: {
+              select: {
+                tenantId: true,
+                tenant: { select: { firstName: true, lastName: true } },
+                unit: { select: { number: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    for (const line of lines) {
+      result.set(
+        key("InvoiceLineItem", line.id),
+        leaseSubject(
+          line.invoice.lease.tenantId,
+          line.invoice.lease.tenant,
+          line.invoice.lease.unit.number,
+        ),
+      );
+    }
+  }
+
   const paymentIds = byType.get("Payment");
   if (paymentIds) {
     const payments = await prisma.payment.findMany({
