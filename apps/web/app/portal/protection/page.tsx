@@ -3,6 +3,8 @@ import { AdminForm, Field } from '@/components/admin/form'
 import { requireTenantActor } from '@/lib/rbac/session'
 import { protectionForTenant } from '@/lib/protection/changes'
 import { formatRate } from '@/lib/format'
+import { coverageLines } from '@/lib/protection/summary'
+import { SITE } from '@/lib/site-config'
 import {
   cancelProtectionChangeAction,
   changeProtectionAction,
@@ -42,7 +44,7 @@ export default async function ProtectionPage() {
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold">{t('prot.title')}</h1>
-        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty print:hidden">
           {t('prot.intro')}
         </p>
       </header>
@@ -55,7 +57,7 @@ export default async function ProtectionPage() {
         <section
           key={unit.leaseId}
           aria-labelledby={`unit-${unit.leaseId}`}
-          className="border-input flex flex-col gap-4 rounded-lg border p-4"
+          className="border-input flex flex-col gap-4 rounded-lg border p-4 print:rounded-none print:border-0 print:p-0"
         >
           <div>
             <h2 id={`unit-${unit.leaseId}`} className="font-medium">
@@ -86,13 +88,51 @@ export default async function ProtectionPage() {
             //
             // B-295: document position is what does that work, not a live
             // region. A lapsed waiver is true when the page is drawn (B-245).
-            <p className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg">
+            <p className="rounded-md border border-danger-border bg-danger-bg p-3 text-sm text-pretty text-danger-fg print:hidden">
               {t('prot.expired', { date: formatDay(unit.waiver.expiresAt!, locale) })}
             </p>
           )}
 
+          {unit.currentPlanName && (
+            // B-423 (US-705, D-152 (4)). What the plan covers, in a list under
+            // its own heading (SC 1.3.1, 2.4.6). The only block on the page
+            // that reaches the paper: everything else here is `print:hidden`,
+            // which is `display: none` in PRINT media only, so the forms stay
+            // in the accessibility tree on screen. HTML, not an image (SC 1.4.5).
+            <section
+              aria-labelledby={`covers-${unit.leaseId}`}
+              className="flex flex-col gap-2 text-sm text-pretty"
+            >
+              <h3 id={`covers-${unit.leaseId}`} className="font-medium">
+                {t('prot.coversHeading')}
+              </h3>
+              {unit.currentCoverageCents === null ? (
+                <p className="text-muted-foreground">{t('prot.coversUnknown')}</p>
+              ) : (
+                <ul className="list-disc space-y-1 pl-5">
+                  {coverageLines(dict, unit.currentCoverageCents).map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-muted-foreground">{t('prot.coversDraft')}</p>
+              <p className="text-muted-foreground">{t('prot.rentersNote')}</p>
+              <p>
+                {t('prot.reportLoss')}{' '}
+                <a
+                  href={`tel:${(unit.facilityPhone ?? SITE.phone.href).replace(/[^0-9+]/g, '')}`}
+                  className="underline underline-offset-4"
+                >
+                  {unit.facilityPhone ?? SITE.phone.display}
+                </a>
+                .
+              </p>
+              <p className="text-muted-foreground print:hidden">{t('prot.printHint')}</p>
+            </section>
+          )}
+
           {unit.pending && (
-            <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
+            <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty print:hidden">
               <p>
                 {unit.pending.toPlanName
                   ? t('prot.pendingChange', {
@@ -120,7 +160,7 @@ export default async function ProtectionPage() {
           <AdminForm
             action={changeProtectionAction}
             label={t('prot.changeFormLabel', { unit: unit.unitNumber })}
-            className="flex flex-col gap-3"
+            className="flex flex-col gap-3 print:hidden"
           >
             <input type="hidden" name="leaseId" value={unit.leaseId} />
             <Field
@@ -150,7 +190,7 @@ export default async function ProtectionPage() {
             </button>
           </AdminForm>
 
-          <details className="border-input rounded-lg border p-4">
+          <details className="border-input rounded-lg border p-4 print:hidden">
             <summary className="cursor-pointer text-sm font-medium">
               {t('prot.tellUsSummary')}
             </summary>

@@ -84,7 +84,7 @@ export default async function PortalLayout({ children }: { children: React.React
         {t('chrome.skipToMain')}
       </a>
 
-      <header className="bg-background border-b">
+      <header className="bg-background border-b print:hidden">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
           {/* B-367 (D-146): the kit's `TopNav` names the tenant as a pill with a
               user glyph rather than bare text — decorative only, the name is

@@ -1322,6 +1322,26 @@ export const en = {
   'prot.youHaveBefore': 'You have',
   'prot.youHaveAfter': 'at {amount}/month.',
   'prot.ownInsurance': 'You are covered by your own insurance on this unit.',
+  // B-423 (D-152 (4)). Four draft coverage lines per tier, parameterised by the
+  // tier's limit, and the renters-policy note. Draft, not legal advice (D-10):
+  // counsel reviews the wording before launch.
+  'prot.coversHeading': 'What your plan covers',
+  'prot.coversLine1':
+    'Up to {coverage} for belongings stored in this unit that are lost or damaged by fire, smoke, lightning, windstorm, hail, a burst pipe or roof leak, burglary with signs of forced entry, or vandalism.',
+  'prot.coversLine2':
+    'A covered loss is paid at what the items were worth at the time of the loss, up to {coverage}, with nothing deducted.',
+  'prot.coversLine3':
+    'Not covered: flood, earthquake, mold, mildew, rust, rodents or insects, gradual wear, and anything kept in a vehicle. Cash, jewelry, furs, firearms and documents are not covered at any tier.',
+  'prot.coversLine4':
+    'Cover runs from the day your plan starts for each month the premium is paid. It ends when your lease ends or the premium goes unpaid.',
+  'prot.coversDraft':
+    'A protection plan is not insurance. This summary is a draft and is not legal advice — the protection addendum to your lease is what applies.',
+  'prot.rentersNote':
+    'Already have a homeowners or renters policy? Check whether it covers belongings in storage before you pay for a plan — many do.',
+  'prot.coversUnknown':
+    'The plan on this unit is no longer in our catalog, so its coverage is not shown here. Call the office and we will tell you what it covers.',
+  'prot.reportLoss': 'To report a loss, call the office at',
+  'prot.printHint': 'To keep a copy, print this page — only the coverage summary prints.',
   'prot.expired':
     'The policy we have on file ran out on {date}. Until you give us current cover, we have to add one of our protection plans to this unit and charge for it. Send us your new policy below and that stops.',
   'prot.pendingChange': 'Changing to {plan} ({amount}/month) on {date}.',

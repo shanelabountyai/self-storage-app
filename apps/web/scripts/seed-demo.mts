@@ -575,7 +575,10 @@ async function makeLease(
       endDate: status === 'ended' ? dayAgo(5) : null,
       monthlyRateCents,
       billingDay: 1,
-      protectionPlanName: 'Standard $2,000',
+      // B-423. The TIER key, as checkout writes it (`provision.ts`), so the
+      // portal resolves the catalog row and its coverage. The premium stays the
+      // figure every seeded invoice already carries.
+      protectionPlanName: 'standard',
       protectionCents: 1_200,
       signedAt: daysAgo(startedDaysAgo),
     },

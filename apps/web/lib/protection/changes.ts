@@ -24,8 +24,16 @@ export type ProtectionView = {
   leaseId: string
   unitNumber: string
   facilityName: string
+  facilityPhone: string | null
+  /// The catalog name of the plan on the lease, or the raw stored value when no
+  /// tier on sale matches it. B-423: `Lease.protectionPlanName` holds the TIER
+  /// key when checkout wrote it and the plan NAME when a portal change did, so
+  /// both are matched.
   currentPlanName: string | null
   currentPremiumCents: number
+  /// What the plan on the lease covers, from the catalog row it matches. Null
+  /// for a waiver, and for a plan name no tier on sale answers to.
+  currentCoverageCents: number | null
   /// The tenant's own cover, if they have told us about it.
   waiver: {
     carrier: string | null
@@ -58,7 +66,7 @@ export async function protectionForTenant(
       protectionPlanName: true,
       protectionCents: true,
       unit: { select: { number: true } },
-      facility: { select: { name: true } },
+      facility: { select: { name: true, phone: true } },
     },
   })
 
@@ -73,12 +81,21 @@ export async function protectionForTenant(
         }),
       ])
 
+      const current = lease.protectionPlanName
+        ? plans.find(
+            (plan) =>
+              plan.tier === lease.protectionPlanName || plan.name === lease.protectionPlanName,
+          )
+        : undefined
+
       return {
         leaseId: lease.id,
         unitNumber: lease.unit.number,
         facilityName: lease.facility.name,
-        currentPlanName: lease.protectionPlanName,
+        facilityPhone: lease.facility.phone,
+        currentPlanName: current?.name ?? lease.protectionPlanName,
         currentPremiumCents: lease.protectionCents,
+        currentCoverageCents: current?.coverageCents ?? null,
         waiver: waiver
           ? {
               carrier: waiver.carrier,

@@ -8,6 +8,9 @@ import {
   scheduleProtectionChange,
   submitInsuranceProof,
 } from '../apps/web/lib/protection/changes'
+import { coverageLines } from '../apps/web/lib/protection/summary'
+import { dictionaryFor } from '../apps/web/lib/i18n'
+import { formatRate } from '../apps/web/lib/format'
 
 // B-104 / PRD 01 US-705, against real rows. The pure suite proves the rule;
 // this proves the consequences — that the current period is never touched, that
@@ -484,6 +487,32 @@ describeDb('protection changes (US-705)', () => {
 
       const [view] = await protectionForTenant(tenantId, new Date('2026-08-20T12:00:00Z'))
       expect(view.waiver?.expired).toBe(true)
+    })
+
+    // B-423. The coverage lines come from the catalog row the lease's plan
+    // matches — by NAME when a portal change wrote it, by TIER when checkout
+    // did (`provision.ts` stores the tier key) — and carry its limit.
+    it('reads the coverage from the tier config, whether the lease names the tier or the plan', async () => {
+      const [byName] = await protectionForTenant(tenantId)
+      expect(byName.currentCoverageCents).toBe(200_000)
+      for (const locale of ['en', 'es'] as const) {
+        const lines = coverageLines(dictionaryFor(locale), byName.currentCoverageCents!)
+        expect(lines).toHaveLength(4)
+        // The limit is on the perils line and the valuation line; the
+        // exclusions and the term are the same at every tier.
+        expect(lines[0]).toContain(formatRate(200_000))
+        expect(lines[1]).toContain(formatRate(200_000))
+      }
+
+      await prisma.lease.update({ where: { id: leaseId }, data: { protectionPlanName: 'standard' } })
+      const [byTier] = await protectionForTenant(tenantId)
+      expect(byTier.currentPlanName).toBe('Standard')
+      expect(byTier.currentCoverageCents).toBe(300_000)
+
+      await prisma.lease.update({ where: { id: leaseId }, data: { protectionPlanName: 'Gone' } })
+      const [unknown] = await protectionForTenant(tenantId)
+      expect(unknown.currentPlanName).toBe('Gone')
+      expect(unknown.currentCoverageCents).toBeNull()
     })
 
     it('shows only the tenant’s own units', async () => {

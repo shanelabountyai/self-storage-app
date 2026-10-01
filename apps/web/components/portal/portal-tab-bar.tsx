@@ -56,7 +56,7 @@ export function PortalTabBar({
     <nav
       id="portal-tab-bar"
       aria-label={t('portal.tabNav')}
-      className="bg-background/95 fixed inset-x-0 bottom-0 z-40 flex border-t backdrop-blur sm:hidden"
+      className="bg-background/95 fixed inset-x-0 bottom-0 z-40 flex border-t backdrop-blur sm:hidden print:hidden"
     >
       {tabs.map(({ key, href, label, name, icon: Icon, current }) => {
         const owed = key === 'pay' && pay !== null

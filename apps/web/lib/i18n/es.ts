@@ -1225,6 +1225,23 @@ export const es: Dictionary = {
   'prot.youHaveBefore': 'Tiene',
   'prot.youHaveAfter': 'por {amount} al mes.',
   'prot.ownInsurance': 'Esta unidad está cubierta por su propio seguro.',
+  'prot.coversHeading': 'Qué cubre su plan',
+  'prot.coversLine1':
+    'Hasta {coverage} por las pertenencias guardadas en esta unidad que se pierdan o dañen por incendio, humo, rayo, vendaval, granizo, una tubería rota o una filtración del techo, robo con señales de entrada forzada, o vandalismo.',
+  'prot.coversLine2':
+    'Una pérdida cubierta se paga según lo que valían los artículos al momento de la pérdida, hasta {coverage}, sin deducible.',
+  'prot.coversLine3':
+    'No cubre: inundación, terremoto, moho, humedad, óxido, roedores o insectos, desgaste gradual, ni nada guardado dentro de un vehículo. El efectivo, las joyas, las pieles, las armas de fuego y los documentos no están cubiertos en ningún nivel.',
+  'prot.coversLine4':
+    'La cobertura corre desde el día en que comienza su plan, por cada mes en que se paga la prima. Termina cuando termina su contrato o cuando la prima queda sin pagar.',
+  'prot.coversDraft':
+    'Un plan de protección no es un seguro. Este resumen es un borrador y no es asesoría legal — lo que aplica es el anexo de protección de su contrato.',
+  'prot.rentersNote':
+    '¿Ya tiene una póliza de vivienda o de inquilino? Revise si cubre las pertenencias en almacenamiento antes de pagar un plan — muchas lo hacen.',
+  'prot.coversUnknown':
+    'El plan de esta unidad ya no está en nuestro catálogo, así que su cobertura no se muestra aquí. Llame a la oficina y le diremos qué cubre.',
+  'prot.reportLoss': 'Para reportar una pérdida, llame a la oficina al',
+  'prot.printHint': 'Para guardar una copia, imprima esta página — solo se imprime el resumen de cobertura.',
   'prot.expired':
     'La póliza que tenemos registrada venció el {date}. Hasta que nos dé una cobertura vigente, tenemos que agregar uno de nuestros planes de protección a esta unidad y cobrarlo. Mándenos su póliza nueva aquí abajo y eso se detiene.',
   'prot.pendingChange': 'Cambiará a {plan} ({amount} al mes) el {date}.',
