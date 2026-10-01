@@ -254,7 +254,14 @@ describeDb('access suspension', () => {
 
   it('is blocked outright by a hold, however far past due', async () => {
     await overdueRent(d('2026-08-01'))
-    await placeHold(manager(), leaseId, { type: 'military_scra', reason: 'Deployment orders.' })
+    // Pinned: `placeHold` defaults `effectiveFrom` to the real clock, and a
+    // hold placed after the evaluation date is not active at it. This test
+    // started failing on 2026-10-01, the day the clock caught up with it.
+    await placeHold(manager(), leaseId, {
+      type: 'military_scra',
+      reason: 'Deployment orders.',
+      effectiveFrom: d('2026-08-01'),
+    })
 
     await evaluateAccessSuspensions(facilityId, d('2026-10-01'), recordItem)
 

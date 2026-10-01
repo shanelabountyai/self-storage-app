@@ -189,7 +189,13 @@ describeDb('dunning ladder', () => {
 
   it('halts on a hold, and says why', async () => {
     await rent(d('2026-09-01'))
-    await placeHold(manager(), leaseId, { type: 'military_scra', reason: 'Deployment orders.' })
+    // Pinned for the same reason as access-suspension-db: the default
+    // `effectiveFrom` is the real clock, and this would rot on 2026-10-05.
+    await placeHold(manager(), leaseId, {
+      type: 'military_scra',
+      reason: 'Deployment orders.',
+      effectiveFrom: d('2026-09-01'),
+    })
 
     await runDunning(facilityId, d('2026-10-05'), recordItem)
 
