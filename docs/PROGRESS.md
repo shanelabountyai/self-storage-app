@@ -12233,3 +12233,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** (1) The page-level branches (empty email, no code) have no test: the confirmation is a DB-backed server page and no e2e fixture reaches `provisioned`; only the summary's wording is unit-tested (`price-summary-paid.test.tsx`). The row asked for both, so this is a gap, not a decision. No row. (2) The confirmation stays unscanned by axe, as the accessibility statement already says; its text was not changed by this item.
 
 **Verification.** `npm run typecheck` clean. Full `npm test`: 303 files passed, 1 skipped; 4884 passed, 8 skipped. e2e on desktop-chrome against a production build: `smoke`, `checkout-no-js`, `checkout-unit-lost`, `checkout-rental-stop`: 92 passed, 2 skipped, 0 failed. mobile-chrome was not run. No migration.
+
+## B-426 — The late-fee block has a heading (2026-10-01, `204aeda`)
+
+**What it built.** `LateAndLeaveTerms` renders `facility.lateHeading` as an `<h4>`, the level below the unit card's `<h3>` it sits inside, instead of a `<p>`. No class change. `e2e/smoke.spec.ts` ("What you'd pay today" itemizes and foots) now asserts the heading by role, name and level 4.
+
+**What it decided.** The level is 4 because the block only renders inside the unit card (`h2#units` > `h3` unit title), never at page level.
+
+**What it left behind.** Nothing. The existing "price breakdown open" scan covers the open state and still passes.
+
+**Verification.** Lint (0 errors) and `npm run typecheck` clean. e2e on desktop-chrome against a production build: the smoke test and the price-breakdown-open scan, 4 passed with setup. The full unit run was not repeated (markup tag only, no test names the element); mobile-chrome was not run. No migration. The accessibility statement makes no claim about headings, so it was not changed.
