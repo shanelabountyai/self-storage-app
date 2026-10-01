@@ -930,6 +930,7 @@ model Facility {
   delinquencyStepRuns    DelinquencyStepRun[]
   overlocks              UnitOverlock[]
   maintenanceTickets     MaintenanceTicket[]
+  incidents              Incident[]
   promoRedemptions       PromoRedemption[]
   analyticsEvents        AnalyticsEvent[]
   photos                 FacilityPhoto[]
@@ -1154,6 +1155,7 @@ model Unit {
   checkoutSessionUnits CheckoutSessionUnit[]
   overlocks            UnitOverlock[]
   maintenanceTickets   MaintenanceTicket[]
+  incidents            IncidentUnit[]
   auctionCases         AuctionCase[]
   statusHistory        UnitStatusHistory[]
 
@@ -1548,6 +1550,7 @@ model Lease {
   authorizedAccessPeople AuthorizedAccessPerson[]
   payLinks               PayLink[]
   holds                  LeaseHold[]
+  incidents              IncidentUnit[]
   paymentPlans           PaymentPlan[]
   delinquencyTimeline    DelinquencyTimeline?     @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
   transferredFrom        Lease?                   @relation("LeaseTransfer", fields: [transferredFromLeaseId], references: [id], onDelete: Restrict)
@@ -3142,6 +3145,68 @@ model MaintenanceTicket {
   @@map("maintenance_ticket")
 }
 
+/// PRD 02 US-37 "an incident is one record" (B-424).
+enum IncidentType {
+  break_in
+  vandalism
+  fire
+  water
+  other
+}
+
+/// PRD 02 US-37 (B-424). A break-in, a fire, a flood: one record every
+/// affected tenant's conversation starts from, so nobody gets a different
+/// story. Photos and documents hang off it through the US-16 store
+/// (`Document.subjectType = 'Incident'`); a protection claim links here once
+/// B-422 builds one.
+model Incident {
+  id                 String       @id @default(cuid())
+  facilityId         String
+  type               IncidentType
+  windowStart        DateTime     @db.Timestamptz(6)
+  /// Exclusive, matching every other range in this codebase.
+  windowEnd          DateTime     @db.Timestamptz(6)
+  description        String
+  /// Usually arrives days after the record does, so it is the one fact that
+  /// can be set later.
+  policeReportNumber String?
+  /// The gate events inside the window, copied at creation as
+  /// `GateLogExcerptRow[]`. Evidence: the migration's trigger refuses any
+  /// UPDATE that changes it, so a late webhook, a renamed tenant or a deleted
+  /// credential cannot alter what the record said on the day.
+  gateLogExcerpt     Json
+  /// Set by the one notify message. A second send is refused: the point of the
+  /// record is that every affected tenant was told the same thing.
+  notifiedAt         DateTime?    @db.Timestamptz(6)
+  recordedByStaffId  String
+  createdAt          DateTime     @default(now()) @db.Timestamptz(6)
+
+  facility   Facility       @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  recordedBy StaffUser      @relation("IncidentRecordedBy", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+  units      IncidentUnit[]
+
+  @@index([facilityId, windowStart])
+  @@map("incident")
+}
+
+/// One affected unit. `leaseId` is who held it when the incident was
+/// recorded, null for a vacant unit — a later move-out does not change who
+/// was affected.
+model IncidentUnit {
+  incidentId String
+  unitId     String
+  leaseId    String?
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  unit     Unit     @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  lease    Lease?   @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+
+  @@id([incidentId, unitId])
+  @@index([unitId])
+  @@index([leaseId])
+  @@map("incident_unit")
+}
+
 /// PRD 04 FR-SEO-2 (B-066). The 301 map.
 ///
 /// "301 redirect map maintained for renamed/retired slugs; facility slug
@@ -4600,6 +4665,7 @@ model StaffUser {
   tenantNotes                TenantNote[]
   paymentsTaken              Payment[]
   holdsPlaced                LeaseHold[]               @relation("HoldPlacedBy")
+  incidentsRecorded          Incident[]                @relation("IncidentRecordedBy")
   holdsLifted                LeaseHold[]               @relation("HoldLiftedBy")
   paymentPlansCreated        PaymentPlan[]             @relation("PaymentPlanCreatedBy")
   paymentPlansCancelled      PaymentPlan[]             @relation("PaymentPlanCancelledBy")

@@ -12,6 +12,7 @@ import {
 } from './sign-in'
 import { expectNoHorizontalOverflow, revealGateCode, TEXT_SPACING } from './a11y-helpers'
 import { createPayReceiptFixture } from './pay-receipt-fixture'
+import { createIncidentFixture } from './incident-fixture'
 
 // B-201 / PRD 02 §5.5 FR-24 (WCAG 2.1 AA, 1.4.10 Reflow, 1.4.4 Resize text,
 // 1.4.12 Text spacing).
@@ -120,6 +121,17 @@ const REACH: Record<string, { audience: Audience; go: (page: Page) => Promise<vo
       cleanups.push(fixture.cleanup)
       await page.goto(`/pay/${fixture.token}/done?payment=${fixture.paymentId}`)
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    },
+  },
+  // B-424. A five-column gate-log table inside a narrow record page. The
+  // fixture row is disposable and removed in `afterAll`, per B-120.
+  '/admin/incidents/[id]': {
+    audience: 'admin',
+    async go(page) {
+      const fixture = await createIncidentFixture()
+      cleanups.push(fixture.cleanup)
+      await page.goto(`/admin/incidents/${fixture.id}`)
+      await expect(page.getByRole('table', { name: /inside the incident window/ })).toBeVisible()
     },
   },
   '/portal/statements/account/[accountId]/[period]': {

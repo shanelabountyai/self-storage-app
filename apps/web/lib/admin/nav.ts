@@ -52,6 +52,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'units', label: 'Units', href: '/admin/units', group: 'property', anyOf: ['units:edit'] },
   { key: 'walkthrough', label: 'Walkthrough', href: '/admin/walkthrough', group: 'property', anyOf: ['units:edit'] },
   { key: 'maintenance', label: 'Maintenance', href: '/admin/maintenance', group: 'property', anyOf: ['units:edit'] },
+  // B-424. A break-in or a flood as one record.
+  { key: 'incidents', label: 'Incidents', href: '/admin/incidents', group: 'property', anyOf: ['access:events'] },
   { key: 'overlocks', label: 'Overlocks', href: '/admin/overlocks', group: 'property', anyOf: ['delinquency:execute_step'] },
   { key: 'access', label: 'Gate activity', href: '/admin/access', group: 'property', anyOf: ['access:events'] },
   { key: 'keypad-queue', label: 'Keypad queue', href: '/admin/access/queue', group: 'property', anyOf: ['tenants:view'] },

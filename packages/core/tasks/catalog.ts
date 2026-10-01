@@ -587,6 +587,15 @@ export const TASK_TYPES = [
     requiredProofFields: ["note"],
     sensitive: false,
   },
+  {
+    // B-424. One per affected tenant when an incident is recorded, so the
+    // call each of them gets starts from the same record. The detail names
+    // the incident and the units; the note says what the tenant was told.
+    type: "incident_follow_up",
+    label: "Incident — contact this tenant",
+    requiredProofFields: ["note"],
+    sensitive: false,
+  },
 ] as const satisfies readonly TaskTypeSpec[];
 
 export type TaskType = (typeof TASK_TYPES)[number]["type"];

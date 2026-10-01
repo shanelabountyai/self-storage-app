@@ -144,7 +144,7 @@ export async function verifyDocument(documentId: string): Promise<
 
 export type LogManualDocumentInput = {
   facilityId: string
-  type: Extract<DocumentType, 'id_copy' | 'insurance_proof' | 'other'>
+  type: Extract<DocumentType, 'id_copy' | 'insurance_proof' | 'inspection_photo' | 'other'>
   subjectType: string
   subjectId: string
   title: string

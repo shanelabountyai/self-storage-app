@@ -183,6 +183,7 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/overlocks',
   '/admin/walkthrough',
   '/admin/maintenance',
+  '/admin/incidents',
   '/admin/auctions',
   '/admin/rate-increases',
   '/admin/pos',
@@ -292,6 +293,8 @@ export const SCANNED_BY_OWN_SPEC = [
   // it by a click from the list is the only way to scan the page rather than
   // an empty state.
   { route: '/admin/billing/accounts/[id]', spec: 'e2e/admin-billing-accounts.spec.ts' },
+  // B-424. Needs a real incident; the spec writes a disposable row of its own.
+  { route: '/admin/incidents/[id]', spec: 'e2e/admin-incidents.spec.ts' },
   // B-256. Needs a real account id AND a real month, neither of which a bare
   // `goto` can produce — and the substance of the page is the row per unit,
   // which only exists once an account has some. Reached the way the payer
@@ -675,6 +678,16 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layout: 'excepted',
     layoutException:
       "The admin route loop measures this page at all three widths, and the confirm step adds `AdminForm`'s echo list to that same measured container.",
+  },
+  // B-424. The echo names the units whose tenants the one message reaches;
+  // the send itself is never pressed against demo tenants.
+  {
+    route: '/admin/incidents/[id]',
+    state: 'the notify confirm step',
+    spec: 'e2e/admin-incidents.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The own-spec route loop measures this page at all three widths, and the confirm step adds `AdminForm`'s echo list to that same measured container.",
   },
   {
     route: '/admin/settings/facilities/new',

@@ -54,6 +54,7 @@ const NO_FACILITY_ID: Record<string, string> = {
   Suppression: 'the shared suppression list is org-wide by address (PRD 05 CN-20); an opt-out spans facilities',
   PayLink: 'scoped through the lease it lets someone pay',
   LeaseHold: 'scoped through the lease it holds',
+  IncidentUnit: 'a line of an incident, scoped through the incident that owns it (B-424)',
   PaymentPlan: 'scoped through the lease it holds — the same reasoning LeaseHold is exempt (PRD 02 §4.6 US-25, B-090)',
   PaymentPlanInstallment: 'scoped through the plan it belongs to, which carries the facilityId indirectly via its lease',
   PromoCode:
