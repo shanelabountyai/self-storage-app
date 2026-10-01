@@ -539,7 +539,7 @@ test('"What you\'d pay today" itemizes and foots', async ({ page }) => {
 
   // B-397. The late/leave block reads the facility's own configuration (the
   // figures are asserted against config in public-inventory-db.test.ts).
-  await expect(card).toContainText('If you pay late / If you leave')
+  await expect(card.getByRole('heading', { name: 'If you pay late / If you leave', level: 4 })).toBeVisible()
   await expect(card).toContainText('Rent is due')
   await expect(card).toContainText('Late fee')
   await expect(card).toContainText('To move out')

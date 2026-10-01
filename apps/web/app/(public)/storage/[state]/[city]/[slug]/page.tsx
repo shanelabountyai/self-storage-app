@@ -260,7 +260,7 @@ function LateAndLeaveTerms({ terms, dict }: { terms: FacilityTerms; dict: Dictio
   ]
   return (
     <div className="mt-4 border-t pt-3">
-      <p className="text-sm font-medium">{translate(dict, 'facility.lateHeading')}</p>
+      <h4 className="text-sm font-medium">{translate(dict, 'facility.lateHeading')}</h4>
       <dl className="mt-2 flex flex-col gap-2 text-sm">
         {rows.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-4">
