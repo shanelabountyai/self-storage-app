@@ -132,7 +132,11 @@ export default async function ProtectionPage() {
           )}
 
           {unit.pending && (
-            <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty print:hidden">
+            // B-423. `print:hidden` sits on a wrapper, not on the live region:
+            // `tests/live-region-display.test.ts` refuses any `hidden` class on
+            // a `role="status"` tag, and keeping that guard blunt is worth a div.
+            <div className="print:hidden">
+            <div role="status" className="border-input rounded-md border p-3 text-sm text-pretty">
               <p>
                 {unit.pending.toPlanName
                   ? t('prot.pendingChange', {
@@ -154,6 +158,7 @@ export default async function ProtectionPage() {
                   {t('prot.callOff')}
                 </button>
               </AdminForm>
+            </div>
             </div>
           )}
 
