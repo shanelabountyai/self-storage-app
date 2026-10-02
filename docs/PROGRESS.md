@@ -12273,3 +12273,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** Nothing.
 
 **Verification.** `metrics.test.ts` 49 passed; typecheck (tests included) clean. The e2e locator in `admin.spec.ts` was updated for the new label but not run; the full `npm test` was not run. No migration.
+
+## B-430 — Move-out reasons have a CSV (2026-10-02, `56a48ed`)
+
+**What it built.** `/admin/reports/moves.csv?month=`, linked as "Export CSV" beside Move-ins and move-outs. One row per facility plus "All facilities": move-ins, move-outs, net, then one column per move-out cause including "Not recorded". `movesCsv(report)` in `lib/admin/reports.ts` builds it from the same `MovesReport` the screen renders; the route reuses `reportRangeForMonth`.
+
+**What it decided.** Report 3 had no CSV at all (B-399's note said B-400 owned it; B-400's entry says that was a misreading), so the export covers the report's move counts, not just the cause columns. Reservation conversion is not included.
+
+**What it left behind.** Conversion columns are screen-only. The route has no e2e (staff-only, same as occupancy.csv).
+
+**Verification.** `tests/moves-csv.test.ts` (reason columns sum to Move-outs on every row and the roll-up); typecheck (tests included) and lint clean. Full `npm test` not run. No migration.
