@@ -12264,7 +12264,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** Typecheck (tests included) clean; lint 0 errors. e2e on desktop-chrome, `portal-move-out.spec.ts`: 11 passed with setup. The full `npm test` and mobile-chrome were not run. No migration.
 
-## B-429 — "All past due" no longer claims more than it counts (2026-10-02, SHA below)
+## B-429 — "All past due" no longer claims more than it counts (2026-10-02, `adc2e89`)
 
 **What it built.** The delinquency queue's tile is now "Owed now (includes due today)". One unit check in `metrics.test.ts` pins that a bill due today (day 0) is in `totalCents`.
 
