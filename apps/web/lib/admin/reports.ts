@@ -4,6 +4,8 @@ import {
   attachRate,
   daysPastDue,
   economicOccupancy,
+  MOVE_OUT_CAUSES,
+  MOVE_OUT_CAUSE_LABELS,
   moveCounts,
   normalizeChannel,
   normalizeSource,
@@ -29,6 +31,7 @@ import {
 } from '@storage/core/metrics'
 import { OCCUPYING_LEASE_STATUSES } from '@storage/core/inventory'
 import { businessDateFor } from '@storage/core/jobs'
+import { toCsv } from '@/lib/admin/csv'
 import { effectsByLease } from '@/lib/admin/holds'
 import { facilityAccess, ForbiddenError, can } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
@@ -583,6 +586,26 @@ export async function movesReport(
       ),
     },
   }
+}
+
+/// B-430. Report 3 as a CSV: the screen's counts plus one column per move-out
+/// cause, per facility and rolled up. Built from the same `MovesReport` the
+/// screen renders, so the reason columns sum to "Move-outs" on every row.
+export function movesCsv(report: MovesReport): string {
+  const line = (name: string, c: MoveCounts) => [
+    name,
+    c.moveIns,
+    c.moveOuts,
+    c.net,
+    ...MOVE_OUT_CAUSES.map((cause) => c.byMoveOutCause[cause]),
+  ]
+  return toCsv(
+    ['Facility', 'Move-ins', 'Move-outs', 'Net', ...MOVE_OUT_CAUSES.map((c) => MOVE_OUT_CAUSE_LABELS[c])],
+    [
+      ...report.rows.map((row) => line(row.facilityName, row.moves)),
+      line('All facilities', report.total.moves),
+    ],
+  )
 }
 
 /// One facility's moves. Same reasoning as `occupancyForFacility` above: a

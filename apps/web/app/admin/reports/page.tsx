@@ -496,9 +496,17 @@ export default async function ReportsPage({
       </nav>
 
       <section aria-labelledby="moves-heading" className="flex flex-col gap-3">
-        <h2 id="moves-heading" className="font-medium">
-          Move-ins and move-outs
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="moves-heading" className="font-medium">
+            Move-ins and move-outs
+          </h2>
+          <Link
+            href={`/admin/reports/moves.csv?month=${selectedMonth}`}
+            className="text-sm underline underline-offset-2"
+          >
+            Export CSV
+          </Link>
+        </div>
         <ScrollRegion aria-label="Move-ins and move-outs">
           <DataTable className="min-w-2xl">
             <caption className="sr-only">Move-ins, move-outs, net and reservation conversion per facility for {label}</caption>
