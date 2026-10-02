@@ -107,7 +107,7 @@ export default async function DelinquencyQueuePage({
           ['Owed by tenants with a step today', formatCents(pastDueCents)],
           ['Tenants with a step today', String(byLease.size)],
           ['Lock-out eligible', String(lockOutEligible)],
-          ...(ar ? [['All past due', formatCents(ar.aging.totalCents)]] : []),
+          ...(ar ? [['Owed now (includes due today)', formatCents(ar.aging.totalCents)]] : []),
         ].map(([label, value]) => (
           <Card key={label} className="p-3">
             <dt className="text-muted-foreground text-xs font-semibold uppercase">{label}</dt>

@@ -134,6 +134,15 @@ describe('roll-up equals the sum of the facilities', () => {
     expect(rolled.ratio).not.toBeCloseTo(naiveAverage, 3)
   })
 
+  it('counts a bill due today in the total, which the tiles label "Owed now" (B-429)', () => {
+    const aging = arAging([
+      { daysPastDue: 0, outstandingCents: 700 },
+      { daysPastDue: 5, outstandingCents: 1_000 },
+    ])
+    expect(aging.totalCents).toBe(1_700)
+    expect(aging.d0to10).toBe(1_700)
+  })
+
   it('rolls AR aging and move counts up by summation too', () => {
     const a = arAging([{ daysPastDue: 5, outstandingCents: 1_000 }])
     const b = arAging([{ daysPastDue: 45, outstandingCents: 2_000 }])

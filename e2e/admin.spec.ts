@@ -106,7 +106,7 @@ test.describe('signed in as the demo owner', () => {
   test('the delinquency queue shows the facility-wide past-due total (B-394)', async ({ page }) => {
     await page.goto('/admin/delinquency')
     const allPastDue = page
-      .locator('dt', { hasText: /^All past due$/ })
+      .locator('dt', { hasText: /^Owed now \(includes due today\)$/ })
       .locator('xpath=following-sibling::dd')
     await expect(allPastDue).toHaveText(/^\$\d/)
     await expect(allPastDue).not.toHaveText('$0.00')

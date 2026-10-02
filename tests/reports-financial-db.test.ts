@@ -475,7 +475,7 @@ describeDb('financial reports', () => {
     })
 
     it('counts the tenants behind the figure the delinquency queue shows (B-394)', async () => {
-      // The queue's "All past due" and its empty state's "{N} tenants owe {$X}"
+      // The queue's "Owed now" and its empty state's "{N} tenants owe {$X}"
       // read `agingForFacility` directly. This fixture has two leases, two
       // tenants, both carrying a balance, and no step due today — the quiet
       // day on which the queue used to say "Past due $0".

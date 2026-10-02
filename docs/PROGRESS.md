@@ -12263,3 +12263,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** Nothing. The refusal (no cause) path does not round-trip the choice because there is none to keep.
 
 **Verification.** Typecheck (tests included) clean; lint 0 errors. e2e on desktop-chrome, `portal-move-out.spec.ts`: 11 passed with setup. The full `npm test` and mobile-chrome were not run. No migration.
+
+## B-429 — "All past due" no longer claims more than it counts (2026-10-02, SHA below)
+
+**What it built.** The delinquency queue's tile is now "Owed now (includes due today)". One unit check in `metrics.test.ts` pins that a bill due today (day 0) is in `totalCents`.
+
+**What it decided.** Rename, not exclude: `arAging` puts day 0 in `d0to10` and the dashboard "Money owed" tile and the per-facility link read the same `totalCents`, so excluding day 0 would have split three figures that agree. The dashboard label "Money owed" already says the same thing and was left.
+
+**What it left behind.** Nothing.
+
+**Verification.** `metrics.test.ts` 49 passed; typecheck (tests included) clean. The e2e locator in `admin.spec.ts` was updated for the new label but not run; the full `npm test` was not run. No migration.
