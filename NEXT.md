@@ -1,6 +1,6 @@
 # Next
 
-**B-428 is built** (2026-10-02, `SHA`). **Next item: B-429** (read its row in `06-backlog.md`; B-422 stays blocked on PRD 02 §10 Q5). `/portal/move-out` keeps the chosen reason and note through "Update". No migration. **Owner actions:** unchanged from B-424 (cloud dev and production are seven migrations behind; production is manual, D-143).
+**B-428 is built** (2026-10-02, `05c87d0`). **Next item: B-429** (read its row in `06-backlog.md`; B-422 stays blocked on PRD 02 §10 Q5). `/portal/move-out` keeps the chosen reason and note through "Update". No migration. **Owner actions:** unchanged from B-424 (cloud dev and production are seven migrations behind; production is manual, D-143).
 
 **B-427 is built** (2026-10-01, `b16b67d`). **Next item: B-428** (read its row in `06-backlog.md`; B-422 stays blocked on PRD 02 §10 Q5). `/reservations` now has the day plan (address, today's office and gate hours, directions) and a "Change move-in date" form that moves the hold in place and re-quotes the rate (`changeMoveInDate`). No migration. **Left behind, no row:** the expired-hold page and the changed-date state are unscanned; `createReservation` judges its window in the server zone. **Owner actions:** unchanged from B-424 (cloud dev and production are seven migrations behind; production is manual, D-143). The full `npm test` was not run here (load 50 to 150).
 

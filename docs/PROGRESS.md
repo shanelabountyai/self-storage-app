@@ -12254,7 +12254,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** `npm run typecheck` (tests included) and lint clean. `reserve-db` 39 passed alone (two older tests timed out in a combined run at load ~50 to 150 and passed on rerun). e2e on desktop-chrome against a production build: the reserve and cancel specs, 3 passed with setup. The full `npm test` and mobile-chrome were not run. No migration.
 
-## B-428 — The move-out form keeps the reason through "Update" (2026-10-02, `SHA`)
+## B-428 — The move-out form keeps the reason through "Update" (2026-10-02, `05c87d0`)
 
 **What it built.** `/portal/move-out` reads `cause` and `causeNote` from `searchParams` and puts them back (`defaultChecked`, `defaultValue`), so "Update" (a GET of the same form) no longer resets the reason. One e2e: pick a reason and a note, press Update, both are still there.
 
