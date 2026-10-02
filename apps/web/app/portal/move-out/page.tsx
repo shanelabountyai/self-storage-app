@@ -55,9 +55,15 @@ function formatDate(date: Date, locale: string): string {
 export default async function PortalMoveOutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lease?: string; date?: string }>;
+  searchParams: Promise<{
+    lease?: string
+    date?: string
+    cause?: string
+    causeNote?: string
+  }>;
 }) {
-  const { lease: leaseId, date } = await searchParams;
+  const { lease: leaseId, date, cause: chosenCause, causeNote } =
+    await searchParams;
   const actor = await requireTenantActor();
   const leases = await tenantMoveOutLeases(actor.tenantId);
   const locale = await getLocale();
@@ -300,6 +306,9 @@ export default async function PortalMoveOutPage({
             as="radio"
             value={cause}
             label={t(`mo.cause.${cause}` as MessageKey)}
+            // B-428: "Update" is a GET of this form, so the choice comes back
+            // in the query string and must be put back.
+            defaultChecked={chosenCause === cause}
           />
         ))}
       </FieldSet>
@@ -307,6 +316,7 @@ export default async function PortalMoveOutPage({
         name="causeNote"
         label={t('mo.cause.note')}
         maxLength={200}
+        defaultValue={causeNote}
       />
 
       {previewProblem && (

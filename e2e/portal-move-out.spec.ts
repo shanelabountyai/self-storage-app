@@ -130,6 +130,17 @@ test.describe('signed in as the demo tenant', () => {
     await assertNoAxeViolations(page)
   })
 
+  // B-428. "Update" is a GET of the form; the reason has to survive it.
+  test('the chosen reason and note survive Update', async ({ page }) => {
+    await page.goto('/portal/move-out')
+    await page.getByLabel('I bought a home').check()
+    await page.getByLabel(/Anything you would like to add/).fill('closing in May')
+    await page.getByRole('button', { name: 'Update' }).click()
+
+    await expect(page.getByLabel('I bought a home')).toBeChecked()
+    await expect(page.getByLabel(/Anything you would like to add/)).toHaveValue('closing in May')
+  })
+
   // B-184 (T1). B-173's `stalePreview` guard, reachable the ordinary way — this
   // page has an explicit "Update" button beside the picker (a native GET
   // submit of the same form), so typing a new date and pressing "Request a

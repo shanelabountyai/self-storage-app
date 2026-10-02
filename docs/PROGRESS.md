@@ -12253,3 +12253,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** (1) An expired hold's page (the "Reserve again" branch) has no e2e of its own; the cancelled state is asserted and shares the branch. (2) `createReservation` still judges its window in the server's zone, not the facility's. (3) The changed-date state has no axe scan. No row for either.
 
 **Verification.** `npm run typecheck` (tests included) and lint clean. `reserve-db` 39 passed alone (two older tests timed out in a combined run at load ~50 to 150 and passed on rerun). e2e on desktop-chrome against a production build: the reserve and cancel specs, 3 passed with setup. The full `npm test` and mobile-chrome were not run. No migration.
+
+## B-428 — The move-out form keeps the reason through "Update" (2026-10-02, `SHA`)
+
+**What it built.** `/portal/move-out` reads `cause` and `causeNote` from `searchParams` and puts them back (`defaultChecked`, `defaultValue`), so "Update" (a GET of the same form) no longer resets the reason. One e2e: pick a reason and a note, press Update, both are still there.
+
+**What it decided.** The row's second half (move the reason above the figures) was already true: the fieldset sits between the date and the settlement `<dl>`, so it was not touched. The values come back through the query string, so nothing is stored.
+
+**What it left behind.** Nothing. The refusal (no cause) path does not round-trip the choice because there is none to keep.
+
+**Verification.** Typecheck (tests included) clean; lint 0 errors. e2e on desktop-chrome, `portal-move-out.spec.ts`: 11 passed with setup. The full `npm test` and mobile-chrome were not run. No migration.
