@@ -1,3 +1,5 @@
+**B-432 is built** (2026-10-03, `11993ed`). **Next item: B-433** (read its row in `06-backlog.md`; B-422 stays blocked on PRD 02 §10 Q5). The confirmation and move-in email give building, floor and a per-facility "Finding your unit" sentence (`Facility.unitFindingNote`, settings field). **New migration `b432_unit_finding_note`:** run `npm run db:migrate:test` and `db:migrate:e2e` when switching to this branch. Empty-by-design merge fields go in `OPTIONAL_MERGE_FIELDS`. **Left behind:** provisioned page unscanned, e2e not run. **Owner actions:** cloud dev and production are eight migrations behind; production is manual (D-143).
+
 **B-431 is built** (2026-10-03, `4e739e9`). **Next item: B-432** (read its row in `06-backlog.md`; B-422 stays blocked on PRD 02 §10 Q5). `/portal/access` shows the tenant's own 30-day gate activity. No migration. **Left behind:** populated table not axe-scanned, e2e not run. **Owner actions:** unchanged from B-424 (cloud dev and production are seven migrations behind; production is manual, D-143).
 
 

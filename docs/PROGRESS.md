@@ -12294,7 +12294,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** New test and `authorized-access-portal-db.test.ts` pass; typecheck (tests included) clean; lint 0 errors. Full `npm test` not run. No migration.
 
-## B-432 — The confirmation says where the unit is, not only where the site is (2026-10-03, SHA below)
+## B-432 — The confirmation says where the unit is, not only where the site is (2026-10-03, `11993ed`)
 
 **What it built.** The provisioned step and the move-in email now say "Building B, floor 2" for each claimed unit (`unitPlace`, `lib/checkout/unit-location.ts`, shared by both), then the facility's own sentence. New `Facility.unitFindingNote` (migration `b432_unit_finding_note`), a "Finding your unit" field on `/admin/settings` next to County, carried on `PublicFacility`. The email gets a trailing `{{unit.location_line}}` on the address sentence of `lease_moved_in_welcome`. Tests: `tests/unit-location.test.ts`; one new case in `comms-move-in-db.test.ts`, and the existing welcome test asserts a site that set nothing sends the old sentence.
 
