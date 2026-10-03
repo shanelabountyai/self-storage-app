@@ -10,6 +10,8 @@ import { codeForTenantAt } from '@/lib/access/provision'
 import { UnlockButton } from '@/components/portal/unlock-button'
 import { GateCodePanel } from '@/components/portal/gate-code-panel'
 import { AnnounceRegion } from '@/components/admin/announce'
+import { ScrollRegion } from '@/components/ui/scroll-region'
+import { ownAccessEvents, type OwnAccessEvent } from '@/lib/portal/own-access-events'
 import {
   addPersonAction,
   enrollMobileKeyAction,
@@ -35,10 +37,11 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function AccessPage() {
   const actor = await requireTenantActor()
-  const [loaded, impersonation, mobileKeys] = await Promise.all([
+  const [loaded, impersonation, mobileKeys, events] = await Promise.all([
     authorizedAccessForTenant(actor.tenantId),
     currentImpersonation(),
     mobileKeysForTenant(actor.tenantId),
+    ownAccessEvents(actor.tenantId),
   ])
 
   // PRD 09 FR-12 (B-091 part 2). Same rule as the tenant's own code on
@@ -254,6 +257,8 @@ export default async function AccessPage() {
         </section>
       ))}
       </section>
+
+      <HistorySection events={events} locale={locale} dict={dict} />
     </div>
   )
 }
@@ -455,4 +460,63 @@ function formatDay(isoDate: string, locale: string): string {
     day: 'numeric',
     year: 'numeric',
   })
+}
+
+// PRD 03 US-5 (B-431). The tenant's own gate activity, last 30 days. Times are
+// text in the facility's zone (SC 1.3.1), never a countdown.
+function HistorySection({
+  events,
+  locale,
+  dict,
+}: {
+  events: OwnAccessEvent[]
+  locale: string
+  dict: Dictionary
+}) {
+  const t = (key: MessageKey) => translate(dict, key)
+  return (
+    <section aria-labelledby="gate-history" className="flex flex-col gap-3">
+      <h2 id="gate-history" className="text-lg font-semibold">
+        {t('acc.historyHeading')}
+      </h2>
+      <p className="text-muted-foreground max-w-prose text-sm text-pretty">{t('acc.historyIntro')}</p>
+      {events.length === 0 ? (
+        <p className="text-muted-foreground text-sm">{t('acc.historyEmpty')}</p>
+      ) : (
+        <ScrollRegion aria-label={t('acc.historyRegion')}>
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">{t('acc.historyCaption')}</caption>
+            <thead>
+              <tr>
+                {(['historyTime', 'historyGate', 'historyResult', 'historyHow', 'historyWho'] as const).map((k) => (
+                  <th key={k} scope="col" className="py-2 pr-4 font-medium">
+                    {t(`acc.${k}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((e) => (
+                <tr key={e.id} className="border-input border-t">
+                  <th scope="row" className="py-2 pr-4 font-normal">
+                    {new Intl.DateTimeFormat(locale, {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                      timeZone: e.timezone,
+                    }).format(e.occurredAt)}
+                  </th>
+                  <td className="py-2 pr-4">{e.facilityName}</td>
+                  <td className="py-2 pr-4">{t(e.result === 'granted' ? 'acc.historyGranted' : 'acc.historyDenied')}</td>
+                  <td className="py-2 pr-4">
+                    {e.entryMethod === 'mobile_key' ? t('acc.historyPhone') : e.entryMethod ? t('acc.historyKeypad') : ''}
+                  </td>
+                  <td className="py-2 pr-4">{e.personName ?? t('acc.historyYou')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollRegion>
+      )}
+    </section>
+  )
 }

@@ -12283,3 +12283,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** Conversion columns are screen-only. The route has no e2e (staff-only, same as occupancy.csv).
 
 **Verification.** `tests/moves-csv.test.ts` (reason columns sum to Move-outs on every row and the roll-up); typecheck (tests included) and lint clean. Full `npm test` not run. No migration.
+
+## B-431 — A tenant can see who used their gate code (2026-10-03, `SHA`)
+
+**What it built.** `/portal/access` gains "Recent gate activity": the last 30 days of gate events on the tenant's own grant and their authorized persons' grants, in a captioned table (`<th scope>`) inside `ScrollRegion`, times as facility-local text. Query is `lib/portal/own-access-events.ts` (`ownAccessEvents`). `tests/own-access-events-db.test.ts`: tenant and person listed newest first, a 31-day-old event and a neighbour's event excluded.
+
+**What it decided.** It does not reuse `accessEventLog`: that is scoped by the staff `access:events` permission and carries tenant names, and a tenant has no such key, so ownership (own grant, or a grant whose person belongs to one of their leases) is the only filter. A withdrawn person's past entries stay listed. Unknown-code attempts have no credential and are never shown. Capped at 500 rows.
+
+**What it left behind.** The populated table is not axe-scanned and the accessibility statement was not edited (the route was already listed and the section adds no new claim); e2e not run. No pagination beyond the cap.
+
+**Verification.** New test and `authorized-access-portal-db.test.ts` pass; typecheck (tests included) clean; lint 0 errors. Full `npm test` not run. No migration.
