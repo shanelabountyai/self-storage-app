@@ -12284,7 +12284,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** `tests/moves-csv.test.ts` (reason columns sum to Move-outs on every row and the roll-up); typecheck (tests included) and lint clean. Full `npm test` not run. No migration.
 
-## B-431 — A tenant can see who used their gate code (2026-10-03, `SHA`)
+## B-431 — A tenant can see who used their gate code (2026-10-03, `4e739e9`)
 
 **What it built.** `/portal/access` gains "Recent gate activity": the last 30 days of gate events on the tenant's own grant and their authorized persons' grants, in a captioned table (`<th scope>`) inside `ScrollRegion`, times as facility-local text. Query is `lib/portal/own-access-events.ts` (`ownAccessEvents`). `tests/own-access-events-db.test.ts`: tenant and person listed newest first, a 31-day-old event and a neighbour's event excluded.
 

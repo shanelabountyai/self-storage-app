@@ -1,3 +1,5 @@
+**B-431 is built** (2026-10-03, `4e739e9`). **Next item: B-432** (read its row in `06-backlog.md`; B-422 stays blocked on PRD 02 §10 Q5). `/portal/access` shows the tenant's own 30-day gate activity. No migration. **Left behind:** populated table not axe-scanned, e2e not run. **Owner actions:** unchanged from B-424 (cloud dev and production are seven migrations behind; production is manual, D-143).
+
 
 **B-429 is built** (2026-10-02, `adc2e89`). **Next item: B-430** (read its row in `06-backlog.md`; B-422 stays blocked on PRD 02 §10 Q5). The delinquency tile reads "Owed now (includes due today)". No migration. **Left behind:** the `e2e/admin.spec.ts` label locator was updated but not run. **Owner actions:** unchanged from B-424 (cloud dev and production are seven migrations behind; production is manual, D-143).
 
