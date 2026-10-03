@@ -79,6 +79,11 @@ export function isAccountTemplateKey(key: string): boolean {
 /// Available only on templates whose event supplies them. Keyed by event name,
 /// mirroring `CONTEXT_EXTENDERS` in the comms service — if a field is added
 /// there it belongs here too, and the test below is what enforces that.
+/// B-432. Built as an optional trailing sentence, so blank on purpose. Every
+/// other field still fails a render when empty (FR-9). A field here is not
+/// listed in a template's `requiredMergeFields`.
+export const OPTIONAL_MERGE_FIELDS: ReadonlySet<string> = new Set(['unit.location_line'])
+
 export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
   'lease.moved_in': [
     { field: 'unit.number', description: 'Unit number', sample: 'A-12' },
@@ -89,6 +94,7 @@ export const EVENT_MERGE_FIELDS: Record<string, readonly MergeFieldSpec[]> = {
     // "A-12, B-04 and C-11" for three, so one template serves both without a
     // conditional the template language does not have.
     { field: 'unit.number_list', description: 'Every unit this move-in covers', sample: 'A-12 and B-04' },
+    { field: 'unit.location_line', description: 'Building, floor and the facility\'s finding-your-unit sentence, with a leading space, or empty', sample: ' Building B, floor 2. Turn left after the office.' },
     { field: 'access.gate_code_line', description: 'The gate-code sentence, or a fallback if no code is issued yet', sample: 'Your gate code is 4821.' },
     { field: 'billing.first_charge_line', description: 'What was charged today and what recurs', sample: 'You were charged $161.00 today. After that, rent is $129.00/mo, billed on day 12 of each month.' },
   ],

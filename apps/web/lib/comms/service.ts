@@ -33,6 +33,7 @@ import { currentConsent } from '@storage/core/consent'
 import { createTask } from '@/lib/admin/tasks'
 import { mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe-token'
 import { mintCheckoutResumeToken, checkoutResumeUrl } from '@/lib/checkout/resume-token'
+import { unitPlace, type UnitPlace } from '@/lib/checkout/unit-location'
 import {
   commsEnabled,
   effectiveRecipient,
@@ -879,13 +880,14 @@ async function referralRewardContext(
 /// the same reason), while `CheckoutSessionUnit` records exactly which units
 /// were bought together. Going lease → line → session → lines is therefore the
 /// only link that actually exists, rather than one inferred from timestamps.
-async function movedInUnitList(leaseId: string, locale: Locale): Promise<string> {
+async function movedInUnits(leaseId: string): Promise<UnitPlace[]> {
+  const pick = { number: true, building: true, floor: true } as const
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId },
-    select: { unitId: true, unit: { select: { number: true } } },
+    select: { unitId: true, unit: { select: pick } },
   })
-  if (!lease) return ''
-  const own = lease.unit?.number ?? ''
+  if (!lease?.unit) return []
+  const own = [lease.unit]
 
   // Newest first: a unit can have been in an earlier, abandoned basket too, and
   // the one that produced THIS lease is the most recent to have claimed it.
@@ -900,18 +902,39 @@ async function movedInUnitList(leaseId: string, locale: Locale): Promise<string>
 
   const lines = await prisma.checkoutSessionUnit.findMany({
     where: { checkoutSessionId: line.checkoutSessionId },
-    select: { unit: { select: { number: true } } },
+    select: { unit: { select: pick } },
     orderBy: { createdAt: 'asc' },
   })
-  const numbers = lines
-    .map((row) => row.unit?.number)
-    .filter((number): number is string => Boolean(number))
-  if (numbers.length === 0) return own
+  const units = lines.flatMap((row) => (row.unit ? [row.unit] : []))
+  return units.length === 0 ? own : units
+}
+
+async function movedInUnitList(leaseId: string, locale: Locale): Promise<string> {
+  const numbers = (await movedInUnits(leaseId)).map((unit) => unit.number)
   // B-261. `Intl.ListFormat` replaces the hand-joined "A, B and C" this built:
   // Spanish drops the serial comma and uses "e" before an i- sound, which is
   // the kind of rule a join cannot know. Same tool B-259 used on
   // `/messaging-policy` for the same reason.
   return new Intl.ListFormat(LOCALE_TAG[locale], { style: 'long', type: 'conjunction' }).format(numbers)
+}
+
+/// B-432. Building, floor and the facility's own "finding your unit" sentence,
+/// as text to append to the address sentence. Empty when there is nothing to
+/// say, so a site that has set none sends the email it always sent.
+async function movedInLocationLine(leaseId: string, locale: Locale): Promise<string> {
+  const say = proseFor(locale)
+  const units = await movedInUnits(leaseId)
+  const places = units.flatMap((unit) => {
+    const place = unitPlace(unit, { building: say.unitBuilding, floor: say.unitFloor })
+    return place ? [units.length === 1 ? place : `${unit.number}: ${place}`] : []
+  })
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    select: { unit: { select: { facility: { select: { unitFindingNote: true } } } } },
+  })
+  const note = lease?.unit?.facility.unitFindingNote
+  const sentences = [places.length > 0 ? `${places.join('; ')}.` : null, note ?? null].filter(Boolean)
+  return sentences.length > 0 ? ` ${sentences.join(' ')}` : ''
 }
 
 const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
@@ -927,6 +950,7 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
       'access.gate_code_line': code ? say.gateCodeIssued(code) : say.gateCodePending,
       'billing.first_charge_line': await firstChargeLine(event.entityId, recipient.locale),
       'unit.number_list': await movedInUnitList(event.entityId, recipient.locale),
+      'unit.location_line': await movedInLocationLine(event.entityId, recipient.locale),
     }
   },
 

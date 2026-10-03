@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { escapeHtml } from '@storage/core/comms'
+import { escapeHtml, OPTIONAL_MERGE_FIELDS } from '@storage/core/comms'
 
 // PRD 05 FR-9 / FR-16. Pure, DB-free helpers: turning a template + a context
 // into a rendered message, and deriving the idempotency key that makes a send
@@ -82,7 +82,8 @@ function render(
   for (const match of template.matchAll(PLACEHOLDER)) {
     out += literal(template.slice(cursor, match.index))
     const value = context[match[1]]
-    if (value === undefined || textOf(value) === '') unresolved.add(match[1])
+    if (value === undefined || (textOf(value) === '' && !OPTIONAL_MERGE_FIELDS.has(match[1])))
+      unresolved.add(match[1])
     else out += mode === 'html' ? htmlOf(value) : textOf(value)
     cursor = match.index + match[0].length
   }

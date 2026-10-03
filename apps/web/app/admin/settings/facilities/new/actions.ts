@@ -114,6 +114,7 @@ export async function createFacilityAction(
       city: text('city'),
       state: state.toUpperCase(),
       county: null,
+      unitFindingNote: null,
       postalCode,
       timezone,
       phone: text('phone') || null,

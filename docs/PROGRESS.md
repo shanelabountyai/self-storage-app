@@ -12293,3 +12293,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** The populated table is not axe-scanned and the accessibility statement was not edited (the route was already listed and the section adds no new claim); e2e not run. No pagination beyond the cap.
 
 **Verification.** New test and `authorized-access-portal-db.test.ts` pass; typecheck (tests included) clean; lint 0 errors. Full `npm test` not run. No migration.
+
+## B-432 — The confirmation says where the unit is, not only where the site is (2026-10-03, SHA below)
+
+**What it built.** The provisioned step and the move-in email now say "Building B, floor 2" for each claimed unit (`unitPlace`, `lib/checkout/unit-location.ts`, shared by both), then the facility's own sentence. New `Facility.unitFindingNote` (migration `b432_unit_finding_note`), a "Finding your unit" field on `/admin/settings` next to County, carried on `PublicFacility`. The email gets a trailing `{{unit.location_line}}` on the address sentence of `lease_moved_in_welcome`. Tests: `tests/unit-location.test.ts`; one new case in `comms-move-in-db.test.ts`, and the existing welcome test asserts a site that set nothing sends the old sentence.
+
+**What it decided.** Floor is never null (default 1), so with no building floor 1 is silence and any other floor is named; with a building, floor 1 is named. New `OPTIONAL_MERGE_FIELDS` (`packages/core/comms/merge-fields.ts`): the renderer's FR-9 refuses an empty field everywhere else, and a blank-by-design trailing sentence cannot be a required field; `comms-billing-db`'s "declares every field it uses" excludes the set. A new facility is created with `unitFindingNote: null`; test fixtures for `FacilityDetailsInput` carry it.
+
+**What it left behind.** No e2e on the provisioned page (no fixture reaches `provisioned`, B-425), so the building/floor line is unscanned. The reservation-only fallback unit shows no place. The note is English only (free text, same as `heroCopy`). Cloud dev and production are now EIGHT migrations behind; production is manual (D-143). Run `npm run db:migrate:test` and `db:migrate:e2e` when switching to this branch.
+
+**Verification.** Full `npm test` 4,896 passed; typecheck (tests included) and lint 0 errors; schema drift clean. e2e not run.

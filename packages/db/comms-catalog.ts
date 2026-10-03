@@ -123,7 +123,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
     bodyText: [
       "Hi {{tenant.first_name}}, you're moved in!",
       '',
-      'Your unit is {{unit.number_list}} at {{facility.name}}, {{facility.address}}.',
+      'Your unit is {{unit.number_list}} at {{facility.name}}, {{facility.address}}.{{unit.location_line}}',
       '',
       '{{access.gate_code_line}}',
       '',
@@ -138,7 +138,7 @@ export const COMMS_TEMPLATES: readonly CommsTemplateSeed[] = [
       bodyText: [
         'Hola {{tenant.first_name}}: ¡ya está instalado!',
         '',
-        'Su unidad es {{unit.number_list}} en {{facility.name}}, {{facility.address}}.',
+        'Su unidad es {{unit.number_list}} en {{facility.name}}, {{facility.address}}.{{unit.location_line}}',
         '',
         '{{access.gate_code_line}}',
         '',

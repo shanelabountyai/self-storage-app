@@ -47,6 +47,8 @@ export type PublicFacility = {
   seoTitle: string | null
   metaDescription: string | null
   heroCopy: string | null
+  /// B-432. Shown on the move-in confirmation only.
+  unitFindingNote: string | null
   longDescription: string | null
   photos: { url: string; alt: string; kind: string }[]
   /// A facility's own FAQs. Empty means the generated five are shown instead.
@@ -109,6 +111,7 @@ export const publicFacilityBySlug = cache(async function publicFacilityBySlug(
       seoTitle: true,
       metaDescription: true,
       heroCopy: true,
+      unitFindingNote: true,
       longDescription: true,
       photos: {
         orderBy: { position: 'asc' },

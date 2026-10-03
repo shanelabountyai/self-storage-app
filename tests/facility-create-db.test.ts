@@ -53,6 +53,7 @@ function input(key: string) {
     city: 'Austin',
     state: 'tx',
     county: null,
+    unitFindingNote: null,
     postalCode: '78704',
     timezone: 'America/Chicago',
     phone: null,

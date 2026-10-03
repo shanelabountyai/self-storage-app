@@ -475,6 +475,9 @@ export const es: Dictionary = {
   'checkout.yourGateCode': 'Su código de la puerta',
   'checkout.unitNumber': 'Unidad {number}',
   'checkout.unitNumbers': 'Sus unidades: {numbers}',
+  'checkout.unitBuilding': 'Edificio {name}',
+  'checkout.unitFloor': 'piso {n}',
+  'checkout.unitWhere': '{number}: {place}',
   'checkout.savedAtOffice': 'Su contrato está guardado en la oficina.',
   'checkout.codeComing':
     'Le enviaremos su código de la puerta por mensaje de texto en 15 minutos. Si no le llega:',

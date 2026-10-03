@@ -187,6 +187,13 @@ export default async function AdminSettingsPage() {
             hint="Used to place an emergency hold on every site in a county."
           />
           <Field
+            name="unitFindingNote"
+            label="Finding your unit"
+            defaultValue={facility.unitFindingNote ?? ""}
+            maxLength={200}
+            hint="One sentence for the move-in confirmation and email, for example “Turn left after the office; Building B is at the back.”"
+          />
+          <Field
             name="postalCode"
             label="Postal code"
             defaultValue={facility.postalCode}

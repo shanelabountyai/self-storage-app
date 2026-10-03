@@ -41,6 +41,7 @@ import { leaseValuesFor } from '@/lib/lease/build'
 import { leaseIdForSession } from '@/lib/checkout/provision'
 import { nextChargeForLease } from '@/lib/portal/dashboard'
 import { codeForLease } from '@/lib/access/provision'
+import { unitPlace } from '@/lib/checkout/unit-location'
 import {
   directionsUrl,
   facilityPath,
@@ -268,7 +269,7 @@ export default async function CheckoutPage({
   // correctly. One query for every number rather than one per line.
   const basketUnits = await prisma.unit.findMany({
     where: { id: { in: session.units.map((line) => line.unitId).filter((id) => id !== null) } },
-    select: { id: true, number: true },
+    select: { id: true, number: true, building: true, floor: true },
   })
   const numberByUnitId = new Map(basketUnits.map((unit) => [unit.id, unit.number]))
   const labelFor = (typeId: string) => {
@@ -329,6 +330,17 @@ export default async function CheckoutPage({
   ]
   if (confirmedUnitNumbers.length === 0 && reservation?.unit?.number)
     confirmedUnitNumbers.push(reservation.unit.number)
+
+  // B-432. Building and floor for each claimed unit, where there is anything to
+  // say. The reservation fallback above is a single unit with no basket line,
+  // so it has no place to show.
+  const unitPlaces = basketUnits.flatMap((unit) => {
+    const place = unitPlace(unit, {
+      building: (name) => t('checkout.unitBuilding', { name }),
+      floor: (n) => t('checkout.unitFloor', { n }),
+    })
+    return place ? [{ number: unit.number, place }] : []
+  })
 
   const remaining = minutesLeft(session.lockExpiresAt)
   const lockedPromo = promoDiscountOn(session)
@@ -786,6 +798,22 @@ export default async function CheckoutPage({
                     ? t('checkout.unitNumber', { number: confirmedUnitNumbers[0] })
                     : t('checkout.unitNumbers', { numbers: confirmedUnitNumbers.join(', ') })}
                 </p>
+              )}
+              {/* B-432. Text, not a map: where the unit is once through the gate. */}
+              {unitPlaces.length > 0 && (
+                <p className="mt-1 text-sm text-pretty">
+                  {unitPlaces
+                    .map((u) =>
+                      unitPlaces.length === 1
+                        ? u.place
+                        : t('checkout.unitWhere', { number: u.number, place: u.place }),
+                    )
+                    .join('; ')}
+                  .
+                </p>
+              )}
+              {confirmationFacility?.unitFindingNote && (
+                <p className="mt-1 text-sm text-pretty">{confirmationFacility.unitFindingNote}</p>
               )}
               {/* B-239. The email is the only copy of the lease the renter has,
                   and "it never arrived" is the commonest first support call

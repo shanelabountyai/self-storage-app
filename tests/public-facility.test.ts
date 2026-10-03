@@ -73,6 +73,7 @@ describe('address and map links', () => {
     seoTitle: null,
     metaDescription: null,
     heroCopy: null,
+    unitFindingNote: null,
     longDescription: null,
     photos: [],
     faqs: [],

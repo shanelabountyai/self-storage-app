@@ -127,6 +127,7 @@ export async function updateFacilityDetailsAction(
       city: String(formData.get("city")),
       state: state.toUpperCase(),
       county: String(formData.get("county") || "").trim() || null,
+      unitFindingNote: String(formData.get("unitFindingNote") || "").trim() || null,
       postalCode: String(formData.get("postalCode")),
       timezone: String(formData.get("timezone")),
       phone: String(formData.get("phone") || "") || null,

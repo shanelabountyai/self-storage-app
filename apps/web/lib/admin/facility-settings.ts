@@ -113,6 +113,8 @@ export type FacilityDetailsInput = {
   state: string;
   /// B-420. Null clears it; the emergency hold's county match then skips this site.
   county: string | null;
+  /// B-432. How to find a unit inside the gate; null clears it.
+  unitFindingNote: string | null;
   postalCode: string;
   timezone: string;
   phone: string | null;

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { prisma } from '../packages/db'
 import { COMMS_RULES, COMMS_TEMPLATES } from '../packages/db/comms-catalog'
+import { OPTIONAL_MERGE_FIELDS } from '../packages/core/comms/merge-fields'
 import { processCommsEvent } from '../apps/web/lib/comms/service'
 import * as provider from '../apps/web/lib/comms/provider'
 
@@ -165,7 +166,7 @@ describeDb('billing notices', () => {
           ),
         )
         const declared = new Set(template.requiredMergeFields)
-        const undeclared = [...used].filter((field) => !declared.has(field))
+        const undeclared = [...used].filter((field) => !declared.has(field) && !OPTIONAL_MERGE_FIELDS.has(field))
         expect(undeclared, `${template.key} uses fields it does not declare`).toEqual([])
       }
     })

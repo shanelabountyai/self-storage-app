@@ -512,6 +512,9 @@ model Facility {
   /// B-420. Free text, as the county calls itself ("Travis"). Only read by the
   /// emergency hold, which matches it case-insensitively within `state`.
   county                   String?
+  /// B-432. One sentence on the confirmation and the move-in email about how to
+  /// reach a unit once through the gate ("Turn left at the office"). Null = none.
+  unitFindingNote          String?
   postalCode               String
   country                  String            @default("US")
   latitude                 Float?

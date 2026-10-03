@@ -131,6 +131,8 @@ describeDb('comms: real seeded content', () => {
     expect(message.bodySnapshot).toContain(`Your gate code is ${issued.code}.`)
     expect(message.bodySnapshot).toContain('You were charged $150.00 today')
     expect(message.bodySnapshot).toContain('unit is B-12')
+    // B-432: a site that set nothing sends the sentence it always sent.
+    expect(message.bodySnapshot).not.toContain('floor')
   })
 
   it('falls back to the honest "texted within 15 minutes" line with no credential issued', async () => {
@@ -141,6 +143,21 @@ describeDb('comms: real seeded content', () => {
       where: { facilityId, templateKey: 'lease_moved_in_welcome' },
     })
     expect(message.bodySnapshot).toContain('Your gate code will be texted to you within 15 minutes.')
+  })
+
+  it('says where the unit is when the unit has a building and the facility has a note (B-432)', async () => {
+    await prisma.unit.update({ where: { id: unitId }, data: { building: 'B', floor: 2 } })
+    await prisma.facility.update({ where: { id: facilityId }, data: { unitFindingNote: 'Turn left after the office.' } })
+    try {
+      await processCommsEvent(await moveInEvent())
+      const message = await prisma.message.findFirstOrThrow({
+        where: { facilityId, templateKey: 'lease_moved_in_welcome' },
+      })
+      expect(message.bodySnapshot).toContain('1 Storage Way, Austin, TX 78704. Building B, floor 2. Turn left after the office.')
+    } finally {
+      await prisma.unit.update({ where: { id: unitId }, data: { building: null, floor: 1 } })
+      await prisma.facility.update({ where: { id: facilityId }, data: { unitFindingNote: null } })
+    }
   })
 
   it('skips the welcome for a lease that already ended by the time the event is processed', async () => {

@@ -134,6 +134,8 @@ export type CommsProse = {
   // ── lease.moved_in ────────────────────────────────────────────────────────
   gateCodeIssued: (code: string) => string
   gateCodePending: string
+  unitBuilding: (name: string) => string
+  unitFloor: (n: number) => string
   firstCharge: (today: string, monthly: string, billingDay: number) => string
 
   // ── B-309: the business account's payer ───────────────────────────────────
@@ -261,6 +263,8 @@ export type CommsProse = {
 const en: CommsProse = {
   gateCodeIssued: (code) => `Your gate code is ${code}.`,
   gateCodePending: 'Your gate code will be texted to you within 15 minutes.',
+  unitBuilding: (name) => `Building ${name}`,
+  unitFloor: (n) => `floor ${n}`,
   firstCharge: (today, monthly, billingDay) =>
     `You were charged ${today} today. After that, rent is ${monthly}/mo, billed on day ${billingDay} of each month.`,
 
@@ -450,6 +454,8 @@ const en: CommsProse = {
 const es: CommsProse = {
   gateCodeIssued: (code) => `Su código de la puerta es ${code}.`,
   gateCodePending: 'Le enviaremos su código de la puerta por mensaje de texto dentro de 15 minutos.',
+  unitBuilding: (name) => `Edificio ${name}`,
+  unitFloor: (n) => `piso ${n}`,
   firstCharge: (today, monthly, billingDay) =>
     `Hoy se le cobró ${today}. Después, la renta es de ${monthly} al mes, con cargo el día ${billingDay} de cada mes.`,
 
