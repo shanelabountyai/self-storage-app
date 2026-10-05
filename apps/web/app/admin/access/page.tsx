@@ -33,6 +33,14 @@ const ENTRY_METHOD_LABELS: Record<string, string> = {
   unknown: '—',
 }
 
+const HOLDER_KIND_LABELS: Record<string, string> = {
+  staff: 'Staff',
+  vendor: 'Vendor',
+  temporary: 'Temporary',
+  auction_buyer: 'Auction buyer',
+  authorized_person: 'Authorized by a tenant',
+}
+
 function formatWhen(at: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-US', {
     dateStyle: 'medium',
@@ -194,6 +202,16 @@ export default async function AccessEventsPage({
                     >
                       {row.tenantName}
                     </Link>
+                  ) : row.holderName ? (
+                    // B-436 / US-10 AC4. A code that is not a tenant's own is
+                    // named by its holder, with the kind in words.
+                    <>
+                      {row.holderName}
+                      <span className="text-muted-foreground">
+                        {' '}
+                        · {HOLDER_KIND_LABELS[row.holderKind ?? 'temporary']}
+                      </span>
+                    </>
                   ) : (
                     <span className="text-muted-foreground">Unknown</span>
                   )}

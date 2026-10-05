@@ -94,6 +94,7 @@ async function applyToSimulatedController(command: GateCommandInput): Promise<Ad
             select: {
               state: true,
               extendedHours: true,
+              accessHours: true,
               authorizedPerson: { select: { accessHours: true } },
             },
           },
@@ -118,7 +119,8 @@ async function applyToSimulatedController(command: GateCommandInput): Promise<Ad
       })
       const schedule = scheduleForGrant(
         parseWeeklySchedule(facility?.gateHours ?? null),
-        credential.grant.authorizedPerson?.accessHours,
+        // B-436: a staff, vendor or temporary grant carries its own window.
+        credential.grant.authorizedPerson?.accessHours ?? credential.grant.accessHours,
       )
       const window = {
         // Same collapse `propagateGateHours` applies: an always-open schedule

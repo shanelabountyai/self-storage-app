@@ -6,6 +6,7 @@ import {
   addAdvertisement,
   approveAuction,
   cancelAuction,
+  issueAuctionBuyerCode,
   recordLockCut,
   recordSaleOutcome,
   recordSurplusDisposition,
@@ -187,4 +188,17 @@ export async function surplusDispositionAction(formData: FormData): Promise<void
     String(formData.get('note') ?? ''),
   )
   revalidate(caseId)
+}
+
+/// PRD 03 US-10 AC3 (B-436). The digits are in the success message once and
+/// nowhere afterwards.
+export async function issueBuyerCodeAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+  const caseId = String(formData.get('caseId') ?? '')
+  const result = await issueAuctionBuyerCode(actor, caseId, String(formData.get('buyerName') ?? ''))
+  if (!result.ok) return fieldError({ buyerName: result.reason })
+  return success(
+    `Code issued. It works through ${result.expiresOn}. Give it to the buyer now. It is not shown again.`,
+    [`Gate code: ${result.code}`],
+  )
 }

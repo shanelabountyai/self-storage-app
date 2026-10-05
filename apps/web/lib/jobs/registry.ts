@@ -5,6 +5,7 @@ import { drainGateCommands } from '@/lib/access/service'
 import { reconcileFacility } from '@/lib/access/reconciliation'
 import { pruneRetiredSecrets } from '@/lib/access/webhook-secrets'
 import { expireSharedAccess } from '@/lib/access/authorized-persons'
+import { expireNonTenantCodes } from '@/lib/access/non-tenant'
 import { provisionAccessForLease } from '@/lib/access/provision'
 import { processCommsEvent } from '@/lib/comms/service'
 import { scanExpiringCards, scanExpiringProtectionProofs } from '@/lib/billing/scans'
@@ -222,10 +223,12 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
     scope: 'per_facility',
     handler: async ({ facilityId, recordItem }) => {
       const { expired } = await expireSharedAccess(new Date(), facilityId ?? undefined)
+      // B-436. Staff, vendor and temporary codes end on the same boundary.
+      const nonTenant = await expireNonTenantCodes(new Date(), facilityId ?? undefined)
       recordItem({
         itemId: facilityId ?? 'global',
         ok: true,
-        message: `expired ${expired} shared-access code${expired === 1 ? '' : 's'}`,
+        message: `expired ${expired} shared-access code${expired === 1 ? '' : 's'}, ${nonTenant.expired} non-tenant`,
       })
     },
   },

@@ -112,14 +112,14 @@ export async function raiseManualTask(command: {
         where: { id: command.credentialId },
         select: {
           lease: { select: { unit: { select: { number: true } } } },
-          grant: { select: { tenant: { select: { firstName: true, lastName: true } } } },
+          grant: { select: { holderName: true, tenant: { select: { firstName: true, lastName: true } } } },
         },
       })
     : command.grantId
       ? await prisma.accessGrant
           .findUnique({
             where: { id: command.grantId },
-            select: { tenant: { select: { firstName: true, lastName: true } } },
+            select: { holderName: true, tenant: { select: { firstName: true, lastName: true } } },
           })
           .then((grant) => (grant ? { lease: null, grant } : null))
       : null
@@ -131,7 +131,10 @@ export async function raiseManualTask(command: {
     // decrypting the credential keeps the reveal path (SR-2, audited) the only
     // way to get a code out of storage.
     code: typeof command.payload.code === 'string' ? command.payload.code : null,
-    tenantName: tenant ? `${tenant.firstName} ${tenant.lastName}` : null,
+    // B-436: a staff, vendor or temporary code is named by its holder.
+    tenantName: tenant
+      ? `${tenant.firstName} ${tenant.lastName}`
+      : (credential?.grant.holderName ?? null),
     unitNumber: credential?.lease?.unit?.number ?? null,
   })
 

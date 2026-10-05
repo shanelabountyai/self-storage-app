@@ -65,6 +65,12 @@ export type GrantCause =
   /// person" on a Tuesday the tenant did nothing is a false statement about
   /// who did what.
   | 'system:shared_access_expired'
+  /// B-436 / PRD 03 US-10. A staff, vendor or temporary code ended with nobody
+  /// present: its date came round, its staff user was deactivated, or its
+  /// auction case was cancelled.
+  | 'system:non_tenant_code_expired'
+  | 'system:staff_deactivated'
+  | 'system:auction_cancelled'
   | `staff:${string}`
   /// B-105. A tenant acting on their own lease from the portal — adding or
   /// withdrawing somebody on their authorized-access list.

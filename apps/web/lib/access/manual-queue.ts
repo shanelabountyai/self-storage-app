@@ -89,7 +89,7 @@ export async function manualQueue(
         select: {
           id: true,
           lease: { select: { unit: { select: { number: true } } } },
-          grant: { select: { tenant: { select: { firstName: true, lastName: true } } } },
+          grant: { select: { holderName: true, tenant: { select: { firstName: true, lastName: true } } } },
         },
       })
     : []
@@ -128,7 +128,9 @@ export async function manualQueue(
         : null,
       instruction: instructionFor(command.type, {
         code: typeof payload.code === 'string' ? payload.code : null,
-        tenantName: tenant ? `${tenant.firstName} ${tenant.lastName}` : null,
+        tenantName: tenant
+          ? `${tenant.firstName} ${tenant.lastName}`
+          : (credential?.grant.holderName ?? null),
         unitNumber: credential?.lease?.unit?.number ?? null,
       }),
     })

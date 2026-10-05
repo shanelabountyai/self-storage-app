@@ -57,6 +57,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { key: 'overlocks', label: 'Overlocks', href: '/admin/overlocks', group: 'property', anyOf: ['delinquency:execute_step'] },
   { key: 'access', label: 'Gate activity', href: '/admin/access', group: 'property', anyOf: ['access:events'] },
   { key: 'keypad-queue', label: 'Keypad queue', href: '/admin/access/queue', group: 'property', anyOf: ['tenants:view'] },
+  // B-436 / PRD 03 US-10. Codes for staff, vendors and dated visitors.
+  { key: 'gate-codes', label: 'Staff and vendor codes', href: '/admin/access/codes', group: 'property', anyOf: ['access:manage_grants'] },
   // PRD 03 §8 Phase 2 (B-080). Where a quiet webhook feed or a dead-lettered
   // command becomes visible before a tenant phones about it.
   { key: 'gate-health', label: 'Gate health', href: '/admin/access/health', group: 'property', anyOf: ['access:events'] },

@@ -23,6 +23,12 @@ export type AccessEventRow = {
   /// rows (FR-4): somebody was at the gate, and we cannot say who.
   tenantId: string | null
   tenantName: string | null
+  /// B-436 / PRD 03 US-10 AC4. Who held the code when it is not the tenant
+  /// themselves: a staff member, a vendor, a temporary visitor, or a person
+  /// on a tenant's authorized list. Null for the tenant's own code and for an
+  /// unknown code.
+  holderName: string | null
+  holderKind: 'staff' | 'vendor' | 'temporary' | 'auction_buyer' | 'authorized_person' | null
   unitNumber: string | null
   /// B-086 part 2. How they presented themselves: `pin` is somebody physically
   /// at the keypad, `mobile_key` is a phone unlock.
@@ -102,6 +108,10 @@ export async function accessEventLog(
             select: {
               tenantId: true,
               tenant: { select: { firstName: true, lastName: true } },
+              holderType: true,
+              holderName: true,
+              auctionCaseId: true,
+              authorizedPerson: { select: { name: true } },
             },
           },
         },
@@ -121,6 +131,14 @@ export async function accessEventLog(
     tenantName: row.credential?.grant.tenant
       ? `${row.credential.grant.tenant.firstName} ${row.credential.grant.tenant.lastName}`
       : null,
+    holderName: row.credential?.grant.holderName ?? row.credential?.grant.authorizedPerson?.name ?? null,
+    holderKind: row.credential?.grant.holderType
+      ? row.credential.grant.auctionCaseId
+        ? 'auction_buyer'
+        : row.credential.grant.holderType
+      : row.credential?.grant.authorizedPerson
+        ? 'authorized_person'
+        : null,
     unitNumber: row.credential?.lease?.unit?.number ?? null,
     entryMethod: row.credential?.type ?? null,
   }))

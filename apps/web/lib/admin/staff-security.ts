@@ -2,6 +2,9 @@ import { prisma } from '@storage/db'
 import { requirePermission } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { resetMfaForStaff } from '@/lib/auth/mfa'
+import { recordAudit } from '@storage/core/audit'
+import { toAuditActor } from '@/lib/rbac/audit-actor'
+import { revokeStaffGateCodes } from '@/lib/access/non-tenant'
 
 // B-079. The administrative side of staff MFA: who has it on, and the one
 // button that gets somebody back in after they drop their phone in a river.
@@ -82,4 +85,51 @@ export async function resetStaffMfa(
   })
 
   return { ok: true }
+}
+
+export type DeactivateResult =
+  | { ok: true; gateCodesRevoked: number }
+  | { ok: false; reason: 'self' | 'not_found' | 'already_inactive' }
+
+/// PRD 03 US-10 AC2 (B-436). Deactivates a staff account and revokes every
+/// gate code it holds, in the same request.
+///
+/// `user.deactivated` had been in the audit catalog with nothing writing it:
+/// until this, an account could only be suspended from a database client.
+/// Same authority as `resetStaffMfa`, and the same refusal of your own
+/// account, which also means the last person able to do this cannot lock
+/// everybody out. `loadStaffActor` already refuses a non-active account, so
+/// the session dies on its next request.
+// ponytail: no reactivation control. A reactivated account would need a new
+// gate code anyway (revoked is terminal); add one when somebody asks.
+export async function deactivateStaffUser(
+  actor: Actor,
+  input: { staffUserId: string; reasonCode: string },
+): Promise<DeactivateResult> {
+  requirePermission(actor, 'users:manage', null)
+  if (actor.kind !== 'staff') return { ok: false, reason: 'not_found' }
+  if (input.staffUserId === actor.staffUserId) return { ok: false, reason: 'self' }
+
+  const claimed = await prisma.staffUser.updateMany({
+    where: { id: input.staffUserId, status: 'active', deletedAt: null },
+    data: { status: 'suspended' },
+  })
+  if (claimed.count === 0) {
+    const exists = await prisma.staffUser.findUnique({
+      where: { id: input.staffUserId },
+      select: { id: true },
+    })
+    return { ok: false, reason: exists ? 'already_inactive' : 'not_found' }
+  }
+
+  const gateCodesRevoked = await revokeStaffGateCodes(input.staffUserId)
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'user.deactivated',
+    entityType: 'StaffUser',
+    entityId: input.staffUserId,
+    reasonCode: input.reasonCode,
+    context: { gateCodesRevoked },
+  })
+  return { ok: true, gateCodesRevoked }
 }

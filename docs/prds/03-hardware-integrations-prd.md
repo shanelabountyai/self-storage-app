@@ -206,6 +206,12 @@ Physical access must not depend on our app being up — and our app must not lie
 - AC3: Auction-day buyer codes are created from the `AuctionCase` and expire with it.
 - AC4: The gate event log names the holder, and a code used outside its window is denied and logged.
 
+- **Built in B-436 (2026-10-05).** The holder is columns on `AccessGrant` (`holderType`, `holderName`, `staffUserId`, `auctionCaseId`, `accessHours`, `expiresAt`), not a new model; the CHECK `access_grant_exactly_one_holder` now allows exactly one of tenant, authorized person or named holder. Codes are issued and revoked at `/admin/access/codes` with `access:manage_grants`.
+- **AC1's time window is the three shared-access presets** (D-101), narrowed against the facility's gate hours (D-100). A `temporary` code must have a last day; `staff` and `vendor` codes may run until revoked. One live staff code per person per facility.
+- **AC2 needed a deactivation to exist.** Nothing in the product could deactivate a staff account before this item (`user.deactivated` was in the audit catalog with no writer). `/admin/settings/staff` now has "Deactivate a staff account" (`users:manage` org-wide, never your own account), which suspends the account and revokes its gate codes in the same request. The nightly `access.expire-shared` job also revokes the code of any staff user who is suspended or soft-deleted by another route.
+- **AC3: a buyer code is issued from the auction case page** once the sale is scheduled. It works through the buyer's clean-out deadline when the sale has recorded one, otherwise through the sale date, and cancelling the case revokes it. A code issued before the sale stops at the end of sale day; the winning buyer is issued a new one after the outcome is recorded.
+- **AC4: gate activity names the holder and the kind** (Staff, Vendor, Temporary, Auction buyer), and now also names a person on a tenant's authorized list, who read "Unknown" before. A revoked or expired code tried at the keypad is still logged as "Code no longer active" with no holder: the simulated controller reports a credential only for a live code. Not changed here.
+
 **US-8 (Phase 3): Smart-entry shared access.**
 *As a tenant with smart locks, I unlock via my phone and grant time-boxed access to a family member.*
 - AC1: Tenant can invite a secondary user (name, phone/email) with scope (which unit(s), schedule, expiry) from the portal; invitee gets their own credential — codes are never shared verbatim.

@@ -1,4 +1,5 @@
 import { prisma, type SurplusDisposition } from '@storage/db'
+import { issueNonTenantCode, revokeAuctionBuyerCodes } from '@/lib/access/non-tenant'
 import { recordAudit } from '@storage/core/audit'
 import {
   auctionReadiness,
@@ -1128,7 +1129,59 @@ export async function cancelAuction(
       tx,
     )
   })
+  // PRD 03 US-10 AC3 (B-436). A buyer's gate code expires with the case.
+  await revokeAuctionBuyerCodes(caseId)
   return { ok: true }
+}
+
+/// PRD 03 US-10 AC3 (B-436). A gate code for a buyer, issued from the case so
+/// nobody lends them a tenant's.
+///
+/// It works through the buyer's clean-out deadline when the sale has recorded
+/// one, otherwise through the sale date, and `cancelAuction` revokes it. A code
+/// issued before the sale therefore stops at the end of sale day: issue the
+/// winning buyer a new one once the outcome is recorded.
+export async function issueAuctionBuyerCode(
+  actor: Actor,
+  caseId: string,
+  buyerName: string,
+): Promise<{ ok: true; code: string; expiresOn: string } | { ok: false; reason: string }> {
+  const row = await prisma.auctionCase.findUniqueOrThrow({
+    where: { id: caseId },
+    select: {
+      facilityId: true,
+      status: true,
+      scheduledSaleDate: true,
+      buyerCleanoutDeadline: true,
+    },
+  })
+  requirePermission(actor, 'access:manage_grants', row.facilityId)
+
+  if (row.status !== 'scheduled' && row.status !== 'sold') {
+    return { ok: false, reason: 'A buyer code needs a scheduled sale. Schedule the sale first.' }
+  }
+  const lastDay = row.buyerCleanoutDeadline ?? row.scheduledSaleDate
+  if (!lastDay) return { ok: false, reason: 'This case has no sale date to end the code on.' }
+  // Both columns are `@db.Date`: a calendar day stored at UTC midnight.
+  const expiresOn = lastDay.toISOString().slice(0, 10)
+
+  const issued = await issueNonTenantCode(actor, {
+    facilityId: row.facilityId,
+    holderType: 'temporary',
+    holderName: buyerName,
+    auctionCaseId: caseId,
+    expiresOn,
+  })
+  if (!issued.ok) {
+    return {
+      ok: false,
+      reason:
+        issued.reason === 'name_required'
+          ? 'Enter the buyer\u2019s name. The gate log shows it.'
+          : 'The sale date or clean-out deadline has passed, so a code would stop working at once.',
+    }
+  }
+  return { ok: true, code: issued.code, expiresOn }
 }
 
 /// Records that the former tenant was notified a surplus is held.

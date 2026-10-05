@@ -210,6 +210,7 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/tasks',
   '/admin/access',
   '/admin/access/queue',
+  '/admin/access/codes',
   '/admin/access/health',
   '/admin/reports',
   '/admin/reports/delinquency',
@@ -691,6 +692,23 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     route: '/admin/reservations',
     state: 'the cancel confirm step',
     spec: 'e2e/admin-reservations.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The confirm step's echo renders inside a table cell, and the table sits in a `ScrollRegion` that scrolls on its own at every width; a staff-only screen.",
+  },
+  // B-436. Against a sandbox vendor code of the spec's own, which it revokes.
+  {
+    route: '/admin/access/codes',
+    state: 'a code just issued, in the list',
+    spec: 'e2e/admin-gate-codes.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'The table sits in a `ScrollRegion` that scrolls on its own at every width, and the admin route loop measures the page and its form at all three widths; a staff-only screen.',
+  },
+  {
+    route: '/admin/access/codes',
+    state: 'the revoke confirm step',
+    spec: 'e2e/admin-gate-codes.spec.ts',
     layout: 'excepted',
     layoutException:
       "The confirm step's echo renders inside a table cell, and the table sits in a `ScrollRegion` that scrolls on its own at every width; a staff-only screen.",

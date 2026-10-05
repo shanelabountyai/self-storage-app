@@ -31,7 +31,7 @@ export class ExpiryInThePastError extends Error {
 /// following day. "Until the 14th" includes the 14th, which is what a person
 /// filling in a date field means and what `access.expire-shared`'s hour-0 sweep
 /// then matches exactly.
-function endOfLocalDay(isoDate: string, timezone: string): Date {
+export function endOfLocalDay(isoDate: string, timezone: string): Date {
   const [year, month, day] = isoDate.split('-').map(Number)
   return zonedMidnight(year, month, day + 1, timezone)
 }
@@ -334,8 +334,14 @@ export async function expireSharedAccess(
   // One drain per facility rather than per person: the outbox is FIFO per
   // facility (FR-3) and draining inside the loop would be N passes over the
   // same queue.
+  //
+  // B-436. Never earlier than now: a revoke queued above is due from the
+  // moment it was enqueued (B-158), so the job's own `new Date()`, taken
+  // before the loop, drained nothing and left an expired code working until
+  // the next drain tick.
+  const cutoff = new Date(Math.max(at.getTime(), Date.now()))
   for (const id of new Set(due.map((person) => person.facilityId))) {
-    await drainGateCommands(at, id)
+    await drainGateCommands(cutoff, id)
   }
 
   return { expired }

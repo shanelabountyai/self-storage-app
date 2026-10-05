@@ -36,12 +36,22 @@ export async function propagateGateHours(facilityId: string): Promise<{ enqueued
     // credential arriving next, and skipping it here would leave exactly one
     // tenant on no window until the next settings edit.
     where: { facilityId, state: { in: ['pending', 'active', 'suspended'] } },
-    select: { id: true, extendedHours: true, authorizedPerson: { select: { accessHours: true } } },
+    select: {
+      id: true,
+      extendedHours: true,
+      accessHours: true,
+      authorizedPerson: { select: { accessHours: true } },
+    },
   })
 
   let enqueued = 0
   for (const grant of grants) {
-    const schedule = scheduleForGrant(facilitySchedule, grant.authorizedPerson?.accessHours)
+    // B-436: a non-tenant grant (staff, vendor, temporary) carries its own
+    // window on the grant; an authorized person's is on the person.
+    const schedule = scheduleForGrant(
+      facilitySchedule,
+      grant.authorizedPerson?.accessHours ?? grant.accessHours,
+    )
     await enqueueCommand({
       type: 'set_time_window',
       facilityId,
@@ -92,6 +102,7 @@ export async function pushGateHoursForGrant(grantId: string): Promise<void> {
     select: {
       facilityId: true,
       extendedHours: true,
+      accessHours: true,
       authorizedPerson: { select: { accessHours: true } },
     },
   })
@@ -101,7 +112,7 @@ export async function pushGateHoursForGrant(grantId: string): Promise<void> {
   })
   const schedule = scheduleForGrant(
     parseWeeklySchedule(facility.gateHours),
-    grant.authorizedPerson?.accessHours,
+    grant.authorizedPerson?.accessHours ?? grant.accessHours,
   )
 
   await enqueueCommand({

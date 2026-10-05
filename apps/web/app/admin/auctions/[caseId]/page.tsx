@@ -2,6 +2,7 @@ import { ScrollRegion } from '@/components/ui/scroll-region'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getAdminActor } from '@/lib/admin/context'
+import { can } from '@/lib/rbac/authorize'
 import { auctionCase } from '@/lib/auctions/service'
 import { SURPLUS_DISPOSITION_LABELS } from '@storage/core/auctions'
 import { TIMELINE_DISCLAIMER } from '@storage/core/delinquency'
@@ -11,6 +12,7 @@ import {
   addAdvertisementAction,
   approveAction,
   cancelAction,
+  issueBuyerCodeAction,
   recordLockCutAction,
   recordSaleAction,
   scheduleAction,
@@ -543,6 +545,40 @@ export default async function AuctionCasePage({
             </form>
           </section>
         </>
+      )}
+
+      {/* PRD 03 US-10 AC3 (B-436). The buyer gets a code of their own, from
+          the case, and it ends with the case. */}
+      {(view.status === 'scheduled' || sold) && can(actor, 'access:manage_grants', view.facilityId) && (
+        <section aria-labelledby="buyer-code-heading" className="flex flex-col gap-2">
+          <h2 id="buyer-code-heading" className="text-sm font-medium">
+            Buyer gate code
+          </h2>
+          <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+            {sold
+              ? 'Works through the buyer\u2019s clean-out deadline, or through the sale date when none was recorded.'
+              : 'Works through the sale date. Issue the winning buyer a new one after the sale is recorded, so it lasts to their clean-out deadline.'}{' '}
+            Cancelling the sale revokes it. Gate activity shows the name you enter.
+          </p>
+          <AdminForm
+            action={issueBuyerCodeAction}
+            label="Issue a buyer gate code"
+            className="border-input flex flex-wrap items-end gap-2 rounded-lg border p-4"
+          >
+            <input type="hidden" name="caseId" value={caseId} />
+            <Field
+              name="buyerName"
+              label="Buyer's name"
+              type="text"
+              required
+              autoComplete="off"
+              className="flex flex-col gap-1 text-sm"
+            />
+            <button type="submit" className="border-input hover:bg-accent min-h-11 rounded-md border px-4 text-sm font-medium">
+              Issue code
+            </button>
+          </AdminForm>
+        </section>
       )}
 
       {sold && (

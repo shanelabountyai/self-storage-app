@@ -6,7 +6,7 @@ import { can, hasPermissionAnywhere } from '@/lib/rbac/authorize'
 import { startStaffImpersonationAction } from '@/app/admin/impersonation/actions'
 import { IMPERSONATION_TTL_MINUTES } from '@/lib/impersonation/service'
 import { staffSecurityRows } from '@/lib/admin/staff-security'
-import { resetStaffMfaAction } from './actions'
+import { deactivateStaffAction, resetStaffMfaAction } from './actions'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Staff security' }
@@ -188,6 +188,43 @@ export default async function StaffSecurityPage() {
           />
           <div className="sm:col-span-2">
             <Button type="submit">Reset second factor</Button>
+          </div>
+        </AdminForm>
+      </section>
+
+      {/* PRD 03 US-10 AC2 (B-436). */}
+      <section aria-labelledby="deactivate-heading" className="flex flex-col gap-3">
+        <h2 id="deactivate-heading" className="text-base font-medium">
+          Deactivate a staff account
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          For somebody who has left. They are signed out on their next click and cannot sign in
+          again, and every gate code they hold is revoked at the keypad. There is no button to
+          undo this. The reason you give is written to the audit log.
+        </p>
+        <AdminForm
+          action={deactivateStaffAction}
+          label="Deactivate a staff account"
+          className="grid max-w-2xl gap-3 sm:grid-cols-2"
+        >
+          <Field name="deactivateStaffUserId" label="Staff member" as="select" required>
+            {rows
+              .filter((row) => row.status === 'active' && row.staffUserId !== actor.staffUserId)
+              .map((row) => (
+                <option key={row.staffUserId} value={row.staffUserId}>
+                  {row.name} ({row.email})
+                </option>
+              ))}
+          </Field>
+          <Field
+            name="deactivateReason"
+            label="Reason"
+            type="text"
+            required
+            hint="For example: left the company on 3 October."
+          />
+          <div className="sm:col-span-2">
+            <Button type="submit">Deactivate account</Button>
           </div>
         </AdminForm>
       </section>

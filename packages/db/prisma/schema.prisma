@@ -241,6 +241,17 @@ enum LedgerEntryType {
   write_off
 }
 
+/// PRD 03 US-10 (B-436). Who holds a grant that belongs to no tenant.
+///
+/// Null on a tenant's or an authorized person's grant: those are named by
+/// their own relation. `temporary` is the dated code for somebody who is not a
+/// vendor, and an auction buyer is the case it was added for.
+enum AccessHolderType {
+  staff
+  vendor
+  temporary
+}
+
 enum AccessGrantState {
   pending
   active
@@ -3500,16 +3511,44 @@ model AccessGrant {
   /// be a configuration surface with no customer behind it, and every one of
   /// them would drift out of step with the facility's own hours.
   extendedHours      Boolean          @default(false)
+
+  /// PRD 03 US-10 (B-436). A code that belongs to no tenant: a staff member,
+  /// a vendor, or a dated visitor such as an auction buyer. Exactly one of
+  /// `tenantId`, `authorizedPersonId` and `holderType` is set; the CHECK
+  /// `access_grant_exactly_one_holder` (migration b436) is the backstop.
+  holderType       AccessHolderType?
+  /// The name the gate log shows. Required with `holderType` (same CHECK). A
+  /// staff grant copies the staff user's name at issue, so the log still reads
+  /// after the account is gone.
+  holderName       String?
+  /// Set on a `staff` grant. Deactivating this user revokes the grant.
+  staffUserId      String?
+  /// Set on a buyer's code issued from an auction case. Cancelling the case
+  /// revokes the grant.
+  auctionCaseId    String?
+  /// A `WeeklySchedule`, narrowed against the facility's gate hours and pushed
+  /// to the controller by `scheduleForGrant`, the same as an authorized
+  /// person's. Null means the facility's own hours.
+  accessHours      Json?
+  /// The local midnight that ENDS the last day the code works, the same shape
+  /// as `AuthorizedAccessPerson.expiresAt`. `access.expire-shared` revokes it.
+  expiresAt        DateTime?         @db.Timestamptz(6)
+  createdByStaffId String?
+
   createdAt          DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime         @updatedAt @db.Timestamptz(6)
 
   facility         Facility                @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   tenant           Tenant?                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   authorizedPerson AuthorizedAccessPerson? @relation(fields: [authorizedPersonId], references: [id], onDelete: Restrict)
+  staffUser        StaffUser?              @relation("AccessGrantStaffHolder", fields: [staffUserId], references: [id], onDelete: Restrict)
+  auctionCase      AuctionCase?            @relation(fields: [auctionCaseId], references: [id], onDelete: Restrict)
   credentials      AccessCredential[]
 
   @@unique([facilityId, tenantId])
   @@index([facilityId, state])
+  @@index([staffUserId])
+  @@index([auctionCaseId])
   @@map("access_grant")
 }
 
@@ -4689,6 +4728,7 @@ model StaffUser {
   paymentsTaken              Payment[]
   holdsPlaced                LeaseHold[]                      @relation("HoldPlacedBy")
   incidentsRecorded          Incident[]                       @relation("IncidentRecordedBy")
+  gateGrants                 AccessGrant[]                    @relation("AccessGrantStaffHolder")
   holdsLifted                LeaseHold[]                      @relation("HoldLiftedBy")
   paymentPlansCreated        PaymentPlan[]                    @relation("PaymentPlanCreatedBy")
   paymentPlansCancelled      PaymentPlan[]                    @relation("PaymentPlanCancelledBy")
@@ -5211,6 +5251,7 @@ model AuctionCase {
   timeline       DelinquencyTimeline?   @relation(fields: [timelineId], references: [id], onDelete: Restrict)
   inventory      Document?              @relation(fields: [inventoryDocumentId], references: [id], onDelete: Restrict)
   advertisements AuctionAdvertisement[]
+  buyerGateGrants AccessGrant[]
 
   /// One LIVE case per lease. A partial unique index in raw SQL (Prisma cannot
   /// express one) — migration 20260810030000_auction_case:
