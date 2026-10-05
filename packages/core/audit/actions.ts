@@ -679,6 +679,13 @@ export const AUDIT_ACTIONS = [
     requiresReason: true,
   },
 
+  /// B-434. A hold released from the counter. The renter's own cancel is not
+  /// audited: it is theirs to make and the event records it.
+  {
+    action: "reservation.cancelled",
+    label: "Reservation cancelled by staff",
+    requiresReason: false,
+  },
   /// B-433. The org's two unrentable limits. The before/after is the record.
   {
     action: "org_setting.updated",

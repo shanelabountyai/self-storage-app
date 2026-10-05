@@ -551,6 +551,8 @@ test.describe('the dashboard (B-113)', () => {
       'Autopay share',
       'Payments today',
       'Failed payments today',
+      // B-434. Beside the move-ins it turns into.
+      'Arriving today',
       'Move-ins today',
       'Move-outs today',
     ])

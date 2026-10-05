@@ -169,6 +169,8 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/units/ready',
   '/admin/units/setup',
   '/admin/units/unrentable',
+  // B-434. The empty state here; the table is scanned in its own spec.
+  '/admin/reservations',
   // B-088 part 1. A price-change surface nobody scans is a price-change
   // surface nobody has checked.
   '/admin/units/rates',
@@ -679,6 +681,15 @@ export const SCANNED_STATES: readonly ScannedState[] = [
     layout: 'excepted',
     layoutException:
       "The admin route loop measures this page at all three widths, and the confirm step adds `AdminForm`'s echo list to that same measured container.",
+  },
+  // B-434. Against a sandbox hold of the spec's own, which it then cancels.
+  {
+    route: '/admin/reservations',
+    state: 'the cancel confirm step',
+    spec: 'e2e/admin-reservations.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      "The confirm step's echo renders inside a table cell, and the table sits in a `ScrollRegion` that scrolls on its own at every width; a staff-only screen.",
   },
   // B-424. The echo names the units whose tenants the one message reaches;
   // the send itself is never pressed against demo tenants.

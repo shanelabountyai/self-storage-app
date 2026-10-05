@@ -61,6 +61,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // command becomes visible before a tenant phones about it.
   { key: 'gate-health', label: 'Gate health', href: '/admin/access/health', group: 'property', anyOf: ['access:events'] },
   { key: 'tenants', label: 'Tenants', href: '/admin/tenants', group: 'money', anyOf: ['tenants:view'] },
+  // B-434. Who is coming in. Not in `today`: that group is the phone strip,
+  // and a fifth item pushes the active one past 320px (the dashboard's
+  // "Arriving today" tile is the way in from there).
+  { key: 'reservations', label: 'Reservations', href: '/admin/reservations', group: 'money', anyOf: ['tenants:view'] },
   { key: 'billing', label: 'Billing', href: '/admin/billing', group: 'money', anyOf: ['payments:take', 'reports:financial'] },
   { key: 'pos', label: 'POS / drawer', href: '/admin/pos', group: 'money', anyOf: ['payments:take'] },
   // PRD 01 §9 Phase 3 (B-090 part 5). Under Money & tenants beside Billing:

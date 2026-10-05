@@ -7,6 +7,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { searchTenants } from '@/lib/admin/tenants'
 import { counterPayableAccounts, counterPayableLeases } from '@/lib/admin/pos'
+import { listHeldReservations } from '@/lib/admin/reservations'
 import { currentRatesForFacility } from '@/lib/pricing/unit-type-rates'
 import { formatCents } from '@/lib/format'
 import { orderWalkInSizes, walkInSizeLabel } from '@/lib/admin/walk-in-sizes'
@@ -46,12 +47,15 @@ export default async function PosPage({
 
   // B-280. Accounts are searched beside tenants because an account's payer
   // usually holds no lease, and `searchTenants` cannot surface them.
-  const [results, accountResults] = q
+  // B-434. Held reservations too: a renter told to "just turn up" is not a
+  // tenant yet, so neither search above can find them.
+  const [results, accountResults, heldResults] = q
     ? await Promise.all([
         searchTenants(actor, q),
         counterPayableAccounts(actor, facilityId, { name: q }),
+        listHeldReservations(actor, facilityId, q),
       ])
-    : [[], []]
+    : [[], [], []]
   const [selectedTenant, payableLeases, payableAccounts, unitTypes, rates] = await Promise.all([
     tenantId
       ? prisma.tenant.findUnique({
@@ -121,8 +125,27 @@ export default async function PosPage({
           </button>
         </form>
 
-        {q && results.length === 0 && accountResults.length === 0 && (
-          <EmptyState>No tenants or business accounts match &ldquo;{q}&rdquo;.</EmptyState>
+        {heldResults.length > 0 && (
+          <ul aria-label="Held reservations" className="flex flex-col gap-1 text-sm">
+            {heldResults.map((held) => (
+              <li key={held.id}>
+                <Link
+                  href={`/admin/reservations?q=${encodeURIComponent(q ?? '')}#reservation-${held.id}`}
+                  className="underline underline-offset-2"
+                >
+                  {held.name}
+                </Link>{' '}
+                <span className="text-muted-foreground">
+                  reservation · {held.sizeName} · {formatCents(held.quotedRateCents)}/mo held
+                  {held.arrivingToday && ' · arriving today'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {q && results.length === 0 && accountResults.length === 0 && heldResults.length === 0 && (
+          <EmptyState>No tenants, business accounts or reservations match &ldquo;{q}&rdquo;.</EmptyState>
         )}
 
         {results.length + accountResults.length > 0 && !selectedTenant && (

@@ -519,10 +519,22 @@ export type CancelResult = { ok: true } | { ok: false; reason: 'not_found' | 'no
 /// before an irreversible action. A mail client prefetching the link must not
 /// release someone's unit.
 export async function cancelReservation(token: string): Promise<CancelResult> {
-  const tokenHash = hashReservationToken(token)
+  return cancelHeldReservation({ tokenHash: hashReservationToken(token) }, 'renter')
+}
 
+/// B-434. The one cancel, for the renter's link and for the counter. `record`
+/// runs inside the transaction, so a staff cancel and its audit row land
+/// together or not at all.
+export async function cancelHeldReservation(
+  where: Prisma.ReservationWhereUniqueInput,
+  cancelledBy: 'renter' | 'staff',
+  record?: (
+    reservation: { id: string; facilityId: string; unitId: string | null },
+    tx: Prisma.TransactionClient,
+  ) => Promise<void>,
+): Promise<CancelResult> {
   return prisma.$transaction(async (tx) => {
-    const reservation = await tx.reservation.findUnique({ where: { tokenHash } })
+    const reservation = await tx.reservation.findUnique({ where })
     if (!reservation) return { ok: false as const, reason: 'not_found' as const }
     // Idempotent from the renter's point of view — clicking cancel twice is not
     // an error worth showing them — but the caller can tell the difference.
@@ -537,10 +549,11 @@ export async function cancelReservation(token: string): Promise<CancelResult> {
         facilityId: reservation.facilityId,
         entityType: 'Reservation',
         entityId: reservation.id,
-        payload: { unitId: reservation.unitId, cancelledBy: 'renter' },
+        payload: { unitId: reservation.unitId, cancelledBy },
       },
       tx,
     )
+    await record?.(reservation, tx)
     return { ok: true as const }
   })
 }

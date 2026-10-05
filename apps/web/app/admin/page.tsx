@@ -6,6 +6,7 @@ import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { formatCents } from '@/lib/format'
 import { attachRateForFacility, delinquencyReport, reportRangeForMonth } from '@/lib/admin/reports'
+import { countArrivingToday } from '@/lib/admin/reservations'
 import { dashboardRollup } from '@/lib/admin/rollups'
 import { FacilityRollup } from '@/components/admin/facility-rollup'
 import { FacilityReadinessBanner } from '@/components/admin/facility-readiness-banner'
@@ -128,6 +129,7 @@ export default async function AdminDashboardPage({
     occupiedUnits,
     availableUnits,
     reservedUnits,
+    arrivingToday,
     movedInToday,
     movedOutToday,
     paymentsToday,
@@ -141,6 +143,7 @@ export default async function AdminDashboardPage({
     // in the gap between occupied and total.
     prisma.unit.count({ where: { facilityId, status: 'available' } }),
     prisma.unit.count({ where: { facilityId, status: 'reserved' } }),
+    countArrivingToday(facilityId, facility.timezone),
     prisma.lease.count({
       where: { facilityId, startDate: { gte: today, lt: tomorrow } },
     }),
@@ -270,6 +273,13 @@ export default async function AdminDashboardPage({
         />
         {/* The tenants list has no "moved today" filter, so both move tiles
             land on the report's own move-in/move-out section. */}
+        {/* B-434. The renter told to "just turn up" (US-14). */}
+        <Tile
+          label="Arriving today"
+          value={String(arrivingToday)}
+          hint="held reservations"
+          href="/admin/reservations"
+        />
         <Tile
           label="Move-ins today"
           value={String(movedInToday)}
