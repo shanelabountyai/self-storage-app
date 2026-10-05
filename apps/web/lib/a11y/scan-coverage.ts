@@ -105,6 +105,10 @@ export const PUBLIC_SCAN_ROUTES = [
   // token — the same posture as the four routes above.
   '/checkout/resume/not-a-real-token',
   '/confirm-email',
+  // B-435. The public not-found page, through a facility slug nobody has, and
+  // the public error page, through the route the e2e server makes throw.
+  '/storage/tx/austin/no-such-facility',
+  '/e2e-error',
 ]
 
 /// B-119 (accessibility review 2026-08-12, test gap 2). Every STATIC portal
@@ -1301,6 +1305,28 @@ export const STATE_EXCEPTIONS: readonly StateException[] = [
       'the three warning states of the plan card — a payment late inside its grace, a payment missed past it, and the plan ended because one was — which all need a plan that has actually let an installment date go by, and that state moves on its own the moment the nightly jobs run',
     reasonEs:
       'los tres estados de aviso de la tarjeta del plan — un abono con retraso dentro de su gracia, un abono perdido después de él, y el plan terminado porque uno lo estuvo — que necesitan un plan que de verdad haya dejado pasar la fecha de un abono, y ese estado se mueve solo en cuanto corren los trabajos nocturnos',
+  },
+  // B-435. The error page is one component (`ErrorPanel`) and it is scanned on
+  // the public site through `/e2e-error`. Nothing can make a portal or a
+  // checkout screen throw on a production build, so these two renderings of
+  // it, each with its own sentence, are reached by no scan.
+  {
+    route: '/portal',
+    state: 'error page',
+    audience: 'portal',
+    reason:
+      'the page your account shows when a screen fails to load (a heading, one sentence, a Try again button and the office phone), which no test can bring up there; the same page on the public site is scanned',
+    reasonEs:
+      'la página que muestra su cuenta cuando una pantalla no carga (un título, una oración, un botón para intentar de nuevo y el teléfono de la oficina), que ninguna prueba puede provocar ahí; la misma página en el sitio público sí se revisa',
+  },
+  {
+    route: '/checkout',
+    state: 'error page',
+    audience: 'public',
+    reason:
+      'the error page as checkout words it, which warns that a card may already have been charged; no test can make a checkout step fail to load, and the same page with its other sentence is scanned',
+    reasonEs:
+      'la página de error con el texto del proceso de renta, que advierte que quizá ya se hizo el cargo a la tarjeta; ninguna prueba puede hacer que un paso de ese proceso no cargue, y la misma página con su otra oración sí se revisa',
   },
 ] as const
 

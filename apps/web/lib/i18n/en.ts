@@ -2201,4 +2201,17 @@ export const en = {
   'unsub.confirmBody':
     'You will stop receiving marketing emails from us at this address. You will still get emails about anything you have an active account or reservation for.',
   'unsub.confirmButton': 'Unsubscribe me',
+
+  // B-435 (PRD 01 §6.7). The not-found and error pages.
+  'errorPage.notFoundTitle': "We can't find that page",
+  'errorPage.notFoundBody':
+    'The link may be old, or the address may be mistyped. Search for storage near you instead.',
+  'errorPage.errorTitle': 'This page did not load',
+  'errorPage.notCharged': 'Something went wrong on our end. Nothing was charged.',
+  'errorPage.checkout':
+    'Something went wrong on our end. If you had already pressed Pay, your card may have been charged. Check your email for a receipt before you try again.',
+  'errorPage.portal': 'Something went wrong on our end. Try again, or call us to pay by phone.',
+  'errorPage.tryAgain': 'Try again',
+  'errorPage.payByPhone': 'Pay by phone: ',
+  'errorPage.backToAccount': 'Back to your account',
 } as const

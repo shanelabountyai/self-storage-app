@@ -2115,4 +2115,18 @@ export const es: Dictionary = {
   'unsub.confirmBody':
     'Dejará de recibir correos promocionales de nuestra parte en esta dirección. Seguirá recibiendo correos sobre cualquier cuenta o reserva que tenga activa.',
   'unsub.confirmButton': 'Cancelar mi suscripción',
+
+  // B-435 (PRD 01 §6.7).
+  'errorPage.notFoundTitle': 'No encontramos esa página',
+  'errorPage.notFoundBody':
+    'El enlace puede ser antiguo o la dirección puede tener un error. Busque bodegas cerca de usted.',
+  'errorPage.errorTitle': 'Esta página no cargó',
+  'errorPage.notCharged': 'Algo falló de nuestra parte. No se le cobró nada.',
+  'errorPage.checkout':
+    'Algo falló de nuestra parte. Si ya había presionado Pagar, es posible que se haya hecho el cargo a su tarjeta. Revise su correo para ver si tiene un recibo antes de intentarlo de nuevo.',
+  'errorPage.portal':
+    'Algo falló de nuestra parte. Inténtelo de nuevo o llámenos para pagar por teléfono.',
+  'errorPage.tryAgain': 'Intentar de nuevo',
+  'errorPage.payByPhone': 'Pagar por teléfono: ',
+  'errorPage.backToAccount': 'Volver a su cuenta',
 }

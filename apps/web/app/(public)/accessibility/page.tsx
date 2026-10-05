@@ -3043,6 +3043,22 @@ function reviewedOn(locale: Locale): string {
 // thing a renter without JavaScript can be bitten by. The `<noscript>` line
 // moved from every step to the payment step. `LAST_REVIEWED` is not bumped
 // (D-115): the other two entries were not re-run.
+//
+// Re-read 2026-10-05, at B-435. Every segment has a not-found page and an
+// error page. The public pair is in `PUBLIC_SCAN_ROUTES` (an unknown facility
+// slug, and `/e2e-error`, which throws only on the e2e server), so axe, 320px,
+// 200% zoom and forced text spacing run on both, in English.
+// `e2e/error-pages.spec.ts` asserts the 404 status, the `<title>` and `<h1>`,
+// that focus lands on the error page's heading, that Try again is a button,
+// and `lang="es"` with Spanish text on both. A URL that matches no route gets
+// its title from the server; the other pages set it after hydration, so with
+// JavaScript off they keep the title Next wrote. The portal's
+// and checkout's renderings of the error page are two new `STATE_EXCEPTIONS`
+// rows and the page lists them. Not scanned and in no list: the portal and
+// staff not-found pages (asserted, not scanned), the staff error page, and
+// `global-error`, which shows English with one Spanish sentence because it
+// replaces the layout that knows the reader's language. No sentence on this
+// page changes. `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

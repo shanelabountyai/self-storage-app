@@ -66,6 +66,9 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: 'e2e-not-a-real-key',
       NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID: 'E2E_MAP_ID',
+      // B-435. Makes `/e2e-error` throw, which is how a spec reaches the
+      // error page on a production build. Unset anywhere else, it is a 404.
+      E2E_FORCE_ERROR: '1',
     },
     // 120s was sized for a dev server, which is ready in under a second and
     // compiles on demand. A cold build takes longer than that on its own.

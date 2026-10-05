@@ -391,7 +391,7 @@ Numbered for traceability. "MUST" = MVP unless the Phasing table says otherwise.
 ### 6.7 Empty/error states
 - Every error state names the problem, the consequence, and the next action, in that order ("We couldn't hold unit 214. Your card was not charged. Here are similar units…").
 - Full-page errors always include click-to-call for the nearest facility — a human fallback for P1-type users.
-- **Every segment fails politely** *(added 2026-09-26 from the UX review, review block 13; B-435)*. There is a not-found and an error page for each segment. Public not-found offers the ZIP search and the phone; public error says "Nothing was charged" only where that is true, offers Try again and the phone; the portal error offers pay by phone; the admin error shows a request id; `global-error` covers the root. No `loading.tsx` (D-150).
+- **Every segment fails politely** *(added 2026-09-26 from the UX review, review block 13; B-435)*. There is a not-found and an error page for each segment. Public not-found offers the ZIP search and the phone; public error says "Nothing was charged" only where that is true, offers Try again and the phone; the portal error offers pay by phone; the admin error shows a request id; `global-error` covers the root. No `loading.tsx` (D-150). **Built in B-435 (2026-10-05):** "Nothing was charged" is said on every public route except `/checkout`, where the page says a card may already have been charged; the portal error makes no claim about the balance; the admin request id is Next's `error.digest`.
 
 ### 6.8 Accessibility — WCAG 2.1 AA (acceptance criteria for every flow)
 - Semantic HTML, landmarks, correct heading order; all interactive elements keyboard-operable with visible focus (≥3:1 focus indicator contrast).
