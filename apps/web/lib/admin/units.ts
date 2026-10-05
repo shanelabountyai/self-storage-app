@@ -5,13 +5,16 @@ import {
   OCCUPYING_LEASE_STATUSES,
   canSetManualStatus,
   deriveUnitStatus,
+  isUnrentableReason,
+  unrentableLimitRefusal,
   type ManualUnitStatus,
   type UnitOccupancyFacts,
 } from '@storage/core/inventory'
-import { ForbiddenError, requirePermission } from '@/lib/rbac/authorize'
+import { ForbiddenError, can, requirePermission } from '@/lib/rbac/authorize'
 import type { Actor } from '@/lib/rbac/actor'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import { unitWhere, type UnitFilters } from './unit-query'
+import { getUnrentableLimits } from './unrentable'
 
 // The adapter between the pure rule in @storage/core/inventory and real rows.
 // Everything that writes Unit.status goes through recomputeUnitStatus() — that
@@ -322,6 +325,20 @@ export async function updateUnit(actor: Actor, facilityId: string, unitId: strin
   return after
 }
 
+/// B-433. What `unrentable` has to be told. `reviewAt` null is "no review
+/// date", which only `units:unrentable_override` may leave.
+export type UnrentableInput = { reason: string; note: string; reviewAt: Date | null }
+
+/// B-433. `unrentable` asked for without a reason and note, or past one of the
+/// org's limits by somebody who may not exceed them. The message is for the
+/// operator.
+export class UnrentableRefusedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UnrentableRefusedError'
+  }
+}
+
 /// The guarded path for the only status change a human may make (US-8).
 /// Throws UnitStatusChangeBlockedError naming the blocking record rather than
 /// failing silently or half-applying.
@@ -331,6 +348,7 @@ export async function setUnitOperationalStatus(
   unitId: string,
   target: string,
   reasonCode: string,
+  unrentable?: UnrentableInput,
 ) {
   requirePermission(actor, 'units:edit', facilityId)
 
@@ -345,9 +363,50 @@ export async function setUnitOperationalStatus(
     throw new UnitStatusChangeBlockedError(verdict.reason, verdict.blocking)
   }
 
+  // B-433. Cleared on the way out, so a unit that comes back carries nothing.
+  let why: Prisma.UnitUncheckedUpdateInput = {
+    unrentableReason: null,
+    unrentableNote: null,
+    unrentableSetAt: null,
+    unrentableSetByStaffId: null,
+    unrentableReviewAt: null,
+  }
+  if (target === 'unrentable') {
+    const note = unrentable?.note.trim() ?? ''
+    if (!unrentable || !isUnrentableReason(unrentable.reason) || !note) {
+      throw new UnrentableRefusedError('Marking a unit unrentable needs a reason and a note.')
+    }
+    // Saving it again (a new note, a later review date) does not restart the
+    // clock or count the unit a second time.
+    const already = unit.operationalStatus === 'unrentable' && unit.unrentableSetAt !== null
+    const setAt = already ? unit.unrentableSetAt! : new Date()
+    // ponytail: count-then-write, so two managers pressing at once can land
+    // one unit over the limit; lock the facility row if that ever matters.
+    const [others, limits] = await Promise.all([
+      prisma.unit.count({ where: { facilityId, operationalStatus: 'unrentable', id: { not: unitId } } }),
+      getUnrentableLimits(),
+    ])
+    const refusal = unrentableLimitRefusal({
+      unitsAfter: already ? 0 : others + 1,
+      setAt,
+      reviewAt: unrentable.reviewAt,
+      limits,
+      mayExceed: can(actor, 'units:unrentable_override', facilityId),
+    })
+    if (refusal) throw new UnrentableRefusedError(refusal)
+
+    why = {
+      unrentableReason: unrentable.reason,
+      unrentableNote: note,
+      unrentableReviewAt: unrentable.reviewAt,
+      unrentableSetAt: setAt,
+      ...(already ? {} : { unrentableSetByStaffId: actor.kind === 'staff' ? actor.staffUserId : null }),
+    }
+  }
+
   await prisma.unit.update({
     where: { id: unitId },
-    data: { operationalStatus: target as ManualUnitStatus },
+    data: { operationalStatus: target as ManualUnitStatus, ...why },
   })
   const status = await recomputeUnitStatus(unitId)
 
@@ -361,7 +420,15 @@ export async function setUnitOperationalStatus(
     facilityId,
     reasonCode,
     before: { operationalStatus: unit.operationalStatus, status: unit.status },
-    after: { operationalStatus: target, status },
+    after: {
+      operationalStatus: target,
+      status,
+      ...(target === 'unrentable' && {
+        unrentableReason: why.unrentableReason,
+        unrentableNote: why.unrentableNote,
+        unrentableReviewAt: unrentable?.reviewAt?.toISOString() ?? null,
+      }),
+    },
   })
 
   return status

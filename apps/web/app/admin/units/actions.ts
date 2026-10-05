@@ -1,9 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import type { ManualUnitStatus } from '@storage/core/inventory'
 import { requireStaffActor } from '@/lib/rbac/session'
-import { createUnit, setUnitOperationalStatus } from '@/lib/admin/units'
+import { UnitStatusChangeBlockedError, UnrentableRefusedError, createUnit, setUnitOperationalStatus } from '@/lib/admin/units'
+import { fieldError, parseDate, type FormState } from '@/lib/admin/form-state'
 import { applyBulkOperation, type BulkUnitOperation } from '@/lib/admin/units-bulk'
 import { applyLayoutImport } from '@/lib/admin/unit-layout'
 import type { UnitFilters } from '@/lib/admin/unit-query'
@@ -57,6 +59,12 @@ export async function createUnitAction(formData: FormData) {
 export async function setUnitStatusAction(formData: FormData) {
   const actor = await requireStaffActor()
 
+  // B-433. Unrentable needs a reason, a note and a review date, so the row's
+  // one-press control hands over to the form that asks for them.
+  if (formData.get('operationalStatus') === 'unrentable') {
+    redirect(`/admin/units/unrentable?unit=${encodeURIComponent(String(formData.get('unitId')))}`)
+  }
+
   await setUnitOperationalStatus(
     actor,
     String(formData.get('facilityId')),
@@ -96,4 +104,39 @@ export async function applyLayoutImportAction(formData: FormData) {
   )
 
   revalidatePath('/admin/units')
+}
+
+/// B-433. Marks one unit unrentable, or re-saves one that already is.
+export async function markUnrentableAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireStaffActor()
+
+  const reason = String(formData.get('reason') ?? '')
+  if (!reason) return fieldError({ reason: 'Choose why the unit cannot be rented.' })
+  const note = String(formData.get('note') ?? '').trim()
+  if (!note) return fieldError({ note: 'Say what is wrong or who is using it, e.g. "roof leak over the door".' })
+
+  let reviewAt: Date | null = null
+  if (String(formData.get('reviewAt') ?? '').trim() !== '') {
+    const parsed = parseDate(formData.get('reviewAt'))
+    if ('error' in parsed) return fieldError({ reviewAt: parsed.error })
+    reviewAt = parsed.value
+  }
+
+  try {
+    await setUnitOperationalStatus(
+      actor,
+      String(formData.get('facilityId')),
+      String(formData.get('unitId')),
+      'unrentable',
+      'management_approval',
+      { reason, note, reviewAt },
+    )
+  } catch (error) {
+    if (error instanceof UnrentableRefusedError) return fieldError({ reviewAt: error.message })
+    if (error instanceof UnitStatusChangeBlockedError) return fieldError({ reason: error.message })
+    throw error
+  }
+
+  revalidatePath('/admin/units')
+  redirect('/admin/units/unrentable')
 }

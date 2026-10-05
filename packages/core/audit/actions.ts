@@ -679,6 +679,13 @@ export const AUDIT_ACTIONS = [
     requiresReason: true,
   },
 
+  /// B-433. The org's two unrentable limits. The before/after is the record.
+  {
+    action: "org_setting.updated",
+    label: "Org setting updated",
+    requiresReason: false,
+  },
+
   // B-079. Org-level defaults (PRD 02 US-4).
   {
     action: "org_default.updated",

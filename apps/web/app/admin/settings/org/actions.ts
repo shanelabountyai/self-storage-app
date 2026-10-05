@@ -6,6 +6,7 @@ import { getAdminActor } from '@/lib/admin/context'
 import { getOrgDefault, pushOrgDefault, saveOrgDefault } from '@/lib/admin/org-defaults'
 import { activeTimeline } from '@/lib/admin/delinquency-timeline'
 import { ForbiddenError } from '@/lib/rbac/authorize'
+import { saveUnrentableLimits } from '@/lib/admin/unrentable'
 import { fieldError, parseDate, parseScaled, success, type FormState } from '@/lib/admin/form-state'
 import type { LateFeeBasis } from '@storage/core/billing'
 
@@ -265,4 +266,33 @@ async function currentLadder(): Promise<LadderRule[]> {
   const record = await getOrgDefault('late_fee_ladder')
   const ladder = (record?.payload as { ladder?: unknown } | undefined)?.ladder
   return Array.isArray(ladder) ? (ladder as LadderRule[]) : []
+}
+
+/// B-433. The two limits past which `unrentable` needs a district manager.
+export async function saveUnrentableLimitsAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await getAdminActor()
+
+  const maxUnits = Number(formData.get('maxUnits'))
+  if (!Number.isInteger(maxUnits) || maxUnits < 0 || maxUnits > 10_000) {
+    return fieldError({ maxUnits: 'Enter a whole number of units, e.g. 5.' })
+  }
+  const maxDays = Number(formData.get('maxDays'))
+  if (!Number.isInteger(maxDays) || maxDays < 1 || maxDays > 3650) {
+    return fieldError({ maxDays: 'Enter a whole number of days, e.g. 30.' })
+  }
+
+  try {
+    await saveUnrentableLimits(actor, { maxUnits, maxDays })
+  } catch (error) {
+    if (error instanceof ForbiddenError) {
+      return fieldError({ maxUnits: 'Only an owner or a manager assigned to every facility can change an org limit.' })
+    }
+    throw error
+  }
+
+  revalidatePath('/admin/settings/org')
+  return success(`Unrentable limits set: ${maxUnits} units at a facility, ${maxDays} days for one unit.`)
 }

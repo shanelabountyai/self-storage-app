@@ -40,6 +40,9 @@ export const PERMISSIONS = [
 
   // Inventory & pricing
   { key: 'units:edit', name: 'Edit unit inventory', category: 'inventory', description: 'Create, edit, and change unit statuses.' },
+  /// PRD 02 US-8 (B-433). The district-manager call: more units unrentable at
+  /// a site, or one unrentable for longer, than the org's limits allow.
+  { key: 'units:unrentable_override', name: 'Exceed the unrentable limits', category: 'inventory', description: 'Mark more units unrentable at a facility, or keep one unrentable longer, than the org limits allow.' },
   { key: 'rates:street:propose', name: 'Propose street rates', category: 'pricing', description: 'Propose a street-rate change for approval.' },
   { key: 'rates:street:change', name: 'Change street rates', category: 'pricing', description: 'Publish street-rate changes.' },
   { key: 'rates:tenant_increase', name: 'Raise existing-tenant rates', category: 'pricing', description: 'Schedule rate increases for current tenants.' },
@@ -250,6 +253,7 @@ export const ROLES: readonly RoleSeed[] = [
       'refunds:request',
       'refunds:approve',
       'units:edit',
+      'units:unrentable_override',
       'rates:street:propose',
       'rates:street:change',
       'rates:tenant_increase',

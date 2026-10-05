@@ -81,6 +81,15 @@ enum OperationalUnitStatus {
   unrentable
 }
 
+/// PRD 02 US-8 (B-433). Why a unit is `unrentable`. Asked for every time the
+/// status is set by hand.
+enum UnrentableReason {
+  company_use
+  damaged
+  owner_use
+  held_for_demolition
+}
+
 /// PRD 02 US-14 (B-399). WHY a lease ended, a separate fact from `MoveOutReason`
 /// (how it ended). The first seven are what a person chose; the `system_*`
 /// values are recorded by the code when the lease is ended by a process, and are
@@ -971,7 +980,7 @@ model Facility {
   reportSubscriptions    ReportSubscription[]
   unitStatusHistory      UnitStatusHistory[]
   /// B-312. Leaseless tenants staff added here — see `Tenant.facilityId`.
-  leaselessTenants       Tenant[]                  @relation("TenantHomeFacility")
+  leaselessTenants       Tenant[]                         @relation("TenantHomeFacility")
 
   @@index([state])
   @@map("facility")
@@ -1127,31 +1136,42 @@ model UnitTypeRate {
 }
 
 model Unit {
-  id                String                @id @default(cuid())
-  facilityId        String
-  unitTypeId        String
-  number            String
+  id                     String                @id @default(cuid())
+  facilityId             String
+  unitTypeId             String
+  number                 String
   /// B-406. When staff last physically verified this unit while `available`;
   /// null = never. The sample takes the oldest first.
-  lastVacantCheckAt DateTime? @db.Timestamptz(6)
-  floor             Int                   @default(1)
+  lastVacantCheckAt      DateTime?             @db.Timestamptz(6)
+  floor                  Int                   @default(1)
   /// Optional grouping for the grid view, e.g. "Building A". Null for
   /// single-building sites.
-  building          String?
-  doorType          String?
+  building               String?
+  doorType               String?
   /// Derived. Write through recomputeUnitStatus() only.
-  status            UnitStatus            @default(available)
+  status                 UnitStatus            @default(available)
   /// Manually settable, guarded by canSetManualStatus().
-  operationalStatus OperationalUnitStatus @default(available)
+  operationalStatus      OperationalUnitStatus @default(available)
+  /// B-433. Why, since when, by whom and until when the unit is `unrentable`.
+  /// Written by `setUnitOperationalStatus` and meaningful only while
+  /// `operationalStatus` is `unrentable`; cleared when it leaves.
+  unrentableReason       UnrentableReason?
+  unrentableNote         String?
+  unrentableSetAt        DateTime?             @db.Timestamptz(6)
+  unrentableSetByStaffId String?
+  /// The day somebody has to look at it again. Further out than the org's
+  /// `unrentableMaxDays` from `unrentableSetAt` needs `units:unrentable_override`.
+  unrentableReviewAt     DateTime?             @db.Timestamptz(6)
   /// Coordinates for the grid/map view (B-010).
-  mapX              Float?
-  mapY              Float?
-  notes             String?
-  createdAt         DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
+  mapX                   Float?
+  mapY                   Float?
+  notes                  String?
+  createdAt              DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime              @updatedAt @db.Timestamptz(6)
 
   facility             Facility              @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   unitType             UnitType              @relation(fields: [unitTypeId], references: [id], onDelete: Restrict)
+  unrentableSetByStaff StaffUser?            @relation("UnitUnrentableSetBy", fields: [unrentableSetByStaffId], references: [id], onDelete: SetNull)
   leases               Lease[]
   reservations         Reservation[]
   checkoutSessions     CheckoutSession[]
@@ -1531,16 +1551,16 @@ model Lease {
   deletedAt              DateTime?        @db.Timestamptz(6)
   version                Int              @default(0)
 
-  facility               Facility                 @relation(fields: [facilityId], references: [id], onDelete: Restrict)
-  tenant                 Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  unit                   Unit                     @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  facility               Facility                        @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  tenant                 Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  unit                   Unit                            @relation(fields: [unitId], references: [id], onDelete: Restrict)
   /// The facility is part of the key on purpose. A composite foreign key onto
   /// `BillingAccount(id, facilityId)` is what makes "a lease can only be on an
   /// account at its own facility" a database fact rather than a check in one
   /// service — and that invariant is a money one: a payment carries exactly one
   /// `facilityId`, so a lease attached across sites would settle out of the
   /// wrong facility's drawer, deposit slip and accounting period.
-  billingAccount         BillingAccount?          @relation(fields: [billingAccountId, facilityId], references: [id, facilityId], onDelete: Restrict)
+  billingAccount         BillingAccount?                 @relation(fields: [billingAccountId, facilityId], references: [id, facilityId], onDelete: Restrict)
   protectionChanges      ProtectionChange[]
   invoices               Invoice[]
   ledgerEntries          LedgerEntry[]
@@ -1555,9 +1575,9 @@ model Lease {
   holds                  LeaseHold[]
   incidents              IncidentUnit[]
   paymentPlans           PaymentPlan[]
-  delinquencyTimeline    DelinquencyTimeline?     @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
-  transferredFrom        Lease?                   @relation("LeaseTransfer", fields: [transferredFromLeaseId], references: [id], onDelete: Restrict)
-  transferredTo          Lease[]                  @relation("LeaseTransfer")
+  delinquencyTimeline    DelinquencyTimeline?            @relation(fields: [delinquencyTimelineId], references: [id], onDelete: SetNull)
+  transferredFrom        Lease?                          @relation("LeaseTransfer", fields: [transferredFromLeaseId], references: [id], onDelete: Restrict)
+  transferredTo          Lease[]                         @relation("LeaseTransfer")
   delinquencyStepRuns    DelinquencyStepRun[]
   overlocks              UnitOverlock[]
   auctionCases           AuctionCase[]
@@ -4167,8 +4187,8 @@ model Notice {
   /// blocks the sale rather than holding it somewhere the served notice never
   /// named. Null on every notice generated before this row, and an absent
   /// snapshot is not a mismatch.
-  renderedSaleManner   AuctionSaleManner?
-  renderedSaleVenue    String?
+  renderedSaleManner AuctionSaleManner?
+  renderedSaleVenue  String?
 
   /// The itemized claim as it stood at generation, and its total. US-27's
   /// "reconciles to the ledger at generation time" — snapshotted because the
@@ -4659,28 +4679,29 @@ model StaffUser {
   deletedAt DateTime? @db.Timestamptz(6)
 
   recoveryCodes              StaffRecoveryCode[]
-  auditLogs                  AuditLog[]                @relation("AuditLogActor")
-  auditLogsAsImpersonator    AuditLog[]                @relation("AuditLogImpersonator")
-  impersonationsStarted      ImpersonationSession[]    @relation("ImpersonationImpersonator")
-  impersonationsEnded        ImpersonationSession[]    @relation("ImpersonationEndedBy")
+  auditLogs                  AuditLog[]                       @relation("AuditLogActor")
+  auditLogsAsImpersonator    AuditLog[]                       @relation("AuditLogImpersonator")
+  impersonationsStarted      ImpersonationSession[]           @relation("ImpersonationImpersonator")
+  impersonationsEnded        ImpersonationSession[]           @relation("ImpersonationEndedBy")
   assignments                StaffFacilityAssignment[]
   suppressions               Suppression[]
   tenantNotes                TenantNote[]
   paymentsTaken              Payment[]
-  holdsPlaced                LeaseHold[]               @relation("HoldPlacedBy")
-  incidentsRecorded          Incident[]                @relation("IncidentRecordedBy")
-  holdsLifted                LeaseHold[]               @relation("HoldLiftedBy")
-  paymentPlansCreated        PaymentPlan[]             @relation("PaymentPlanCreatedBy")
-  paymentPlansCancelled      PaymentPlan[]             @relation("PaymentPlanCancelledBy")
-  tasksAssigned              Task[]                    @relation("TaskAssignee")
-  tasksCompleted             Task[]                    @relation("TaskCompletedBy")
+  holdsPlaced                LeaseHold[]                      @relation("HoldPlacedBy")
+  incidentsRecorded          Incident[]                       @relation("IncidentRecordedBy")
+  holdsLifted                LeaseHold[]                      @relation("HoldLiftedBy")
+  paymentPlansCreated        PaymentPlan[]                    @relation("PaymentPlanCreatedBy")
+  paymentPlansCancelled      PaymentPlan[]                    @relation("PaymentPlanCancelledBy")
+  tasksAssigned              Task[]                           @relation("TaskAssignee")
+  tasksCompleted             Task[]                           @relation("TaskCompletedBy")
   ledgerExceptionAcks        LedgerExceptionAcknowledgement[]
-  maintenanceTicketsAssigned MaintenanceTicket[]       @relation("MaintenanceTicketAssignee")
+  maintenanceTicketsAssigned MaintenanceTicket[]              @relation("MaintenanceTicketAssignee")
   leadsCreated               Lead[]
   delinquencyTimelines       DelinquencyTimeline[]
   orgDefaultsUpdated         OrgDefault[]
   cityCopyUpdated            City[]
   periodsClosed              AccountingPeriod[]
+  unrentableUnits            Unit[]                           @relation("UnitUnrentableSetBy")
 
   @@map("staff_user")
 }
@@ -4719,6 +4740,21 @@ model StaffRecoveryCode {
 /// late-fee job and the delinquency engine keep reading exactly one place. See
 /// the header of packages/core/org/defaults.ts for why that choice also makes
 /// "overridden" a comparison rather than a stored flag.
+/// B-433. Org-wide settings that ARE read at runtime (unlike `OrgDefault`,
+/// which is pushed down). One row, id `org`; absent means the column defaults.
+model OrgSetting {
+  id                 String   @id @default("org")
+  /// Units one facility may hold `unrentable` before the next needs
+  /// `units:unrentable_override`.
+  unrentableMaxUnits Int      @default(5)
+  /// Days a unit may stay `unrentable` before a later review date needs
+  /// `units:unrentable_override`.
+  unrentableMaxDays  Int      @default(30)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("org_setting")
+}
+
 model OrgDefault {
   id               String          @id @default(cuid())
   scope            OrgDefaultScope @unique

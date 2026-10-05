@@ -710,6 +710,20 @@ test.describe('units (B-116)', () => {
     await assertNoAxeViolations(page)
   })
 
+  // B-433. The list and the form it opens. The form is NOT sent: the demo
+  // unit's reason and dates are read by nothing else, but a second sweep must
+  // find the same row (B-120).
+  test('/admin/units/unrentable lists the unit with its reason, and its form has no WCAG 2.1 AA violations', async ({ page }) => {
+    await page.goto('/admin/units/unrentable')
+    await expect(page.getByRole('heading', { name: 'Unrentable units' })).toBeVisible()
+    await expect(page.getByText('Damaged').first()).toBeVisible()
+    await assertNoAxeViolations(page)
+
+    await page.getByRole('link', { name: /^Update/ }).first().click()
+    await expect(page.getByRole('button', { name: 'Mark unrentable' })).toBeVisible()
+    await assertNoAxeViolations(page)
+  })
+
   test('an occupied unit names the tenant and links to their profile', async ({ page }) => {
     // Not scoped to the table's own `row` role: below `sm` the table is
     // `hidden` in favour of the card list, which carries the identical link

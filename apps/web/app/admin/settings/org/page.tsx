@@ -16,7 +16,9 @@ import {
   pushOrgDefaultAction,
   saveFeeDefaultAction,
   saveLadderDefaultAction,
+  saveUnrentableLimitsAction,
 } from './actions'
+import { getUnrentableLimits } from '@/lib/admin/unrentable'
 
 export const metadata = { title: 'Org defaults' }
 
@@ -72,7 +74,7 @@ export default async function OrgDefaultsPage() {
     )
   }
 
-  const [fees, ladder, timeline, feeRows, ladderRows, timelineRows, templates] = await Promise.all([
+  const [fees, ladder, timeline, feeRows, ladderRows, timelineRows, templates, unrentableLimits] = await Promise.all([
     getOrgDefault('fee_schedule'),
     getOrgDefault('late_fee_ladder'),
     getOrgDefault('delinquency_timeline'),
@@ -80,6 +82,7 @@ export default async function OrgDefaultsPage() {
     compareFacilities(actor, 'late_fee_ladder'),
     compareFacilities(actor, 'delinquency_timeline'),
     templateOverrides(actor),
+    getUnrentableLimits(),
   ])
 
   const feeList = (fees?.payload as { fees?: { feeType: string; amountCents: number }[] })?.fees ?? []
@@ -298,6 +301,47 @@ export default async function OrgDefaultsPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* --------------------------------------------- unrentable limits -- */}
+      <section aria-labelledby="unrentable-heading" className="flex flex-col gap-4">
+        <h2 id="unrentable-heading" className="text-base font-medium">
+          Unrentable limits
+        </h2>
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">
+          Unlike the defaults above, these apply at every facility as soon as they are saved. Past
+          either one, marking a unit unrentable needs the &quot;Exceed the unrentable limits&quot;
+          permission. See the{' '}
+          <Link href="/admin/units/unrentable" className="underline underline-offset-2">
+            unrentable units
+          </Link>
+          .
+        </p>
+        <AdminForm
+          action={saveUnrentableLimitsAction}
+          label="Set the unrentable limits"
+          className="grid gap-3 sm:grid-cols-3"
+        >
+          <Field
+            name="maxUnits"
+            label="Units at one facility"
+            type="number"
+            min={0}
+            required
+            defaultValue={unrentableLimits.maxUnits}
+          />
+          <Field
+            name="maxDays"
+            label="Days for one unit"
+            type="number"
+            min={1}
+            required
+            defaultValue={unrentableLimits.maxDays}
+          />
+          <div className="flex items-end">
+            <Button type="submit">Set limits</Button>
+          </div>
+        </AdminForm>
       </section>
     </div>
   )

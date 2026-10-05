@@ -74,6 +74,19 @@ function evaluateRow(
 
   switch (operation.kind) {
     case 'status': {
+      // B-433. Each unrentable unit needs its own reason, note and review
+      // date, and the org's limits are checked one unit at a time.
+      // ponytail: no bulk path into `unrentable`; give the operation a reason
+      // and a review date if closing a whole row in one go is ever needed.
+      if (operation.operationalStatus === 'unrentable' && unit.operationalStatus !== 'unrentable') {
+        return {
+          ...base,
+          outcome: 'skip',
+          from: unit.status,
+          to: 'unrentable',
+          skipReason: 'Unrentable needs a reason for each unit. Set it from the unit’s own row.',
+        }
+      }
       const verdict = canSetManualStatus(operation.operationalStatus, facts)
       if (!verdict.allowed) {
         return {
@@ -233,6 +246,14 @@ export async function applyBulkOperation(
             where: { id: row.unitId },
             data: {
               operationalStatus: operation.operationalStatus,
+              // B-433. Same clearing `setUnitOperationalStatus` does.
+              ...(operation.operationalStatus !== 'unrentable' && {
+                unrentableReason: null,
+                unrentableNote: null,
+                unrentableSetAt: null,
+                unrentableSetByStaffId: null,
+                unrentableReviewAt: null,
+              }),
               // `to` is the derived effective status from the same evaluation,
               // so this stays consistent with recomputeUnitStatus().
               status: row.to as Prisma.UnitUpdateInput['status'],

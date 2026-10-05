@@ -187,6 +187,9 @@ export default async function AdminUnitsPage({
           <Link href="/admin/units/setup" className="text-muted-foreground underline underline-offset-2">
             Add or import units
           </Link>
+          <Link href="/admin/units/unrentable" className="text-muted-foreground underline underline-offset-2">
+            Unrentable units
+          </Link>
         </div>
       </div>
 

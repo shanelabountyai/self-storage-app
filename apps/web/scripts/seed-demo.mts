@@ -1161,7 +1161,14 @@ async function seedLifecycleStates(
   const unrentableSlot = next()
   await prisma.unit.update({
     where: { id: unrentableSlot.unit.id },
-    data: { operationalStatus: 'unrentable' },
+    // B-433. A reason and a date, so the unrentable list has a real row.
+    data: {
+      operationalStatus: 'unrentable',
+      unrentableReason: 'damaged',
+      unrentableNote: 'Door track bent; waiting on the installer.',
+      unrentableSetAt: new Date(Date.now() - 12 * 86_400_000),
+      unrentableReviewAt: new Date(Date.now() + 18 * 86_400_000),
+    },
   })
   await recomputeUnitStatus(unrentableSlot.unit.id)
 

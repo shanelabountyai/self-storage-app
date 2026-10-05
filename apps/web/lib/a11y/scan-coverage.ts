@@ -168,6 +168,7 @@ export const ADMIN_SCAN_ROUTES = [
   '/admin/units/types',
   '/admin/units/ready',
   '/admin/units/setup',
+  '/admin/units/unrentable',
   // B-088 part 1. A price-change surface nobody scans is a price-change
   // surface nobody has checked.
   '/admin/units/rates',
