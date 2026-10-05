@@ -12328,7 +12328,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** Full `npm test`: 4,919 passed, 8 skipped. Typecheck (tests included) and lint 0 errors. No schema change. e2e against a production build: `admin-reservations`, `admin` and `admin-pos` on desktop-chrome 339 passed; `admin-reservations` on mobile-chrome 6 passed; the reservation tests in `a11y`, `smoke` and `i18n` 11 passed. The full sweep was not run.
 
-## B-435 — Every segment fails politely (2026-10-05, `PENDING`)
+## B-435 — Every segment fails politely (2026-10-05, `1935fd8`)
 
 **What it built.** A not-found page and an error page for the public site, the portal and the staff screens, plus `global-error`. The public not-found (`app/(public)/not-found.tsx`) has the zip search and the office phone; `app/not-found.tsx` wraps it in the public layout for a URL that matches no route. Every `error.tsx` renders one client component, `ErrorPanel` (`components/site/error-panel.tsx`): heading, one sentence, a Try again button (`unstable_retry`) and a `tel:` link, with focus moved to the heading. The public error says "Nothing was charged" except under `/checkout`, where it says a card may already have been charged and to check for a receipt first. The portal error offers pay by phone and says nothing about the balance. The staff error shows Next's `error.digest` as the request id. Public and portal pages are in English and Spanish (`errorPage.*`, nine keys); `global-error` is English with one Spanish sentence. Tests: `e2e/error-pages.spec.ts` (404 status, title, `<h1>`, zip box, phone, Spanish, focus on the error heading, Try again, and the portal and staff 404s inside their shells); both public pages are in `PUBLIC_SCAN_ROUTES`.
 
