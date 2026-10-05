@@ -12304,7 +12304,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** Full `npm test` 4,896 passed; typecheck (tests included) and lint 0 errors; schema drift clean. e2e not run.
 
-## B-433 — An unrentable unit says why, since when, and until when (2026-10-04, `SHA_PENDING`)
+## B-433 — An unrentable unit says why, since when, and until when (2026-10-04, `80e8cae`)
 
 **What it built.** Marking a unit `unrentable` now needs a reason (company use, damaged, owner use, held for demolition), a note and a review date, and records who set it and when (`Unit.unrentableReason`, `unrentableNote`, `unrentableSetAt`, `unrentableSetByStaffId`, `unrentableReviewAt`; migration `b433_unrentable_reason`). `setUnitOperationalStatus` takes them as a sixth argument and throws `UnrentableRefusedError` without them. `/admin/units/unrentable` lists every unrentable unit at every facility the reader can see, longest first, with rent lost at today's street rate (`rentLostCents`, `packages/core/inventory/unrentable.ts`) and "Review overdue" in words; `?unit=<id>` opens the form. The units screen's row control redirects there when `unrentable` is chosen. The two limits live on a new one-row `OrgSetting` (5 units, 30 days) with a form on `/admin/settings/org`, audited as `org_setting.updated`. New permission `units:unrentable_override`, granted to Regional Manager and Owner. The demo seed's unrentable unit has a reason and dates. Tests: `tests/unrentable.test.ts` (arithmetic, both limits), `tests/unrentable-db.test.ts` (a manager refused past each limit, a regional manager allowed), one e2e in `admin.spec.ts`.
 
