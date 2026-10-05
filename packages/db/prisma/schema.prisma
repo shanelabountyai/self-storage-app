@@ -1340,6 +1340,7 @@ model Tenant {
   homeFacility              Facility?                @relation("TenantHomeFacility", fields: [facilityId], references: [id])
   leases                    Lease[]
   payLinks                  PayLink[]
+  nominatedPayers           NominatedPayer[]
   addresses                 TenantAddress[]
   notes                     TenantNote[]
   payments                  Payment[]
@@ -4509,15 +4510,60 @@ model PayLink {
   /// The payment made through this link. The other half of CN-4's attribution,
   /// and the number that proves the module earns its keep (PRD 05 §7).
   paymentId      String?   @unique
+  /// B-437. Set when the link was sent to the tenant's nominated payer rather
+  /// than to the tenant. It keeps the two copies of one event's link apart, it
+  /// is what removing or stopping the payer revokes, and the pay screen reads
+  /// it to hide the tenant's saved cards from somebody who is not the tenant.
+  nominatedPayerId String?
   createdAt      DateTime  @default(now()) @db.Timestamptz(6)
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  lease   Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
-  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lease          Lease           @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  payment        Payment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  nominatedPayer NominatedPayer? @relation(fields: [nominatedPayerId], references: [id], onDelete: Cascade)
 
   @@index([leaseId, expiresAt])
   @@index([eventId])
   @@map("pay_link")
+}
+
+/// PRD 01 US-703 "someone else can pay" (B-437). The one person a tenant has
+/// asked us to send the bill to: a family member, usually. They get the pay
+/// link and the payment reminders and nothing else. No portal login, no gate
+/// code, no documents.
+///
+/// Not a `Tenant` and not a business-account member (D-120): a member can see
+/// an account and cannot pay; this person can pay one tenant's units and can
+/// see nothing.
+///
+/// A row is never deleted or edited. `removedAt` is the tenant taking them
+/// off, `stoppedAt` is the payer's own stop from the link in every message,
+/// and a change of payer is a new row, so the consent each one was nominated
+/// under stays on record. At most one row per tenant has both null
+/// (`nominatePayer` removes the old one in the same transaction).
+model NominatedPayer {
+  id                String    @id @default(cuid())
+  tenantId          String
+  name              String
+  /// Required (D-157): the reminders go by email only. A text to somebody who
+  /// has not agreed to be texted is not ours to send on the tenant's word.
+  email             String
+  /// Kept so the office can call them. Never texted.
+  phone             String?
+  /// The version and language of the `PAYER_NOMINATION_CONSENT` sentence the
+  /// tenant ticked, as on a `Consent` row.
+  disclosureVersion String
+  locale            String
+  consentedAt       DateTime  @default(now()) @db.Timestamptz(6)
+  stoppedAt         DateTime? @db.Timestamptz(6)
+  removedAt         DateTime? @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payLinks PayLink[]
+
+  @@index([tenantId])
+  @@map("nominated_payer")
 }
 
 /// PRD 02 §4.4 US-42 (B-096). A reason automated collections stop on a lease.

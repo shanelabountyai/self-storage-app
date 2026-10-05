@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { AdminForm } from '@/components/admin/form'
+import { AdminForm, Field } from '@/components/admin/form'
+import { AnnounceRegion } from '@/components/admin/announce'
 import { requireTenantActor } from '@/lib/rbac/session'
 import {
   currentPreferences,
@@ -8,8 +9,11 @@ import {
   NOTIFICATION_CATEGORIES,
   smsConsentView,
 } from '@/lib/portal/notifications'
-import { MARKETING_SMS_CONSENT } from '@/lib/consent/disclosures'
+import { MARKETING_SMS_CONSENT, PAYER_NOMINATION_CONSENT } from '@/lib/consent/disclosures'
+import { nominatedPayerFor } from '@/lib/portal/nominated-payer'
 import {
+  nominatePayerAction,
+  removePayerAction,
   revokeSmsAction,
   setMarketingSmsAction,
   setPreferencesAction,
@@ -31,6 +35,8 @@ export async function generateMetadata(): Promise<Metadata> {
 // it is described rather than offered as a control (AC's own instruction —
 // "the UI says so").
 
+const FIELD_CLASS = 'flex flex-col gap-1 text-sm'
+
 function formatWhen(date: Date, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
     day: 'numeric',
@@ -43,7 +49,8 @@ function formatWhen(date: Date, locale: string): string {
 
 export default async function NotificationsPage() {
   const actor = await requireTenantActor()
-  const [grid, consent, marketingSms, writingLocale] = await Promise.all([
+  const [payer, grid, consent, marketingSms, writingLocale] = await Promise.all([
+    nominatedPayerFor(actor.tenantId),
     currentPreferences(actor.tenantId),
     smsConsentView(actor.tenantId),
     smsConsentView(actor.tenantId, 'marketing_sms'),
@@ -169,6 +176,88 @@ export default async function NotificationsPage() {
         <p className="text-muted-foreground max-w-prose text-xs text-pretty">
           {t('notif.mandatoryNote')}
         </p>
+      </section>
+
+      {/* B-437 (PRD 01 US-703). Who else is sent the bill. Beside the grid
+          because it answers the same question the grid does, "who hears about
+          my payments, and how". One payer at a time: the form is offered only
+          when there is nobody, so naming a new one is remove, then name. */}
+      <section aria-labelledby="payer-heading" className="flex flex-col gap-3">
+        <h2 id="payer-heading" className="font-medium">
+          {t('payer.heading')}
+        </h2>
+        {/* 3.3.4: what the payer will and will not get, before the control. */}
+        <p className="text-muted-foreground max-w-prose text-sm text-pretty">{t('payer.intro')}</p>
+        {/* Each form's own success unmounts it (the other takes its place), so
+            both announce in the region above them rather than inside. */}
+        <AnnounceRegion>
+        {payer ? (
+          <>
+            <p className="max-w-prose text-sm text-pretty">
+              {t(payer.stoppedAt ? 'payer.stopped' : 'payer.current', {
+                name: payer.name,
+                email: payer.email,
+                date: formatWhen(payer.stoppedAt ?? payer.consentedAt, locale),
+              })}
+            </p>
+            <AdminForm
+              action={removePayerAction}
+              label={t('payer.remove')}
+              className="flex flex-col gap-2"
+              announceOutside
+            >
+              <button
+                type="submit"
+                className="border-input hover:bg-accent inline-flex min-h-11 items-center justify-center self-start rounded-md border px-4 text-sm font-medium"
+              >
+                {t('payer.remove')}
+              </button>
+            </AdminForm>
+          </>
+        ) : (
+          <AdminForm
+            action={nominatePayerAction}
+            label={t('payer.heading')}
+            className="flex max-w-md flex-col gap-3"
+            announceOutside
+          >
+            <Field name="payerName" label={t('payer.name')} autoComplete="off" required className={FIELD_CLASS} />
+            <Field
+              name="payerEmail"
+              label={t('payer.email')}
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              required
+              className={FIELD_CLASS}
+            />
+            <Field
+              name="payerPhone"
+              label={t('payer.phone')}
+              hint={t('payer.phoneHint')}
+              type="tel"
+              autoComplete="off"
+              className={FIELD_CLASS}
+            />
+            {/* The sentence the tenant agrees to, verbatim and versioned, in
+                the language it is recorded under (`disclosureLocale`). */}
+            <Field
+              as="checkbox"
+              name="payerConsent"
+              value="yes"
+              label={PAYER_NOMINATION_CONSENT[locale].text}
+              className="text-sm"
+            />
+            <input type="hidden" name="disclosureLocale" value={locale} />
+            <button
+              type="submit"
+              className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center self-start rounded-md px-4 text-sm font-medium"
+            >
+              {t('payer.save')}
+            </button>
+          </AdminForm>
+        )}
+        </AnnounceRegion>
       </section>
 
       <section aria-labelledby="sms-consent-heading" className="flex flex-col gap-3">

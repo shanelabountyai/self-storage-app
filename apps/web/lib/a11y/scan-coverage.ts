@@ -480,6 +480,33 @@ export type ScannedState = {
 }
 
 export const SCANNED_STATES: readonly ScannedState[] = [
+  // B-437. The "send my bill to someone else" section in its two states the
+  // route loop cannot reach (it scans the empty form), and the unsubscribe
+  // page's wording for a nominated payer.
+  {
+    route: '/portal/notifications',
+    state: 'bill payer refused',
+    spec: 'e2e/portal-bill-payer.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the form the /portal/notifications route loop measures at every width, with one error sentence under its checkbox and the error summary every AdminForm shows',
+  },
+  {
+    route: '/portal/notifications',
+    state: 'bill payer named',
+    spec: 'e2e/portal-bill-payer.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'one wrapping sentence and one button where the measured state has a four-field form; narrower content in the same column',
+  },
+  {
+    route: '/unsubscribe/[token]',
+    state: 'bill payer stop',
+    spec: 'e2e/portal-bill-payer.spec.ts',
+    layout: 'excepted',
+    layoutException:
+      'the same centred heading, paragraph and button the unsubscribe page always has, with a different sentence in the paragraph',
+  },
   // B-362. The two customer states B-336 and B-349 shipped that had a spec
   // but no axe scan. `layout: 'excepted'` for each: a short single-column
   // message on a page whose form is already measured at every width.

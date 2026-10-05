@@ -28,7 +28,7 @@ import { absoluteUrl } from '@storage/core/marketing'
 import { currentRateForUnitType } from '@/lib/pricing/unit-type-rates'
 import { offerFor } from '@/lib/promotions/service'
 import { offerTermsText } from '@/lib/promotions/terms'
-import { ACCOUNT_KEY_SUFFIX, defaultNotificationPreference, isMarketingQuietHours, isSmsQuietHours, normalizePhoneE164, tableHtml } from '@storage/core/comms'
+import { ACCOUNT_KEY_SUFFIX, defaultNotificationPreference, escapeHtml, isMarketingQuietHours, isSmsQuietHours, normalizePhoneE164, tableHtml } from '@storage/core/comms'
 import { currentConsent } from '@storage/core/consent'
 import { createTask } from '@/lib/admin/tasks'
 import { mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe-token'
@@ -132,6 +132,11 @@ type Recipient = {
   /// one message per account per business day per event class, rendered from
   /// the `_account` template, linked to the account pay screen.
   payerAccount: { id: string; name: string } | null
+  /// B-437. Set only on the ADDED copy for the tenant's nominated payer (PRD 01
+  /// US-703). That person is not a tenant, so `tenantId` is null on their copy
+  /// and the tenant whose bill it is rides here: the pay link is minted on the
+  /// tenant's lease, and the footer names who asked for the message to be sent.
+  nominatedPayer?: { id: string; tenantId: string; tenantName: string } | null
 }
 
 /// B-261. The tenant fields every recipient resolver reads. One constant
@@ -460,12 +465,10 @@ async function resolveRecipients(event: DomainEvent): Promise<Recipient[]> {
   })
   const account = lease?.billingAccount
   const payer = account?.payer
+  const recipients = [recipient]
   // A payer who is also this lease's tenant is already the recipient.
-  if (!account || !payer || payer.id === recipient.tenantId) return [recipient]
-
-  return [
-    recipient,
-    {
+  if (account && payer && payer.id !== recipient.tenantId) {
+    recipients.push({
       ...recipient,
       locale: localeOf(payer),
       recipientKey: payer.id,
@@ -475,8 +478,60 @@ async function resolveRecipients(event: DomainEvent): Promise<Recipient[]> {
       firstName: payer.firstName,
       lastName: payer.lastName,
       payerAccount: { id: account.id, name: account.name },
-    },
-  ]
+    })
+  }
+
+  // B-437 (PRD 01 US-703). The person the tenant asked us to send the bill to.
+  // The same three events and the same reasoning as the account payer above:
+  // the bill and the courtesy ladder, never a lien notice, a gate notice or
+  // anything about the tenant's card. They share the tenant's `lease`, so the
+  // rule's own skip conditions read the same facts: a bill the tenant's
+  // autopay covers, or one already paid, is not sent to either of them.
+  //
+  // Email only (D-157). `phone` is null on this copy, so an SMS-first rule
+  // falls back to email, and `tenantId` is null, so nothing here reads the
+  // tenant's own preferences or consent as if they were this person's. The
+  // language is the tenant's: it is the language the form that named them was
+  // filled in, and the language of the pay screen the link opens.
+  const nominated = recipient.tenantId
+    ? await prisma.nominatedPayer.findFirst({
+        where: { tenantId: recipient.tenantId, removedAt: null, stoppedAt: null },
+        select: { id: true, name: true, email: true },
+      })
+    : null
+  if (nominated && recipient.tenantId) {
+    recipients.push({
+      ...recipient,
+      recipientKey: `nominated-payer:${nominated.id}`,
+      tenantId: null,
+      email: nominated.email,
+      phone: null,
+      firstName: nominated.name,
+      lastName: '',
+      nominatedPayer: {
+        id: nominated.id,
+        tenantId: recipient.tenantId,
+        tenantName: `${recipient.firstName} ${recipient.lastName}`.trim(),
+      },
+    })
+  }
+  return recipients
+}
+
+/// B-437. What the pipeline appends to a nominated payer's email, and never a
+/// template: why a bill in somebody else's name has reached them, and the link
+/// that stops it. Appended here for the reason the postal footer is: an edited
+/// template cannot drop it.
+function payerFooter(recipient: Recipient, address: string): { text: string; html: string } {
+  const payer = recipient.nominatedPayer
+  if (!payer) return { text: '', html: '' }
+  const say = proseFor(recipient.locale)
+  const why = say.payerFooter(payer.tenantName, recipient.facility?.name ?? '')
+  const stop = unsubscribeUrl(mintUnsubscribeToken(address, recipient.locale, payer.id), baseUrl())
+  return {
+    text: `\n\n${why}\n${say.payerStop}: ${stop}`,
+    html: `<p>${escapeHtml(why)} <a href="${stop}">${say.payerStop}</a></p>`,
+  }
 }
 
 /// B-309. What the whole account owes, over how many units, and when the
@@ -811,12 +866,16 @@ async function payNowLink(recipient: Recipient, event: DomainEvent): Promise<str
   // account's own screen answers both fields. Short-circuited before the mint,
   // so the fifteen throwaway PayLink rows are not created either.
   if (recipient.payerAccount) return accountPayUrl(recipient.payerAccount.id)
-  if (!recipient.tenantId || !recipient.lease) return fallback
+  // B-437. A nominated payer's link is minted on the tenant's lease and marked
+  // as theirs, so removing them revokes it and leaves the tenant's own alone.
+  const tenantId = recipient.nominatedPayer?.tenantId ?? recipient.tenantId
+  if (!tenantId || !recipient.lease) return fallback
 
   const link = await mintPayLink({
-    tenantId: recipient.tenantId,
+    tenantId,
     leaseId: recipient.lease.id,
     eventId: event.id,
+    nominatedPayerId: recipient.nominatedPayer?.id,
   })
   return link ? payLinkUrl(link.token, baseUrl()) : fallback
 }
@@ -1721,8 +1780,11 @@ async function restoreAmountCents(recipient: {
   tenantId: string | null
   facility: { id: string } | null
   lease: { id: string } | null
+  nominatedPayer?: { tenantId: string } | null
 }): Promise<number> {
-  if (!recipient.tenantId || !recipient.facility) {
+  // B-437. A nominated payer is quoted the tenant's figure, not a fallback.
+  const tenantId = recipient.nominatedPayer?.tenantId ?? recipient.tenantId
+  if (!tenantId || !recipient.facility) {
     return leaseBalanceCents(recipient.lease?.id ?? null)
   }
 
@@ -1734,7 +1796,7 @@ async function restoreAmountCents(recipient: {
     prisma.ledgerEntry.aggregate({
       where: {
         lease: {
-          tenantId: recipient.tenantId,
+          tenantId,
           facilityId: recipient.facility.id,
           status: { in: [...OCCUPYING_LEASE_STATUSES] },
         },
@@ -2353,10 +2415,12 @@ async function sendEmailFallback(
 
   const facility = recipient.facility
   const footerTarget = facility ? { name: facility.name, address: formatFacilityAddress(facility) } : null
-  const text = withPostalFooter(rendered.text, footerTarget)
-  const html = footerTarget
-    ? `${rendered.html}<hr><p>${footerTarget.name}<br>${footerTarget.address}</p>`
-    : rendered.html
+  const payer = payerFooter(recipient, address)
+  const text = withPostalFooter(rendered.text, footerTarget) + payer.text
+  const html =
+    (footerTarget
+      ? `${rendered.html}<hr><p>${footerTarget.name}<br>${footerTarget.address}</p>`
+      : rendered.html) + payer.html
 
   const result = await selectProvider().sendEmail({
     to: effectiveRecipient(address),
@@ -2811,10 +2875,13 @@ async function deliverForRule(
   // B-261. The word, in the recipient's language — the LINK is unchanged, and
   // the page it lands on is `/unsubscribe`, which B-260 translated.
   const unsubscribeLabel = proseFor(recipient.locale).unsubscribe
-  const text = unsubscribeLink ? `${withFooter}\n\n${unsubscribeLabel}: ${unsubscribeLink}` : withFooter
-  const html = unsubscribeLink
-    ? `${htmlWithFooter}<p><a href="${unsubscribeLink}">${unsubscribeLabel}</a></p>`
-    : htmlWithFooter
+  const payer = payerFooter(recipient, address)
+  const text =
+    (unsubscribeLink ? `${withFooter}\n\n${unsubscribeLabel}: ${unsubscribeLink}` : withFooter) + payer.text
+  const html =
+    (unsubscribeLink
+      ? `${htmlWithFooter}<p><a href="${unsubscribeLink}">${unsubscribeLabel}</a></p>`
+      : htmlWithFooter) + payer.html
 
   const provider = selectProvider()
   const result = await provider.sendEmail({

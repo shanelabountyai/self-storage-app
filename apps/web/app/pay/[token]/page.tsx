@@ -178,7 +178,9 @@ export default async function PayLinkPage({
         {setup.available ? (
           <PortalPayment
             clientSecret={setup.clientSecret}
-            customerSessionSecret={setup.customerSessionSecret}
+            // B-437. The customer session is what redisplays the tenant's
+            // saved cards. A nominated payer pays with their own.
+            customerSessionSecret={link.forPayer ? null : setup.customerSessionSecret}
             returnUrl={`${process.env.AUTH_URL ?? 'http://localhost:3000'}/pay/${token}/done?payment=${setup.paymentId}`}
             amountLabel={formatRate(amountCents)}
           />

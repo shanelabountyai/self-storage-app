@@ -2202,6 +2202,33 @@ export const en = {
     'You will stop receiving marketing emails from us at this address. You will still get emails about anything you have an active account or reservation for.',
   'unsub.confirmButton': 'Unsubscribe me',
 
+  // B-437 (PRD 01 US-703). A nominated payer's own stop, on the unsubscribe page.
+  'unsub.payerConfirmBody':
+    'You will stop getting bills and payment reminders for this unit at this address. The person who rents the unit will be told the bill is no longer reaching you.',
+  'unsub.payerDoneBody':
+    '{address} will not be sent this bill or its payment reminders again. Any pay link we sent you no longer works.',
+
+  // B-437 (PRD 01 US-703). "Someone else can pay", on /portal/notifications.
+  'payer.heading': 'Send my bill to someone else',
+  'payer.intro':
+    'Name one person, such as a family member, who pays your bill. We email them your bill and payment reminders with a link to pay. That is all they get: no gate code, no documents and no login to your account. You still get every message yourself.',
+  'payer.name': 'Their name',
+  'payer.email': 'Their email',
+  'payer.phone': 'Their phone (optional)',
+  'payer.phoneHint': 'Only so the office can call them. We do not text them.',
+  'payer.save': 'Send them my bill',
+  'payer.saved': '{name} will get your bill and payment reminders at {email}.',
+  'payer.current': '{name} ({email}) gets your bill and payment reminders. You named them on {date}.',
+  'payer.stopped':
+    '{name} ({email}) asked us on {date} to stop sending your bill. It is not being sent to them. To send it to someone, remove them first.',
+  'payer.remove': 'Stop sending them my bill',
+  'payer.removed': 'Your bill is no longer sent to anyone else. Any pay link they had no longer works.',
+  'payer.noneToRemove': 'Nobody else was getting your bill.',
+  'payer.problem.name': 'Enter their name.',
+  'payer.problem.email': 'Enter their email address, like name@example.com.',
+  'payer.problem.phone': 'Enter a phone number with at least 10 digits, or leave it empty.',
+  'payer.problem.consent': 'Tick the box to agree before we send your bill to someone else.',
+
   // B-435 (PRD 01 §6.7). The not-found and error pages.
   'errorPage.notFoundTitle': "We can't find that page",
   'errorPage.notFoundBody':

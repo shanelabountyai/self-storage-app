@@ -63,13 +63,24 @@ export async function mintPayLink(input: {
   leaseId: string
   eventId?: string | null
   ttlDays?: number
+  /// B-437. Set when the link goes to the tenant's nominated payer. `tenantId`
+  /// is still the tenant: the payment is made on their lease, in their name.
+  nominatedPayerId?: string | null
 }): Promise<{ token: string; expiresAt: Date } | null> {
+  const nominatedPayerId = input.nominatedPayerId ?? null
   if (input.eventId) {
     const existing = await prisma.payLink.findFirst({
       // B-279. Per tenant too: a business account's payer gets a link to the
       // same lease from the same event, and revoking by lease alone would kill
-      // the tenant's link the moment the payer's was minted.
-      where: { eventId: input.eventId, leaseId: input.leaseId, tenantId: input.tenantId, revokedAt: null },
+      // the tenant's link the moment the payer's was minted. B-437: and per
+      // nominated payer, for the same reason.
+      where: {
+        eventId: input.eventId,
+        leaseId: input.leaseId,
+        tenantId: input.tenantId,
+        nominatedPayerId,
+        revokedAt: null,
+      },
       select: { id: true },
     })
     // The plaintext is unrecoverable by design, so a reused event has to mint a
@@ -92,6 +103,7 @@ export async function mintPayLink(input: {
       tenantId: input.tenantId,
       leaseId: input.leaseId,
       eventId: input.eventId ?? null,
+      nominatedPayerId,
       expiresAt,
     },
   })
@@ -100,7 +112,9 @@ export async function mintPayLink(input: {
 }
 
 export type PayLinkCheck =
-  | { ok: true; payLinkId: string; tenantId: string; leaseId: string }
+  /// B-437. `forPayer` is true when the link was sent to the tenant's nominated
+  /// payer, who must not be offered the tenant's saved cards.
+  | { ok: true; payLinkId: string; tenantId: string; leaseId: string; forPayer: boolean }
   /// One reason for every failure mode, deliberately. A revoked link and a
   /// token that never existed are indistinguishable from outside — there is
   /// nothing to enumerate and no reason to help someone try. (B-336: an expired
@@ -125,6 +139,7 @@ export async function checkPayLink(token: string): Promise<PayLinkCheck> {
       expiresAt: true,
       revokedAt: true,
       firstClickedAt: true,
+      nominatedPayerId: true,
       lease: { select: { status: true } },
     },
   })
@@ -147,7 +162,13 @@ export async function checkPayLink(token: string): Promise<PayLinkCheck> {
     },
   })
 
-  return { ok: true, payLinkId: link.id, tenantId: link.tenantId, leaseId: link.leaseId }
+  return {
+    ok: true,
+    payLinkId: link.id,
+    tenantId: link.tenantId,
+    leaseId: link.leaseId,
+    forPayer: link.nominatedPayerId !== null,
+  }
 }
 
 /// B-283. The language the pay screen speaks: the tenant's, read the way the

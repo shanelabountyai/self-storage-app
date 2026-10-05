@@ -160,3 +160,22 @@ export const MARKETING_EMAIL_LEAD_CONSENT: Record<Locale, Disclosure> = {
     version: 'v1-es',
   },
 }
+
+/// PRD 01 US-703 "someone else can pay" (B-437). What a tenant agrees to when
+/// they ask us to send their bill to another person, recorded on the
+/// `NominatedPayer` row by version and language.
+///
+/// It says three things because it is three consents in one act: the tenant
+/// lets us show somebody else what they owe, says that person has agreed to be
+/// emailed, and is told what that person will not get. Draft, as all the legal
+/// copy here is (D-10).
+export const PAYER_NOMINATION_CONSENT: Record<Locale, Disclosure> = {
+  en: {
+    text: 'Send my bill and payment reminders to this person by email, and let them pay it. They have agreed to get these emails. They will see my unit number and what I owe. They will not get my gate code, my documents or a login to my account. Either of us can stop this at any time.',
+    version: 'v1-draft',
+  },
+  es: {
+    text: 'Envíen mi factura y mis recordatorios de pago a esta persona por correo electrónico, y permítanle pagarla. Esta persona aceptó recibir estos correos. Verá el número de mi unidad y lo que debo. No recibirá mi código de la puerta, mis documentos ni acceso a mi cuenta. Cualquiera de los dos puede detener esto en cualquier momento.',
+    version: 'v1-draft-es',
+  },
+}

@@ -31,6 +31,8 @@ const NO_FACILITY_ID: Record<string, string> = {
   City:
     'a city page lists EVERY facility in the city, so there is no one facility to scope it to — which is also why editing it is checked against `marketing:city_copy` with a null facilityId rather than against `facility:settings` at a site (PRD 04 US-4 AC1, B-128, D-62)',
   Tenant: 'a person, who may hold leases at several facilities',
+  NominatedPayer:
+    'the person a TENANT asked us to send the bill to (B-437); they follow the tenant to every facility the tenant rents at',
   StaffUser: 'org-level identity; facility scoping is RoleAssignment in B-004',
   Promotion: 'targets facilities through facilityIds[]',
   Consent: 'scoped to a tenant or lead, not a facility',

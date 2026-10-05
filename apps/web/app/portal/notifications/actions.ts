@@ -10,10 +10,11 @@ import {
   setWritingLocale,
 } from '@/lib/portal/notifications'
 import { MARKETING_SMS_CONSENT } from '@/lib/consent/disclosures'
+import { nominatePayer, removeNominatedPayer } from '@/lib/portal/nominated-payer'
 import { isLocale, LOCALE_COOKIE, LOCALE_COOKIE_DAYS, dictionaryFor, translate } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { cookies } from 'next/headers'
-import { success, type FormState } from '@/lib/admin/form-state'
+import { keyedFieldError, success, type FormState } from '@/lib/admin/form-state'
 import { messages } from '@/lib/i18n/server'
 
 // PRD 05 CN-13 (B-074). Thin session wrapper, same shape as
@@ -126,4 +127,46 @@ export async function setWritingLocaleAction(
   // reason `setLocaleAction` revalidates the layout rather than the page.
   revalidatePath('/', 'layout')
   return success(translate(dictionaryFor(requested), 'notif.languageSaved'))
+}
+
+/// B-437 (PRD 01 US-703). Names the one person who is sent the bill. Every
+/// decision is in `lib/portal/nominated-payer.ts`.
+export async function nominatePayerAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireTenantActor()
+  // The language the consent sentence was rendered in, from the form, for the
+  // reason `setMarketingSmsAction` gives.
+  const claimed = formData.get('disclosureLocale')
+  const locale = isLocale(claimed) ? claimed : await getLocale()
+
+  const result = await nominatePayer(actor.tenantId, {
+    name: String(formData.get('payerName') ?? ''),
+    email: String(formData.get('payerEmail') ?? ''),
+    phone: String(formData.get('payerPhone') ?? ''),
+    consent: formData.get('payerConsent') === 'yes',
+    locale,
+  })
+  const { t } = await messages()
+  if (!result.ok) {
+    return keyedFieldError(
+      Object.fromEntries(
+        Object.entries(result.problems).map(([field, key]) => [
+          `payer${field[0].toUpperCase()}${field.slice(1)}`,
+          { key },
+        ]),
+      ),
+      t,
+    )
+  }
+
+  revalidatePath('/portal/notifications')
+  return success(t('payer.saved', { name: result.payer.name, email: result.payer.email }))
+}
+
+export async function removePayerAction(_prev: FormState, _formData: FormData): Promise<FormState> {
+  const actor = await requireTenantActor()
+  const removed = await removeNominatedPayer(actor.tenantId)
+
+  revalidatePath('/portal/notifications')
+  const { t } = await messages()
+  return success(removed ? t('payer.removed') : t('payer.noneToRemove'))
 }

@@ -237,6 +237,10 @@ export type CommsProse = {
 
   // ── appended by the pipeline, never by a template ─────────────────────────
   unsubscribe: string
+  /// B-437. Under every email to a tenant's nominated payer: why it reached
+  /// them, then the label of the link that stops it.
+  payerFooter: (tenant: string, facility: string) => string
+  payerStop: string
   /// FR-11's opt-out line. STOP and HELP stay English in both languages: they
   /// are not words, they are the literal strings `classifyInboundSms` matches
   /// (`packages/core/comms/sms-keywords.ts`), and a carrier's own keyword
@@ -448,6 +452,9 @@ const en: CommsProse = {
   },
 
   unsubscribe: 'Unsubscribe',
+  payerFooter: (tenant, facility) =>
+    `You are getting this because ${tenant} asked ${facility} to send you the bill for their unit.`,
+  payerStop: 'Stop these emails',
   smsOptOut: 'Reply STOP to opt out, HELP for help.',
 }
 
@@ -647,6 +654,9 @@ const es: CommsProse = {
   },
 
   unsubscribe: 'Cancelar la suscripción',
+  payerFooter: (tenant, facility) =>
+    `Recibe este mensaje porque ${tenant} nos pidió que le enviáramos a usted la factura de la unidad que renta en ${facility}.`,
+  payerStop: 'Dejar de recibir estos correos',
   smsOptOut: 'Responda STOP para darse de baja, o HELP para obtener ayuda; estas dos palabras se escriben en inglés.',
 }
 

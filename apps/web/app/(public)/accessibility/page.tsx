@@ -3059,6 +3059,17 @@ function reviewedOn(locale: Locale): string {
 // `global-error`, which shows English with one Spanish sentence because it
 // replaces the layout that knows the reader's language. No sentence on this
 // page changes. `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-10-05, at B-437. `/portal/notifications` gains a "send my bill
+// to someone else" section. Its empty form is what the portal route loop
+// already scans and measures; the refused form and the named-payer state are
+// two new `SCANNED_STATES` rows (axe, English), and so is the unsubscribe
+// page's wording for a nominated payer. Layout is excepted for all three, with
+// the reason on each row. Not scanned and in no list: the "they asked us to
+// stop" sentence (asserted, same markup as the named state), and any of the
+// four in Spanish. The payer's emails are plain text and a paragraph; nothing
+// on this page speaks about email. No sentence on this page changes.
+// `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

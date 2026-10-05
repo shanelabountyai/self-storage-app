@@ -20,12 +20,22 @@ afterAll(() => {
 describe('unsubscribe tokens', () => {
   it('round-trips the address', () => {
     const token = mintUnsubscribeToken('Ada@Example.com', 'en')
-    expect(verifyUnsubscribeToken(token)).toEqual({ valid: true, address: 'ada@example.com', locale: 'en' })
+    expect(verifyUnsubscribeToken(token)).toEqual({
+      valid: true,
+      address: 'ada@example.com',
+      locale: 'en',
+      payerId: null,
+    })
   })
 
   it('carries the language of the email it was minted for, signed (B-321)', () => {
     const token = mintUnsubscribeToken('ada@example.com', 'es')
-    expect(verifyUnsubscribeToken(token)).toEqual({ valid: true, address: 'ada@example.com', locale: 'es' })
+    expect(verifyUnsubscribeToken(token)).toEqual({
+      valid: true,
+      address: 'ada@example.com',
+      locale: 'es',
+      payerId: null,
+    })
     // The page trusts it, so a visitor must not be able to swap it.
     const [, signature] = token.split('.')
     const forged = `${Buffer.from(JSON.stringify({ v: 1, a: 'ada@example.com', l: 'en' })).toString('base64url')}.${signature}`
@@ -44,6 +54,11 @@ describe('unsubscribe tokens', () => {
     const [, signature] = token.split('.')
     const forged = `${Buffer.from(JSON.stringify({ v: 1, a: 'someoneelse@example.com' })).toString('base64url')}.${signature}`
     expect(verifyUnsubscribeToken(forged)).toEqual({ valid: false })
+  })
+
+  it("carries a nominated payer's id, signed (B-437)", () => {
+    const token = mintUnsubscribeToken('sam@example.com', 'en', 'payer_1')
+    expect(verifyUnsubscribeToken(token)).toMatchObject({ valid: true, payerId: 'payer_1' })
   })
 
   it('refuses a malformed token', () => {

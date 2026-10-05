@@ -54,6 +54,7 @@ import {
   REFERRAL_STATE_LABELS,
 } from "@/lib/referrals/portal";
 import { en } from '@/lib/i18n/en'
+import { nominatedPayerFor } from "@/lib/portal/nominated-payer";
 
 /// The effects in an operator's words, on the banner. The catalog names them
 /// for code; a staffer needs to know what stopped.
@@ -154,6 +155,8 @@ export default async function TenantProfilePage({
   const messageLimit = tenantMessageLimit((await searchParams).messages);
   const actor = await getAdminActor();
   const profile = await tenantProfile(actor, tenantId, messageLimit);
+  // After `tenantProfile`, which is the access check and throws.
+  const billPayer = await nominatedPayerFor(tenantId);
 
   // B-167. The charge control, one per lease this tenant has — ended leases
   // included, because the walk that finds the damage happens after they have
@@ -1002,6 +1005,22 @@ export default async function TenantProfilePage({
                 ]
                   .filter(Boolean)
                   .join(" · ")}
+              </dd>
+            </>
+          )}
+          {/* B-437. Read-only here: the tenant names and removes them in the
+              portal. Shown so a caller who says they pay the bill can be
+              checked against the record before a balance is read out. */}
+          {billPayer && (
+            <>
+              <dt className="text-muted-foreground">Bill also sent to</dt>
+              <dd>
+                {[billPayer.name, billPayer.email, billPayer.phone]
+                  .filter(Boolean)
+                  .join(" · ")}
+                {billPayer.stoppedAt
+                  ? " (they asked us to stop; nothing is being sent)"
+                  : " (pay link and payment reminders only)"}
               </dd>
             </>
           )}

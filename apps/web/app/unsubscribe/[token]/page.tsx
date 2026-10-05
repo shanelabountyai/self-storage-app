@@ -45,7 +45,9 @@ export default async function UnsubscribePage({
       <div className="mx-auto flex max-w-md flex-col gap-3 px-4 py-16 text-center">
         <h1 className="text-lg font-semibold">{translate(dict, 'unsub.doneHeading')}</h1>
         <p className="text-muted-foreground text-sm text-pretty">
-          {translate(dict, 'unsub.doneBody', { address: verdict.address })}
+          {translate(dict, verdict.payerId ? 'unsub.payerDoneBody' : 'unsub.doneBody', {
+            address: verdict.address,
+          })}
         </p>
       </div>
     )
@@ -56,7 +58,9 @@ export default async function UnsubscribePage({
       <h1 className="text-lg font-semibold break-words">
         {translate(dict, 'unsub.confirmHeading', { address: verdict.address })}
       </h1>
-      <p className="text-muted-foreground text-sm text-pretty">{translate(dict, 'unsub.confirmBody')}</p>
+      <p className="text-muted-foreground text-sm text-pretty">
+        {translate(dict, verdict.payerId ? 'unsub.payerConfirmBody' : 'unsub.confirmBody')}
+      </p>
       <form action={confirmUnsubscribeAction} className="flex justify-center">
         <input type="hidden" name="token" value={token} />
         <button

@@ -2116,6 +2116,33 @@ export const es: Dictionary = {
     'Dejará de recibir correos promocionales de nuestra parte en esta dirección. Seguirá recibiendo correos sobre cualquier cuenta o reserva que tenga activa.',
   'unsub.confirmButton': 'Cancelar mi suscripción',
 
+  // B-437 (PRD 01 US-703).
+  'unsub.payerConfirmBody':
+    'Dejará de recibir en esta dirección las facturas y los recordatorios de pago de esta unidad. Le avisaremos a la persona que renta la unidad que la factura ya no le llega a usted.',
+  'unsub.payerDoneBody':
+    '{address} no volverá a recibir esta factura ni sus recordatorios de pago. Los enlaces de pago que le enviamos ya no funcionan.',
+
+  // B-437 (PRD 01 US-703).
+  'payer.heading': 'Enviar mi factura a otra persona',
+  'payer.intro':
+    'Indique una persona, como un familiar, que paga su factura. Le enviamos por correo electrónico su factura y sus recordatorios de pago con un enlace para pagar. Eso es todo lo que recibe: ni el código de la puerta, ni documentos, ni acceso a su cuenta. Usted sigue recibiendo todos los mensajes.',
+  'payer.name': 'Nombre de la persona',
+  'payer.email': 'Correo electrónico de la persona',
+  'payer.phone': 'Teléfono de la persona (opcional)',
+  'payer.phoneHint': 'Solo para que la oficina pueda llamarle. No le enviamos mensajes de texto.',
+  'payer.save': 'Enviarle mi factura',
+  'payer.saved': '{name} recibirá su factura y sus recordatorios de pago en {email}.',
+  'payer.current': '{name} ({email}) recibe su factura y sus recordatorios de pago. Usted la indicó el {date}.',
+  'payer.stopped':
+    '{name} ({email}) nos pidió el {date} que dejáramos de enviarle su factura. No se le está enviando. Para enviarla a alguien, primero quite a esta persona.',
+  'payer.remove': 'Dejar de enviarle mi factura',
+  'payer.removed': 'Su factura ya no se envía a nadie más. Los enlaces de pago que tenía esa persona ya no funcionan.',
+  'payer.noneToRemove': 'Nadie más estaba recibiendo su factura.',
+  'payer.problem.name': 'Escriba el nombre de la persona.',
+  'payer.problem.email': 'Escriba el correo electrónico de la persona, como nombre@ejemplo.com.',
+  'payer.problem.phone': 'Escriba un teléfono de al menos 10 dígitos, o deje el campo vacío.',
+  'payer.problem.consent': 'Marque la casilla para aceptar antes de que enviemos su factura a otra persona.',
+
   // B-435 (PRD 01 §6.7).
   'errorPage.notFoundTitle': 'No encontramos esa página',
   'errorPage.notFoundBody':

@@ -35,10 +35,15 @@ function sign(encodedPayload: string): string {
 /// the page it opens speaks it too. Signed with the rest, so a visitor cannot
 /// pick it; optional because every token minted before B-321 lacks it, and
 /// those must keep working (they never expire) — they read as `null`.
-type Payload = { v: number; a: string; l?: string }
+///
+/// B-437. `p` is a nominated payer's id. A token carrying one stops that
+/// payer's bill reminders (`stopNominatedPayer`) and suppresses nothing: the
+/// reminders are transactional, which an `unsubscribe` suppression does not
+/// block, and the address may also be a tenant's own.
+type Payload = { v: number; a: string; l?: string; p?: string }
 
-export function mintUnsubscribeToken(address: string, locale: Locale): string {
-  const payload: Payload = { v: VERSION, a: address.toLowerCase(), l: locale }
+export function mintUnsubscribeToken(address: string, locale: Locale, payerId?: string): string {
+  const payload: Payload = { v: VERSION, a: address.toLowerCase(), l: locale, ...(payerId ? { p: payerId } : {}) }
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   return `${encoded}.${sign(encoded)}`
 }
@@ -48,7 +53,7 @@ export function unsubscribeUrl(token: string, origin: string): string {
 }
 
 export type UnsubscribeVerdict =
-  | { valid: true; address: string; locale: Locale | null }
+  | { valid: true; address: string; locale: Locale | null; payerId: string | null }
   | { valid: false }
 
 export function verifyUnsubscribeToken(token: string): UnsubscribeVerdict {
@@ -72,5 +77,10 @@ export function verifyUnsubscribeToken(token: string): UnsubscribeVerdict {
     return { valid: false }
   }
 
-  return { valid: true, address: payload.a, locale: isLocale(payload.l) ? payload.l : null }
+  return {
+    valid: true,
+    address: payload.a,
+    locale: isLocale(payload.l) ? payload.l : null,
+    payerId: typeof payload.p === 'string' && payload.p ? payload.p : null,
+  }
 }
