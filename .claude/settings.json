@@ -53,5 +53,19 @@
       "Bash(cp apps/web/lib/admin/inquiries.ts /tmp/inq.bak)",
       "Bash(sed -i '' 's|promotionsAvailable: lines.some\\(\\(line\\) => line.promo !== null\\)|promotionsAvailable: false|' apps/web/lib/admin/inquiries.ts)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-bash.py\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
   }
 }

@@ -198,6 +198,15 @@ jobs:
             # without this nothing can sign a simulated gate event and the
             # signed webhook path FR-8 asks to be exercised is not.
             echo 'HARDWARE_WEBHOOK_SECRET=ci-only-hardware-webhook-secret-not-a-real-key'
+            # D-163. Stripe TEST keys so e2e/checkout-stripe-load.spec.ts runs
+            # instead of self-skipping (B-410). When the two repository secrets
+            # are not set these lines write empty values, the spec still skips,
+            # and nothing else reads them. NEXT_PUBLIC_* is read at `npm run
+            # build`, so it must be in this file, not on the test step. The
+            # e2e lane only: `verify` never loads Stripe, so the two blocks
+            # differ here on purpose.
+            echo "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_TEST_PUBLISHABLE_KEY }}"
+            echo "STRIPE_SECRET_KEY=${{ secrets.STRIPE_TEST_SECRET_KEY }}"
           } > .env.local
 
       - run: npm run db:generate
