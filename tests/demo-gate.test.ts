@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { demoGate } from '../apps/web/lib/demo-gate'
 
@@ -115,5 +115,34 @@ describe('demo access gate', () => {
         expect(response?.status).toBe(401)
       })
     })
+  })
+})
+
+// SEC-09. The gate only runs on what the proxy matcher lets in, and the matcher
+// used to skip every path whose last segment had a dot.
+// next-auth resolves `next/server` in a way vitest cannot follow, and nothing
+// here needs it: the matcher is a constant.
+vi.mock('next-auth', () => ({ default: () => ({ auth: (handler: unknown) => handler }) }))
+
+describe('proxy matcher', () => {
+  it('sees dotted paths, and skips only the named static files', async () => {
+    const { config } = await import('../apps/web/proxy')
+    const matches = (path: string) => config.matcher.some((source) => new RegExp(`^${source}$`).test(path))
+
+    for (const path of [
+      '/admin/reports/revenue.csv',
+      '/admin/tenants/t1/ledger/l1/ledger.csv',
+      '/pay/abc.def',
+      '/unsubscribe/abc.def',
+      '/checkout/resume/abc.def',
+      '/storage/tx/austin/anything.js',
+      '/api/public/facilities/x.json',
+      '/',
+    ]) {
+      expect(matches(path), path).toBe(true)
+    }
+    for (const path of ['/_next/static/chunks/a.js', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/indexnow/Key.txt']) {
+      expect(matches(path), path).toBe(false)
+    }
   })
 })

@@ -259,18 +259,15 @@ export default function proxy(request: NextRequest, event: unknown) {
 }
 
 export const config = {
-  // Everything except Next's internals and files with an extension. The
-  // extension test is what keeps `/favicon.ico`, `/robots.txt` and
-  // `/sitemap.xml` out — all three are served as-is, and none wants a
-  // canonicalising redirect applied to it.
+  // Everything except Next's internals and the files named here, which are
+  // served as-is and want neither a canonicalising redirect nor the demo gate:
+  // a crawler has to be able to read `robots.txt` to be told to stay out, and
+  // the IndexNow key file is public by protocol and case-sensitive.
   //
-  // B-321. Plus the two token routes whose signed tokens contain a `.`, which
-  // the extension test mistakes for a file — without these the proxy never
-  // sees them, so `MESSAGE_LINK_HEADER` is never set and their `<html lang>`
-  // cannot follow the message.
-  matcher: [
-    '/((?!_next/static|_next/image|.*\\.[^/]*$).*)',
-    '/unsubscribe/:token*',
-    '/checkout/resume/:token*',
-  ],
+  // SEC-09. This was "anything with an extension" until 2026-10-06, and a
+  // path is not a file because its last segment has a dot in it: every
+  // `/admin/**/*.csv` export, and any URL at all with `.x` appended, skipped
+  // the proxy and with it the demo gate and the edge auth redirect. Name the
+  // file here rather than widening the exclusion back to a pattern.
+  matcher: ['/((?!_next/static|_next/image|indexnow/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$).*)'],
 }
