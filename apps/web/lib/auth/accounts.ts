@@ -217,17 +217,48 @@ export async function loadSubject(
   }
 }
 
+/// `revokeSessions` moves the SEC-03 watermark in the same write, so there is
+/// no instant at which the new password is live and the old cookies are too.
+/// The login-time rehash passes nothing: it must not sign the person out.
 export async function setPassword(
   subjectId: string,
   audience: AuthAudience,
   password: string,
+  { revokeSessions = false } = {},
 ): Promise<void> {
-  const passwordHash = await hashPassword(password)
-  if (audience === 'tenant') {
-    await prisma.tenant.update({ where: { id: subjectId }, data: { passwordHash } })
-  } else {
-    await prisma.staffUser.update({ where: { id: subjectId }, data: { passwordHash } })
+  const data = {
+    passwordHash: await hashPassword(password),
+    ...(revokeSessions && { sessionsValidFrom: new Date() }),
   }
+  if (audience === 'tenant') {
+    await prisma.tenant.update({ where: { id: subjectId }, data })
+  } else {
+    await prisma.staffUser.update({ where: { id: subjectId }, data })
+  }
+}
+
+/// SEC-03. A signed JWT cannot be deleted server-side, so every `auth()` asks
+/// this instead (the jwt callback in `apps/web/auth.ts`): is the account still
+/// there, and did this session sign in before its sessions were revoked?
+/// `authenticatedAt` is epoch milliseconds, on the app's clock — the same
+/// clock `setPassword` stamps the watermark with.
+// ponytail: one primary-key read per auth() call. If it shows in a trace,
+// cache (id -> row) for a few seconds; do not remove the check.
+export async function sessionStillValid(
+  subjectId: string,
+  audience: AuthAudience,
+  authenticatedAt: number,
+): Promise<boolean> {
+  const select = { deletedAt: true, sessionsValidFrom: true }
+  const account =
+    audience === 'tenant'
+      ? await prisma.tenant.findUnique({ where: { id: subjectId }, select })
+      : await prisma.staffUser.findUnique({ where: { id: subjectId }, select })
+
+  if (!account || account.deletedAt !== null) return false
+  // A watermark in the same millisecond as the sign-in belongs to that
+  // sign-in, not to a revocation of it.
+  return !account.sessionsValidFrom || account.sessionsValidFrom.getTime() <= authenticatedAt
 }
 
 /// Looks an account up for magic-link and password-reset requests. Callers must

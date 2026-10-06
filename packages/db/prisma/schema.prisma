@@ -1291,6 +1291,10 @@ model Tenant {
   /// onboarding (PRD 01 FR-5.1). Never a plaintext or reversible value.
   passwordHash                 String?
   emailVerifiedAt              DateTime? @db.Timestamptz(6)
+  /// SEC-03. A session whose sign-in predates this instant is refused
+  /// (`sessionStillValid`, called from the jwt callback in `apps/web/auth.ts`).
+  /// Null means never revoked. Moved by a completed password reset.
+  sessionsValidFrom            DateTime? @db.Timestamptz(6)
   /// PRD 05 FR-15. Set when a hard bounce or a spam complaint proves this
   /// address is unusable. A flag rather than clearing the address: the address
   /// is still what we last had, and losing it would make "which address did we
@@ -4770,6 +4774,10 @@ model StaffUser {
   email           String          @unique
   passwordHash    String?
   emailVerifiedAt DateTime?       @db.Timestamptz(6)
+  /// SEC-03, as on Tenant. A session whose sign-in predates this instant is refused
+  /// (`sessionStillValid`, called from the jwt callback in `apps/web/auth.ts`).
+  /// Null means never revoked. Moved by a completed password reset.
+  sessionsValidFrom DateTime?     @db.Timestamptz(6)
   firstName       String
   lastName        String
   status          StaffUserStatus @default(active)

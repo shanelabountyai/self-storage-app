@@ -1,6 +1,11 @@
 import NextAuth from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
-import { authenticateWithPassword, loadSubject, LoginThrottledError } from '@/lib/auth/accounts'
+import {
+  authenticateWithPassword,
+  loadSubject,
+  LoginThrottledError,
+  sessionStillValid,
+} from '@/lib/auth/accounts'
 import { consumeToken } from '@/lib/auth/tokens'
 import { authConfig, audienceOf } from './auth.config'
 
@@ -11,6 +16,23 @@ function clientIp(request: Request | undefined): string | null {
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
+  callbacks: {
+    ...authConfig.callbacks,
+    // SEC-03. Returning null ends the session for every `auth()` caller at
+    // once — currentActor, the portal layout, re-auth — rather than in the ones
+    // somebody remembered. It lives here and not in auth.config.ts because it
+    // reads the database, which the Edge proxy cannot; the proxy therefore
+    // still lets a revoked cookie through to a page, and the page refuses it.
+    async jwt(params) {
+      const token = await authConfig.callbacks.jwt(params)
+      const authenticatedAt =
+        typeof token.authAt === 'number' ? token.authAt : Number(token.authTime ?? 0) * 1000
+      const valid =
+        typeof token.id === 'string' &&
+        (await sessionStillValid(token.id, audienceOf(token.audience), authenticatedAt))
+      return valid ? token : null
+    },
+  },
   providers: [
     Credentials({
       id: 'password',

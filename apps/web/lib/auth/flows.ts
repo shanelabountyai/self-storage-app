@@ -168,7 +168,9 @@ export async function completePasswordReset(
   const consumed = await consumeToken(token, 'password_reset')
   if (!consumed) return { ok: false, reason: 'invalid_token' }
 
-  await setPassword(consumed.subjectId, consumed.audience, newPassword)
+  // SEC-03. Whoever prompted the reset may still hold a cookie: every session
+  // signed in before now ends with the old password.
+  await setPassword(consumed.subjectId, consumed.audience, newPassword, { revokeSessions: true })
 
   // Password changes are privileged actions and belong in the audit log
   // (master PRD §7.1).

@@ -1,6 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
-import { authenticateWithPassword, LoginThrottledError, setPassword } from '../apps/web/lib/auth/accounts'
+import {
+  authenticateWithPassword,
+  LoginThrottledError,
+  sessionStillValid,
+  setPassword,
+} from '../apps/web/lib/auth/accounts'
 import { completePasswordReset } from '../apps/web/lib/auth/flows'
 import { LIMITS } from '../apps/web/lib/auth/rate-limit'
 import { consumeToken, mintToken } from '../apps/web/lib/auth/tokens'
@@ -178,6 +183,34 @@ describe.skipIf(!hasDatabase)('password reset', () => {
       ok: false,
       reason: 'invalid_token',
     })
+  })
+
+  // SEC-03. The session that was live when the reset happened is the one a
+  // reset exists to end.
+  it('ends sessions signed in before the reset, and only those', async () => {
+    // The suite shares one tenant and the reset tests above already moved it.
+    await prisma.tenant.update({ where: { id: tenantId }, data: { sessionsValidFrom: null } })
+    const signedInBefore = Date.now() - 1000
+    await expect(sessionStillValid(tenantId, 'tenant', signedInBefore)).resolves.toBe(true)
+
+    const { token } = await mint('password_reset')
+    await completePasswordReset(token, 'a-brand-new-password')
+
+    await expect(sessionStillValid(tenantId, 'tenant', signedInBefore)).resolves.toBe(false)
+    await expect(sessionStillValid(tenantId, 'tenant', Date.now())).resolves.toBe(true)
+  })
+
+  it('does not end sessions when a login merely rehashes the password', async () => {
+    await prisma.tenant.update({ where: { id: tenantId }, data: { sessionsValidFrom: null } })
+    await setPassword(tenantId, 'tenant', 'correct horse battery staple')
+    await expect(sessionStillValid(tenantId, 'tenant', 0)).resolves.toBe(true)
+  })
+
+  it('refuses a session for a soft-deleted or missing account', async () => {
+    await prisma.tenant.update({ where: { id: tenantId }, data: { deletedAt: new Date() } })
+    await expect(sessionStillValid(tenantId, 'tenant', Date.now())).resolves.toBe(false)
+    await expect(sessionStillValid('no-such-tenant', 'tenant', Date.now())).resolves.toBe(false)
+    await prisma.tenant.update({ where: { id: tenantId }, data: { deletedAt: null } })
   })
 
   it('rejects a weak password without consuming the token', async () => {

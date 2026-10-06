@@ -63,7 +63,13 @@ export const authConfig = {
         // involved. This block only runs when `user` is present, which only
         // happens on a real `signIn()` call — a fresh password entry or a
         // freshly consumed magic link, never a background token refresh.
-        token.authTime = Math.floor(Date.now() / 1000)
+        // SEC-03 compares the sign-in against a revocation watermark, and a
+        // whole second is too coarse for that: reset-then-sign-in inside one
+        // second would bounce the new session. Tokens minted before this
+        // claim existed fall back to `authTime`.
+        const now = Date.now()
+        token.authAt = now
+        token.authTime = Math.floor(now / 1000)
       }
       return token
     },
