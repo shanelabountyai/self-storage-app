@@ -497,3 +497,14 @@ export async function revealGateCode(page: Page): Promise<void> {
   await page.getByRole('button', { name: /show gate code/i }).first().click()
   await expect(page.getByRole('button', { name: /copy/i }).first()).toBeVisible()
 }
+
+// B-441 (c). SC 2.4.3. The control that was just pressed unmounted, or the
+// page jumped: wherever focus went, it must not have fallen back to <body>,
+// which puts a keyboard or screen-reader user at the top of the page. Callers
+// that know WHERE focus should land assert that too; this is the floor, and it
+// still holds when the landing element is later renamed or moved.
+export async function expectFocusNotLost(page: Page): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.tagName ?? 'BODY'))
+    .not.toBe('BODY')
+}

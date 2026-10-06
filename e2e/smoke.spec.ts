@@ -3,7 +3,12 @@ import { expect, test, type Locator } from '@playwright/test'
 import { LEGAL_PAGES } from '../apps/web/lib/site-config'
 import { DEMO_PROMO_CODE } from '../apps/web/scripts/demo-credentials'
 import { GUIDES } from '../apps/web/lib/guides/catalog'
-import { assertNoAxeViolations, expectAnnounced, expectPreexisting } from './a11y-helpers'
+import {
+  assertNoAxeViolations,
+  expectAnnounced,
+  expectFocusNotLost,
+  expectPreexisting,
+} from './a11y-helpers'
 
 test('home page renders its search hero', async ({ page }) => {
   await page.goto('/')
@@ -615,6 +620,7 @@ test('the phone sticky bar names the cheapest size and jumps to the sizes (B-396
   await page.getByRole('link', { name: 'See sizes' }).first().click()
   const heading = page.getByRole('heading', { name: 'Available units' })
   await expect(heading).toBeFocused()
+  await expectFocusNotLost(page)
   const covered = await heading.evaluate((el) => {
     const r = el.getBoundingClientRect()
     const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)

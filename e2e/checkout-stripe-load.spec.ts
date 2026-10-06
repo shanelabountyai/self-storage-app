@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { prisma } from '../packages/db'
+import { expectFocusNotLost } from './a11y-helpers'
 
 // B-410 (3). What B-392's T2 was never taken over for, and what B-411 and
 // B-412 each left to this row: the card form when Stripe.js never arrives, and
@@ -66,6 +67,7 @@ test('a card form that cannot load Stripe.js says so, and "Check again" keeps fo
     timeout: 15_000,
   })
   await expect(status).toBeFocused()
+  await expectFocusNotLost(page)
   await expect(card.getByRole('button', { name: 'Try the card form again' })).toBeVisible()
   await expect(card.getByRole('button', { name: 'Pay and complete move-in' })).toHaveCount(0)
 
@@ -88,6 +90,7 @@ test('a card form that cannot load Stripe.js says so, and "Check again" keeps fo
     await page.keyboard.press('Enter')
     // The button unmounts on press; focus must not fall to <body>.
     await expect(heading).toBeFocused()
+    await expectFocusNotLost(page)
     await expect(again).toHaveCount(0)
   } finally {
     // Nothing was charged, so no report should count this as money in flight.

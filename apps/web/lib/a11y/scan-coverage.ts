@@ -52,6 +52,9 @@ export const PUBLIC_SCAN_ROUTES = [
   // an error message that fails contrast is an error message nobody reads.
   '/storage/tx/austin/demo-austin-south?promo=NOT-A-REAL-CODE',
   '/storage/size-guide',
+  // B-441 (b). With a ZIP the form's button changes name and a "Links below
+  // search near …" line appears under it — markup the bare route never renders.
+  '/storage/size-guide?zip=78704',
   // B-366. The all-locations directory — a card grid plus the shared search
   // form, which is different markup from both the city page's single-city
   // list and the home page's own sample of it.
