@@ -5,6 +5,7 @@ import { findSubjectByEmail, resolveAudience, setPassword } from './accounts'
 import { currentWritingLocale } from '@/lib/portal/notifications'
 import { DEFAULT_LOCALE, type Locale } from '@/lib/i18n'
 import { writingLocale } from '@/lib/i18n/server'
+import { mayRequestAuthLink } from '@/lib/http/rate-limit'
 import { sendAuthEmail } from './send-auth-email'
 import { consumeToken, mintToken, tokenSubject } from './tokens'
 
@@ -39,11 +40,16 @@ async function linkLocale(audience: AuthAudience, subjectId: string): Promise<Lo
 /// requires MFA (TOTP)... Tenants use email/password + magic-link fallback."
 /// Staff who forget a password still have the reset flow, which lands them back
 /// at a sign-in that asks for the code.
+///
+/// SEC-05. Past the limit this returns as it does for an unknown address: no
+/// token, no mail, nothing for the caller to tell the two apart by.
 export async function requestMagicLink(
   email: string,
   hint: AuthAudience | null,
   ipAddress?: string | null,
 ): Promise<void> {
+  if (!(await mayRequestAuthLink(email, ipAddress))) return
+
   // Resolved from the address, not assumed from the URL — see resolveAudience.
   // The staff refusal below now applies to the account that actually exists,
   // rather than to whatever the query parameter implied: previously a staff
@@ -78,6 +84,8 @@ export async function requestPasswordReset(
   hint: AuthAudience | null,
   ipAddress?: string | null,
 ): Promise<void> {
+  if (!(await mayRequestAuthLink(email, ipAddress))) return
+
   const audience = await resolveAudience(email, hint)
   const subject = audience && (await findSubjectByEmail(email, audience))
   if (!subject || !audience) return

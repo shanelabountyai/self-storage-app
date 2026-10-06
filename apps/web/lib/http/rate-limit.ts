@@ -15,6 +15,11 @@ export const PUBLIC_LIMITS = {
   /// Promo codes one IP may try. Every check counts, right or wrong.
   promoChecksPerIp: 20,
   promoWindowMs: 15 * 60_000,
+  /// SEC-05. Sign-in and reset links one address may be sent, and one IP may
+  /// ask for. The same numbers as login's `LIMITS`, for the same two reasons.
+  authLinksPerEmail: 5,
+  authLinksPerIp: 20,
+  authLinkWindowMs: 15 * 60_000,
 }
 
 /// Records one attempt and answers whether it is within the limit.
@@ -68,6 +73,21 @@ export async function mayCheckPromo(ipAddress: string | null): Promise<boolean> 
   const ip = remote(ipAddress)
   if (!ip) return true
   return withinLimit('promo-check:ip', ip, PUBLIC_LIMITS.promoChecksPerIp, PUBLIC_LIMITS.promoWindowMs)
+}
+
+/// SEC-05. Whether another sign-in or reset link may be requested for this
+/// address. One allowance across both kinds: each is a mail to the same inbox
+/// and a fresh token to guess at.
+///
+/// The email limit holds for every caller, loopback included, and for an
+/// address with no account: the caller answers the same either way, so a refusal
+/// must not be the thing that tells them apart. The IP goes first so a refused
+/// address cannot spend somebody else's allowance past its own 20.
+export async function mayRequestAuthLink(email: string, ipAddress: string | null | undefined): Promise<boolean> {
+  const { authLinksPerEmail, authLinksPerIp, authLinkWindowMs } = PUBLIC_LIMITS
+  const ip = remote(ipAddress ?? null)
+  if (ip && !(await withinLimit('auth-link:ip', ip, authLinksPerIp, authLinkWindowMs))) return false
+  return withinLimit('auth-link:email', email.trim().toLowerCase(), authLinksPerEmail, authLinkWindowMs)
 }
 
 /// Nothing here is read past its window. Called from the hourly cron.

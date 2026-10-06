@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
+import { requestMagicLink, requestPasswordReset } from '../apps/web/lib/auth/flows'
 import {
   PUBLIC_LIMITS,
   mayCheckPromo,
+  mayRequestAuthLink,
   mayStartCheckout,
   pruneRateLimitEvents,
 } from '../apps/web/lib/http/rate-limit'
@@ -47,6 +49,34 @@ describe('public rate limits', () => {
     const address = ip()
     for (let i = 0; i < PUBLIC_LIMITS.promoChecksPerIp; i++) expect(await mayCheckPromo(address)).toBe(true)
     expect(await mayCheckPromo(address)).toBe(false)
+  })
+
+  // SEC-05. Through the real flows, so the guard cannot be unhooked unnoticed.
+  it('stops minting sign-in and reset links for one address after the limit, across both kinds', async () => {
+    const email = `sec05-${randomUUID()}@example.com`
+    const tenant = await prisma.tenant.create({ data: { email, firstName: 'Ada', lastName: 'Renter' } })
+    try {
+      // Mixed case and from loopback: the email limit is the one with no exemption.
+      for (let i = 0; i < PUBLIC_LIMITS.authLinksPerEmail + 3; i++) {
+        if (i % 2) await requestMagicLink(email.toUpperCase(), 'tenant', '::1')
+        else await requestPasswordReset(email, 'tenant', null)
+      }
+      expect(await prisma.authToken.count({ where: { subjectId: tenant.id } })).toBe(PUBLIC_LIMITS.authLinksPerEmail)
+    } finally {
+      await prisma.authToken.deleteMany({ where: { subjectId: tenant.id } })
+      await prisma.tenant.delete({ where: { id: tenant.id } })
+    }
+  })
+
+  it('refuses link requests from one IP across many addresses, without spending theirs', async () => {
+    const address = ip()
+    const victim = `sec05-${randomUUID()}@example.com`
+    for (let i = 0; i < PUBLIC_LIMITS.authLinksPerIp; i++) {
+      expect(await mayRequestAuthLink(`sec05-${randomUUID()}@example.com`, address)).toBe(true)
+    }
+    expect(await mayRequestAuthLink(victim, address)).toBe(false)
+    expect(await prisma.rateLimitEvent.count({ where: { bucket: 'auth-link:email', key: victim } })).toBe(0)
+    expect(await mayRequestAuthLink(victim, ip())).toBe(true)
   })
 
   // Under `next start` with no proxy every caller is `::1`, never null — which
