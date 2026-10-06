@@ -297,6 +297,9 @@ export const ROLES: readonly RoleSeed[] = [
     maxPlanDeferralCents: 0,
     // Deliberately narrow: jobs that need more must be granted it explicitly
     // rather than inheriting owner-level authority.
-    permissions: ['tenants:view', 'delinquency:execute_step'],
+    // B-443 / D-158: `refunds:approve` so a move-out credit can go back to the
+    // card by itself. Its refund limit stays 0 and is not consulted: see
+    // `refundPayment`.
+    permissions: ['tenants:view', 'delinquency:execute_step', 'refunds:approve'],
   },
 ]

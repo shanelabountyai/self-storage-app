@@ -1627,8 +1627,10 @@ export const es: Dictionary = {
   'mo.monthsOther': '{count} meses',
   'mo.refundExpected': 'Reembolso que debe esperar',
   'mo.willStillOwe': 'Todavía deberá',
-  'mo.refundOffice':
-    'Si le debemos {amount} cuando se mude, la oficina lo pone en su lista de reembolsos por enviar.',
+  'mo.refundCard':
+    'Si le debemos dinero cuando se mude, {amount} se devuelven a la tarjeta con la que pagó.',
+  'mo.refundCheque':
+    'Si le debemos dinero cuando se mude, la oficina le envía {amount} con cheque.',
   'mo.settledInFull': 'Liquidado por completo',
   'mo.activeUntil':
     'Su código de la puerta y su cuenta siguen activos hasta el {date}. Nuestro equipo revisará que la unidad esté vacía antes de cerrar su cuenta definitivamente.',

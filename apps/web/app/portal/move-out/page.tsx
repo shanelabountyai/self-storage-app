@@ -15,6 +15,7 @@ import { cancelMoveOutAction, requestMoveOutAction } from "./actions";
 import { dictionaryFor, plural, translate, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
 import { recaptureReasonText } from '@/lib/promotions/message'
+import { planMoveOutRefund } from '@/lib/billing/refunds'
 
 export async function generateMetadata() {
   return { title: translate(dictionaryFor(await getLocale()), "mo.title") };
@@ -216,6 +217,14 @@ export default async function PortalMoveOutPage({
     requestedDate,
   );
   const preview = previewResult.ok ? previewResult.preview : null;
+  // B-443 / D-158. Which part of a refund goes back to the card.
+  const refundPlan =
+    preview && preview.settlement.refundDueCents > 0
+      ? await planMoveOutRefund(
+          lease.leaseId,
+          preview.settlement.refundDueCents,
+        )
+      : null;
   // B-174. B-142 fixed exactly this on the sibling transfer screen and the fix
   // never crossed one file: the refused branch was dropped on the floor, so the
   // page rendered a blank where the figures had been and stayed otherwise
@@ -388,14 +397,15 @@ export default async function PortalMoveOutPage({
         </dl>
       )}
 
-      {/* B-414. Directly under the figures it explains (SC 1.3.1). It states
-          the amount and who has it, and promises no method and no date: how a
-          credit is refunded is D-113, which is open. */}
-      {preview && preview.settlement.refundDueCents > 0 && (
+      {/* B-414, B-443. Directly under the figures it explains (SC 1.3.1):
+          the card part and the cheque part, each only when there is one
+          (D-158). */}
+      {refundPlan && (
         <p className="text-muted-foreground text-sm text-pretty">
-          {t('mo.refundOffice', {
-            amount: formatRate(preview.settlement.refundDueCents),
-          })}{" "}
+          {refundPlan.cardCents > 0 &&
+            `${t('mo.refundCard', { amount: formatRate(refundPlan.cardCents) })} `}
+          {refundPlan.chequeCents > 0 &&
+            `${t('mo.refundCheque', { amount: formatRate(refundPlan.chequeCents) })} `}
           {t('dash.questionsCall')}{" "}
           <a
             href={`tel:${phoneFor(lease.facilityPhone || null).href}`}

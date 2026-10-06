@@ -1050,15 +1050,21 @@ const CONTEXT_EXTENDERS: Record<string, ContextExtender> = {
   // here, because by send time a later adjustment could make this sentence
   // disagree with the figure the tenant was shown at the counter.
   'lease.moved_out': async (event, recipient) => {
-    const payload = (event.payload ?? {}) as { amountDueCents?: number; refundDueCents?: number }
+    const payload = (event.payload ?? {}) as { amountDueCents?: number; refundDueCents?: number; refundCardCents?: number }
     const due = payload.amountDueCents ?? 0
     const refund = payload.refundDueCents ?? 0
+    // B-443. An event from before it has no card part: all of it is the office's.
+    const card = Math.min(refund, payload.refundCardCents ?? 0)
     const say = proseFor(recipient.locale)
     const tag = LOCALE_TAG[recipient.locale]
     return {
       'billing.settlement_line':
         refund > 0
-          ? say.settlementRefund(formatCents(refund, tag))
+          ? say.settlementRefund(
+              formatCents(refund, tag),
+              card > 0 ? formatCents(card, tag) : null,
+              refund > card ? formatCents(refund - card, tag) : null,
+            )
           : due > 0
             ? say.settlementOutstanding(formatCents(due, tag))
             : say.settlementSettled,

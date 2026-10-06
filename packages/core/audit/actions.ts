@@ -71,6 +71,13 @@ export const AUDIT_ACTIONS = [
     requiresReason: true,
   },
   { action: "refund.issued", label: "Refund issued", requiresReason: true },
+  // B-443 / D-158. The system sending a move-out credit back to the card: one
+  // row on the Lease for the whole decision, beside each refund's own row.
+  {
+    action: "refund.auto_issued",
+    label: "Move-out credit refunded automatically",
+    requiresReason: true,
+  },
   // B-146. FR-8's append-only correction: the entry stands and a reversing one
   // is posted beside it. `requiresReason` because the bank's own reason — NSF,
   // account closed, stop payment — is what a manager needs when the tenant

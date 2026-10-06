@@ -3070,6 +3070,14 @@ function reviewedOn(locale: Locale): string {
 // four in Spanish. The payer's emails are plain text and a paragraph; nothing
 // on this page speaks about email. No sentence on this page changes.
 // `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-10-06, at B-443. The sentence B-414 put under the settlement
+// figures on `/portal/move-out` now says which part of a refund goes back to
+// the card and which the office sends by check. Same paragraph, same phone
+// link, no new control. It is still the `STATE_EXCEPTIONS` row B-414 added:
+// no demo tenant reaches a preview that settles to a refund, so it is not
+// scanned and not measured for layout, and the page still says so. No
+// sentence on this page changes. `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

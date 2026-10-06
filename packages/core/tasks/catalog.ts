@@ -567,8 +567,9 @@ export const TASK_TYPES = [
     // PRD 02 US-14 (B-414). A move-out settled with money owed back. The
     // detail names the amount. Recording the refund on the tenant's profile
     // (US-23) closes it once the lease holds no credit; a note cannot, because
-    // the ledger would still say we owe it. Refunding to the card
-    // automatically is D-113 option (A), which is open.
+    // the ledger would still say we owe it. B-443 (D-158): the system sends
+    // what it can back to the card first, so what is still open here is the
+    // part the detail says goes by cheque.
     type: "move_out_refund_due",
     label: "Refund owed after a move-out",
     requiredProofFields: ["note"],

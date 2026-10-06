@@ -174,7 +174,9 @@ export type CommsProse = {
   referralRefusals: Record<ReferralRefusal, string>
 
   // ── lease.moved_out ───────────────────────────────────────────────────────
-  settlementRefund: (amount: string) => string
+  /// B-443. `card` and `cheque` are the two parts of `amount`, each null when
+  /// it is nothing.
+  settlementRefund: (amount: string, card: string | null, cheque: string | null) => string
   /// B-414. How a refund went, for `refund.sent`. `method` is a `RefundMethod`.
   refundMethod: (method: string, checkNumber: string | null) => string
   /// B-421. The `charge.answer` line when staff waived the charge instead of
@@ -317,9 +319,16 @@ const en: CommsProse = {
     program_disabled: 'The referral program is not running at this location right now.',
   },
 
-  // B-414. States the amount and who has it. No method and no date (D-113 is
-  // open); the template's next line carries the office phone.
-  settlementRefund: (amount) => `We owe you ${amount} back. It is on the office's list of refunds to send.`,
+  // B-414, B-443 (D-158). The amount, then where each part goes. The
+  // template's next line carries the office phone.
+  settlementRefund: (amount, card, cheque) =>
+    [
+      `We owe you ${amount} back.`,
+      card && `${card} is going back to the card you paid with.`,
+      cheque && `The office will send ${cheque} by check.`,
+    ]
+      .filter(Boolean)
+      .join(' '),
   chargeWaived: 'We removed this charge from your balance.',
   refundMethod: (method, checkNumber) =>
     method === 'card'
@@ -513,8 +522,14 @@ const es: CommsProse = {
     program_disabled: 'El programa de recomendaciones no está activo en esta ubicación por ahora.',
   },
 
-  settlementRefund: (amount) =>
-    `Le debemos ${amount} de reembolso. Está en la lista de reembolsos por enviar de la oficina.`,
+  settlementRefund: (amount, card, cheque) =>
+    [
+      `Le debemos ${amount} de reembolso.`,
+      card && `${card} se devuelven a la tarjeta con la que pagó.`,
+      cheque && `La oficina le enviará ${cheque} con cheque.`,
+    ]
+      .filter(Boolean)
+      .join(' '),
   chargeWaived: 'Quitamos este cargo de su saldo.',
   refundMethod: (method, checkNumber) =>
     method === 'card'

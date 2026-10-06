@@ -34,8 +34,45 @@ import { isOccupied, isRentable } from "@storage/core/metrics";
 import type { Actor } from "../apps/web/lib/rbac/actor";
 import { ForbiddenError } from "../apps/web/lib/rbac/authorize";
 import type { PermissionKey } from "@storage/db/rbac-catalog";
+import type Stripe from "stripe";
+import { applyStripeEvent } from "../apps/web/lib/payments/reconcile";
 
 // B-040 / PRD 02 US-14 (move-out), PRD 03 US-2.
+
+// B-443. Stripe's refund call, stubbed: each call answers with the next id
+// queued here, or throws the next Error. Only a card payment that carries a
+// payment intent reaches it, and only B-443's tests make one.
+const stripeRefunds = vi.hoisted(() => ({
+  next: [] as (string | Error)[],
+  made: [] as { id: string; amount: number; status: string; reason: null }[],
+}));
+vi.mock("../apps/web/lib/payments/stripe", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../apps/web/lib/payments/stripe")>();
+  return {
+    ...actual,
+    stripeClient: () =>
+      ({
+        refunds: {
+          create: async (params: { amount: number }) => {
+            const answer = stripeRefunds.next.shift();
+            if (!answer || answer instanceof Error)
+              throw answer ?? new Error("no refund queued");
+            stripeRefunds.made.push({
+              id: answer,
+              amount: params.amount,
+              status: "succeeded",
+              reason: null,
+            });
+            return { id: answer };
+          },
+          list: async function* () {
+            yield* stripeRefunds.made;
+          },
+        },
+      }) as never,
+  };
+});
 
 const hasDatabase = Boolean(process.env.DATABASE_URL);
 const describeDb = hasDatabase ? describe : describe.skip;
@@ -1169,7 +1206,10 @@ describeDb("move-out", () => {
         status: "open",
         priority: "normal",
         entityType: "Lease",
-        detail: "Refund $170.00 to Ada Renter, unit A-1.",
+        // B-443: this payment carries no payment intent, so none of it can go
+        // back to a card and the task says so.
+        detail:
+          "Refund $170.00 to Ada Renter, unit A-1. By cheque: $170.00 (no card payment it can go back to).",
       });
       // A note cannot close it: the ledger would still say we owe the money.
       const base = actorOf(counterId, 10);
@@ -1323,5 +1363,188 @@ describeDb("move-out", () => {
       formerTenantDebts(actorOf(counterId, 10), other.id),
     ).rejects.toThrow(ForbiddenError);
     await prisma.facility.delete({ where: { id: other.id } });
+  });
+
+  // B-443 / D-158.
+  describe("a move-out credit goes back to the card by itself (B-443)", () => {
+    beforeEach(() => {
+      stripeRefunds.next = [];
+      stripeRefunds.made = [];
+    });
+
+    async function pay(
+      leaseIds: Record<string, number>,
+      method: "card" | "cash",
+      receivedAt: string,
+    ) {
+      const intentId = `pi_${randomUUID().slice(0, 12)}`;
+      const payment = await prisma.payment.create({
+        data: {
+          facilityId,
+          tenantId,
+          amountCents: Object.values(leaseIds).reduce((a, b) => a + b, 0),
+          method,
+          status: "succeeded",
+          receivedAt: d(receivedAt),
+          stripePaymentIntentId: method === "card" ? intentId : null,
+        },
+      });
+      for (const [leaseId, amountCents] of Object.entries(leaseIds)) {
+        await prisma.ledgerEntry.create({
+          data: {
+            facilityId,
+            leaseId,
+            type: "payment",
+            amountCents: -amountCents,
+            description: "Payment",
+            paymentId: payment.id,
+          },
+        });
+      }
+      return { paymentId: payment.id, intentId };
+    }
+
+    /// Ends a paid-up $310.00 lease mid-month: $170.00 is owed back.
+    const moveOut = async (leaseId: string) =>
+      expect(
+        await completeMoveOut(actorOf(counterId, 10), {
+          leaseId,
+          moveOutDate: d("2026-08-15"),
+          reason: "tenant_request",
+        }),
+      ).toMatchObject({ ok: true, settlement: { refundDueCents: 17_000 } });
+
+    const balanceOf = async (leaseId: string) =>
+      (
+        await prisma.ledgerEntry.aggregate({
+          where: { leaseId },
+          _sum: { amountCents: true },
+        })
+      )._sum.amountCents ?? 0;
+    const taskOf = (leaseId: string) =>
+      prisma.task.findFirstOrThrow({
+        where: { type: "move_out_refund_due", entityId: leaseId },
+      });
+    const refundsOf = (paymentId: string) =>
+      prisma.payment.findMany({ where: { refundOfPaymentId: paymentId } });
+    const autoAudits = (leaseId: string) =>
+      prisma.auditLog.findMany({
+        where: { action: "refund.auto_issued", entityId: leaseId },
+      });
+
+    it("splits the credit across two card payments, newest first, to the cent", async () => {
+      const lease = await makeLease(unitAId, 31_000);
+      const older = await pay({ [lease.id]: 21_000 }, "card", "2026-08-01");
+      const newer = await pay({ [lease.id]: 10_000 }, "card", "2026-08-03");
+      stripeRefunds.next = ["re_newer", "re_older"].map((id) => `${id}_${suffix}`);
+
+      await moveOut(lease.id);
+
+      const [fromNewer, fromOlder] = [
+        await refundsOf(newer.paymentId),
+        await refundsOf(older.paymentId),
+      ];
+      expect(fromNewer.map((r) => r.amountCents)).toEqual([10_000]);
+      expect(fromOlder.map((r) => r.amountCents)).toEqual([7_000]);
+      expect(fromNewer[0]!.stripeRefundId).toBe(`re_newer_${suffix}`);
+      expect(await balanceOf(lease.id)).toBe(0);
+      expect(await taskOf(lease.id)).toMatchObject({
+        status: "completed",
+        completedByStaffId: null,
+      });
+      expect(
+        await prisma.domainEvent.count({
+          where: { name: "refund.sent", entityId: lease.id },
+        }),
+      ).toBe(2);
+
+      const audits = await autoAudits(lease.id);
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({
+        reasonCode: "move_out_credit",
+        after: { creditCents: 17_000, refundedCents: 17_000, chequeCents: 0 },
+      });
+      // The confirmation's figures, from the move-out's own transaction.
+      const moved = await prisma.domainEvent.findFirstOrThrow({
+        where: { name: "lease.moved_out", entityId: lease.id },
+      });
+      expect(moved.payload).toMatchObject({
+        refundDueCents: 17_000,
+        refundCardCents: 17_000,
+      });
+
+      // Stripe then reports the same refund: it is already in the books.
+      await applyStripeEvent({
+        id: `evt_${randomUUID().slice(0, 12)}`,
+        type: "charge.refunded",
+        data: {
+          object: {
+            payment_intent: newer.intentId,
+            amount: 10_000,
+            amount_refunded: 10_000,
+          },
+        },
+      } as unknown as Stripe.Event);
+      expect(await refundsOf(newer.paymentId)).toHaveLength(1);
+      expect(await balanceOf(lease.id)).toBe(0);
+    });
+
+    it("leaves a cash-paid lease's refund on the task as a cheque", async () => {
+      const lease = await makeLease(unitAId, 31_000);
+      const cash = await pay({ [lease.id]: 31_000 }, "cash", "2026-08-01");
+
+      await moveOut(lease.id);
+
+      expect(await refundsOf(cash.paymentId)).toHaveLength(0);
+      expect(await balanceOf(lease.id)).toBe(-17_000);
+      expect(await taskOf(lease.id)).toMatchObject({
+        status: "open",
+        detail:
+          "Refund $170.00 to Ada Renter, unit A-1. By cheque: $170.00 (no card payment it can go back to).",
+      });
+      // No card was asked, so the system issued nothing.
+      expect(await autoAudits(lease.id)).toHaveLength(0);
+    });
+
+    it("a card Stripe refuses leaves the ledger alone and the task open", async () => {
+      const lease = await makeLease(unitAId, 31_000);
+      const card = await pay({ [lease.id]: 31_000 }, "card", "2026-08-01");
+      stripeRefunds.next = [new Error("This charge has expired.")];
+
+      await moveOut(lease.id);
+
+      expect(await refundsOf(card.paymentId)).toHaveLength(0);
+      expect(await balanceOf(lease.id)).toBe(-17_000);
+      expect(await taskOf(lease.id)).toMatchObject({
+        status: "open",
+        detail:
+          "Refund $170.00 to Ada Renter, unit A-1. By cheque: $170.00 (the card refund was refused: This charge has expired.).",
+      });
+      expect((await autoAudits(lease.id))[0]).toMatchObject({
+        after: { refundedCents: 0, chequeCents: 17_000 },
+      });
+    });
+
+    it("refunds only the ended lease's share of a payment that covered two units", async () => {
+      const ended = await makeLease(unitAId, 31_000);
+      // The other unit holds MORE of the payment, which is where the refund
+      // went before: the largest share, whichever lease that was.
+      const kept = await makeLease(unitBId, 40_000);
+      const both = await pay(
+        { [ended.id]: 31_000, [kept.id]: 40_000 },
+        "card",
+        "2026-08-01",
+      );
+      stripeRefunds.next = [`re_share_${suffix}`];
+
+      await moveOut(ended.id);
+
+      expect((await refundsOf(both.paymentId)).map((r) => r.amountCents)).toEqual([
+        17_000,
+      ]);
+      expect(await balanceOf(ended.id)).toBe(0);
+      expect(await balanceOf(kept.id)).toBe(0);
+      expect((await taskOf(ended.id)).status).toBe("completed");
+    });
   });
 });

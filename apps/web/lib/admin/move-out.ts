@@ -30,6 +30,10 @@ import { dictionaryFor } from "@/lib/i18n";
 import { recaptureReasonText } from "@/lib/promotions/message";
 import { createTask } from "@/lib/admin/tasks";
 import { formatCents } from "@/lib/format";
+import {
+  autoRefundMoveOutCredit,
+  planMoveOutRefund,
+} from "@/lib/billing/refunds";
 
 // PRD 02 US-14 (move-out) / PRD 03 US-2 / PRD 05 CN-8.
 
@@ -419,6 +423,14 @@ export async function completeMoveOut(
   if (wroteOff && !input.reasonCode?.trim())
     return { ok: false, problem: "reason_code_required" };
 
+  // B-443 / D-158. Where the credit will go, read before the lease ends so
+  // the tenant's confirmation can say which part is the card and which a
+  // cheque. The refund itself runs after the transaction, below.
+  const refundPlan = await planMoveOutRefund(
+    lease.id,
+    settlement.refundDueCents,
+  );
+
   await prisma.$transaction(async (tx) => {
     if (settlement.prorationCreditCents > 0) {
       await tx.ledgerEntry.create({
@@ -608,7 +620,7 @@ export async function completeMoveOut(
 
     // B-414. Money owed back is somebody's work. In the transaction, so a
     // lease cannot end owing a refund with nothing on the queue saying so.
-    // `refundPayment` closes it.
+    // `refundPayment` closes it, and since B-443 the system tries first.
     if (settlement.refundDueCents > 0) {
       await createTask({
         facilityId: lease.facilityId,
@@ -648,11 +660,24 @@ export async function completeMoveOut(
         payload: {
           amountDueCents: wroteOff ? 0 : settlement.amountDueCents,
           refundDueCents: settlement.refundDueCents,
+          refundCardCents: refundPlan.cardCents,
         },
       },
       tx,
     );
   });
+
+  // B-443 / D-158. The credit goes back to the card by itself. After the
+  // commit, like the gate below: Stripe being slow or refusing must not
+  // un-end the lease, and the task raised above is still open if this throws.
+  if (settlement.refundDueCents > 0) {
+    await autoRefundMoveOutCredit(lease.id).catch((error) =>
+      console.error(
+        `[move-out] automatic refund failed for lease ${lease.id}; its refund task is still open`,
+        error,
+      ),
+    );
+  }
 
   // Outside the transaction on purpose, and the same reasoning B-026 used for
   // provisioning: the lease HAS ended, and a gate adapter that is slow or

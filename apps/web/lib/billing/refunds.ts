@@ -1,12 +1,13 @@
 import { prisma } from '@storage/db'
 import { recordAudit } from '@storage/core/audit'
 import { emitEvent } from '@storage/core/events'
-import { checkMonetaryAuthority } from '@/lib/rbac/authorize'
+import { can, checkMonetaryAuthority, loadSystemPermissions } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
 import { systemActor, type Actor } from '@/lib/rbac/actor'
 import { stripeClient } from '@/lib/payments/stripe'
 import { recomputeInvoices } from '@/lib/billing/allocation'
 import { openSessionFor } from '@/lib/admin/drawer'
+import { formatCents } from '@/lib/format'
 
 // PRD 02 US-23 (B-048). Refunds.
 //
@@ -54,6 +55,11 @@ export type RefundInput = {
   /// Force a cash/cheque refund of a card payment — the counter case where the
   /// card is closed and the tenant wants cash. Audited as such.
   asMethod?: RefundMethod
+  /// B-443. The refund returns a CREDIT this lease holds, not money that is
+  /// settling an invoice. It posts whole to this lease and leaves every
+  /// allocation alone: the invoices were paid and stay paid, and a payment
+  /// that also covered another unit does not re-open that unit's invoice.
+  creditOfLeaseId?: string
 }
 
 /// Refunds a payment, in full or in part.
@@ -98,16 +104,23 @@ export async function refundPayment(
     return { ok: false, reason: 'over_original' }
   }
 
-  const decision = checkMonetaryAuthority(actor, 'refund', input.amountCents, payment.facilityId)
-  if (!decision.allowed) {
-    return decision.reason === 'forbidden'
-      ? { ok: false, reason: 'forbidden' }
-      : {
-          ok: false,
-          reason: 'over_limit',
-          limitCents: decision.limitCents,
-          escalateToRank: decision.escalateToRank,
-        }
+  // B-443 / D-158. The system returning a tenant's own credit needs the
+  // permission and no limit: the facility's refund limit (B-004) caps what a
+  // person may decide to give back, and nobody is deciding here.
+  if (actor.kind === 'system') {
+    if (!can(actor, 'refunds:approve')) return { ok: false, reason: 'forbidden' }
+  } else {
+    const decision = checkMonetaryAuthority(actor, 'refund', input.amountCents, payment.facilityId)
+    if (!decision.allowed) {
+      return decision.reason === 'forbidden'
+        ? { ok: false, reason: 'forbidden' }
+        : {
+            ok: false,
+            reason: 'over_limit',
+            limitCents: decision.limitCents,
+            escalateToRank: decision.escalateToRank,
+          }
+    }
   }
 
   const method: RefundMethod =
@@ -155,6 +168,7 @@ export async function refundPayment(
     note: input.note,
     checkNumber: input.checkNumber,
     drawerSessionId: drawerSession?.id ?? null,
+    creditOfLeaseId: input.creditOfLeaseId,
   })
 
   // MONEY-03. Stripe returned a refund that is already in the books: the same
@@ -180,6 +194,7 @@ type RefundWrite = {
   note?: string
   checkNumber?: string | null
   drawerSessionId?: string | null
+  creditOfLeaseId?: string
 }
 
 /// Puts one refund in the books: the refund row, the ledger entry, the trimmed
@@ -235,14 +250,19 @@ function writeRefund(actor: Actor, paymentId: string, input: RefundWrite): Promi
     // the money again. The post used to go whole to whichever ledger entry the
     // database returned first, so a payment that settled two units could
     // re-open unit B's invoice and debit unit A (B-257's defect on the way out).
-    const allocations = await tx.paymentAllocation.findMany({
-      where: { paymentId: payment.id },
-      select: { id: true, invoiceId: true, amountCents: true, invoice: { select: { leaseId: true } } },
-      orderBy: [{ invoice: { dueDate: 'desc' } }, { id: 'desc' }],
-    })
+    //
+    // B-443. A refund of a lease's credit unwinds nothing (`creditOfLeaseId`).
+    const allocations = input.creditOfLeaseId
+      ? []
+      : await tx.paymentAllocation.findMany({
+          where: { paymentId: payment.id },
+          select: { id: true, invoiceId: true, amountCents: true, invoice: { select: { leaseId: true } } },
+          orderBy: [{ invoice: { dueDate: 'desc' } }, { id: 'desc' }],
+        })
     const byLease = new Map<string, number>()
     const post = (leaseId: string, cents: number) => byLease.set(leaseId, (byLease.get(leaseId) ?? 0) + cents)
-    let toUnwind = input.amountCents
+    let toUnwind = input.creditOfLeaseId ? 0 : input.amountCents
+    if (input.creditOfLeaseId) post(input.creditOfLeaseId, input.amountCents)
     for (const allocation of allocations) {
       if (toUnwind <= 0) break
       const reduction = Math.min(toUnwind, allocation.amountCents)
@@ -403,6 +423,128 @@ export async function recordStripeRefund(
     providerRefundId: refund.id,
     reasonCode: `stripe_${refund.reason ?? 'refund'}`,
     note: `Stripe refund ${refund.id}, not made through this system`,
+  })
+}
+
+export type MoveOutRefundPlan = {
+  card: { paymentId: string; amountCents: number }[]
+  cardCents: number
+  /// What no card payment can take back: cash, a cheque, a payment that was
+  /// returned or disputed, or no Stripe to ask.
+  chequeCents: number
+}
+
+/// B-443 / D-158. Where a lease's credit goes back to: the card payments that
+/// put money on this lease, newest first, each up to the least of what is
+/// still owed back, what the payment still holds on THIS lease (so a payment
+/// that covered several units gives back only this one's share) and what is
+/// left on the payment to refund. Reads only; `autoRefundMoveOutCredit` acts.
+export async function planMoveOutRefund(leaseId: string, creditCents: number): Promise<MoveOutRefundPlan> {
+  const card: MoveOutRefundPlan['card'] = []
+  let left = Math.max(0, creditCents)
+  const payments =
+    left > 0 && stripeClient()
+      ? await prisma.payment.findMany({
+          where: {
+            method: 'card',
+            status: { in: ['succeeded', 'partially_refunded'] },
+            refundOfPaymentId: null,
+            stripePaymentIntentId: { not: null },
+            ledgerEntries: { some: { leaseId } },
+          },
+          orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
+          select: { id: true, amountCents: true, refunds: { select: { amountCents: true, status: true } } },
+        })
+      : []
+  for (const payment of payments) {
+    if (left <= 0) break
+    const held = await prisma.ledgerEntry.aggregate({
+      where: { leaseId, OR: [{ paymentId: payment.id }, { payment: { refundOfPaymentId: payment.id } }] },
+      _sum: { amountCents: true },
+    })
+    const refunded = payment.refunds
+      .filter((refund) => refund.status !== 'failed')
+      .reduce((sum, refund) => sum + refund.amountCents, 0)
+    const amountCents = Math.min(left, -(held._sum.amountCents ?? 0), payment.amountCents - refunded)
+    if (amountCents <= 0) continue
+    card.push({ paymentId: payment.id, amountCents })
+    left -= amountCents
+  }
+  return { card, cardCents: Math.max(0, creditCents) - left, chequeCents: left }
+}
+
+/// B-443 / D-158. A credit left by a move-out goes back to the card by itself.
+///
+/// Each part goes through `refundPayment`, so the provider is asked before the
+/// books are written and each refund Stripe accepts is recorded the moment it
+/// is accepted; `refund.sent` and the task close exactly as a manual refund
+/// does. Whatever does not go back stays on B-414's task as a cheque, with the
+/// amount and why. Runs after the move-out has committed: a refused card must
+/// not un-end a lease.
+export async function autoRefundMoveOutCredit(leaseId: string): Promise<void> {
+  const [lease, balance] = await Promise.all([
+    prisma.lease.findUniqueOrThrow({ where: { id: leaseId }, select: { facilityId: true } }),
+    prisma.ledgerEntry.aggregate({ where: { leaseId }, _sum: { amountCents: true } }),
+  ])
+  const creditCents = -(balance._sum.amountCents ?? 0)
+  if (creditCents <= 0) return
+
+  await loadSystemPermissions()
+  const actor = systemActor('move_out_refund')
+  const plan = await planMoveOutRefund(leaseId, creditCents)
+  const refunds: { paymentId: string; refundPaymentId: string; amountCents: number }[] = []
+  let refused: string | null = null
+  for (const part of plan.card) {
+    const result = await refundPayment(actor, part.paymentId, {
+      amountCents: part.amountCents,
+      reasonCode: 'move_out_credit',
+      note: 'Automatic refund of the tenant’s own credit at move-out (D-158). The facility refund limit does not apply.',
+      creditOfLeaseId: leaseId,
+    })
+    if (result.ok) refunds.push({ ...part, refundPaymentId: result.refundPaymentId })
+    else refused = result.message ?? result.reason
+  }
+
+  const refundedCents = refunds.reduce((sum, refund) => sum + refund.amountCents, 0)
+  const chequeCents = creditCents - refundedCents
+  const chequeReason = refused ? `the card refund was refused: ${refused}` : 'no card payment it can go back to'
+  await prisma.$transaction(async (tx) => {
+    // One row for the decision the system made, beside the `refund.issued`
+    // row each refund wrote. Nothing when no card was ever asked: a cash
+    // lease's cheque is the task's business and no refund was issued.
+    if (plan.card.length > 0) {
+      await recordAudit(
+        {
+          actor: toAuditActor(actor),
+          action: 'refund.auto_issued',
+          entityType: 'Lease',
+          entityId: leaseId,
+          facilityId: lease.facilityId,
+          reasonCode: 'move_out_credit',
+          context: {
+            creditCents,
+            refundedCents,
+            chequeCents,
+            refunds,
+            refused,
+            limit: 'Not applied: a system refund of the tenant’s own money (D-158).',
+          },
+        },
+        tx,
+      )
+    }
+    if (chequeCents > 0) {
+      const task = await tx.task.findFirst({
+        where: { type: 'move_out_refund_due', entityId: leaseId, status: 'open' },
+        select: { id: true, detail: true },
+      })
+      if (task) {
+        await tx.task.update({
+          where: { id: task.id },
+          data: { detail: `${task.detail ?? ''} By cheque: ${formatCents(chequeCents)} (${chequeReason}).`.trim() },
+        })
+      }
+    }
   })
 }
 

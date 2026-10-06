@@ -64,8 +64,14 @@ describe('permission catalog', () => {
   it('does not let the system role act as a superuser', () => {
     const system = ROLES.find((r) => r.key === 'system')!
     expect(system.permissions).not.toContain('users:manage')
-    expect(system.permissions).not.toContain('refunds:approve')
-    expect(system.permissions.length).toBeLessThan(PERMISSIONS.length)
+    // B-443 / D-158 granted `refunds:approve`, so a move-out credit can go
+    // back to the card by itself. The list is pinned whole: a fourth
+    // permission is a decision, and this is where it gets noticed.
+    expect([...system.permissions].sort()).toEqual([
+      'delinquency:execute_step',
+      'refunds:approve',
+      'tenants:view',
+    ])
   })
 
   it('gives read-only roles no mutating permissions', () => {
