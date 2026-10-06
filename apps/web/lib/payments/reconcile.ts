@@ -297,7 +297,18 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
         // Recording nothing and acknowledging is right; the event row keeps it
         // visible.
         if (!payment) return
-        if (payment.status === 'succeeded') return
+        // MONEY-01. Not only `succeeded`: a retry that lands after the money
+        // went back (SEC-01 re-applies an event whose first apply threw) must
+        // not flip the payment to succeeded and allocate it a second time.
+        // `failed` is deliberately absent, because a declined intent that the
+        // payer retries with another card succeeds on the same intent id.
+        if (
+          payment.status === 'succeeded' ||
+          payment.status === 'refunded' ||
+          payment.status === 'partially_refunded' ||
+          payment.status === 'returned'
+        )
+          return
 
         await tx.payment.update({
           where: { id: payment.id },

@@ -197,6 +197,40 @@ describeDb('reconciliation into the ledger', () => {
     expect(events).toHaveLength(1)
   })
 
+  it.each(['refunded', 'partially_refunded', 'returned'] as const)(
+    'MONEY-01: a redelivered success does not re-credit a %s payment',
+    async (status) => {
+      const intentId = `pi_${suffix}_m01_${status}`
+      const payment = await pendingPayment(intentId)
+      await applyStripeEvent(succeededEvent(intentId))
+      await prisma.payment.update({ where: { id: payment.id }, data: { status } })
+
+      await applyStripeEvent(succeededEvent(intentId))
+
+      expect(
+        (await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status,
+      ).toBe(status)
+      // The event is emitted in the same transaction as the allocation, after
+      // the guard, so one event means the payment was settled once.
+      const events = await prisma.domainEvent.findMany({
+        where: { entityId: payment.id, name: 'payment.succeeded' },
+      })
+      expect(events).toHaveLength(1)
+    },
+  )
+
+  it('MONEY-01: a declined intent that is retried still succeeds', async () => {
+    const intentId = `pi_${suffix}_m01_retry`
+    const payment = await pendingPayment(intentId)
+    await prisma.payment.update({ where: { id: payment.id }, data: { status: 'failed' } })
+
+    await applyStripeEvent(succeededEvent(intentId))
+
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status,
+    ).toBe('succeeded')
+  })
+
   it('SEC-01: re-applies an event whose first apply failed, then treats it as done', async () => {
     const { POST } = await import('../apps/web/app/api/stripe/webhook/route')
     const before = {
