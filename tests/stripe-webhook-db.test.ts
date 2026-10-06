@@ -646,6 +646,7 @@ describeDb('card disputes', () => {
     type: 'charge.dispute.created' | 'charge.dispute.closed',
     intentId: string,
     status: string,
+    amount?: number,
   ) =>
     ({
       id,
@@ -656,6 +657,7 @@ describeDb('card disputes', () => {
           payment_intent: intentId,
           status,
           reason: 'fraudulent',
+          ...(amount === undefined ? {} : { amount }),
         },
       },
     }) as unknown as Stripe.Event
@@ -830,6 +832,48 @@ describeDb('card disputes', () => {
     // Redelivering `closed` adds nothing.
     await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d8c`, 'charge.dispute.closed', intentId, 'lost'))
     expect(await prisma.ledgerEntry.count({ where: { paymentId, type: 'adjustment' } })).toBe(posted)
+  })
+
+  it('does not reverse a payment disputed for part of its amount', async () => {
+    // MONEY-04. $50 disputed of $129: reversing would re-open $129 and start
+    // dunning for the $79 still held.
+    const intentId = `pi_${dsuffix}_partial`
+    const { paymentId, invoiceId } = await settledRent(intentId)
+    const untouched = async () => {
+      expect(
+        (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status,
+      ).toBe('succeeded')
+      expect(
+        (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status,
+      ).toBe('paid')
+      expect(await prisma.ledgerEntry.count({ where: { paymentId, type: 'adjustment' } })).toBe(0)
+    }
+
+    await applyStripeEvent(
+      disputeEvent(`evt_${dsuffix}_d9a`, 'charge.dispute.created', intentId, 'needs_response', 5_000),
+    )
+    await untouched()
+    const task = await prisma.task.findFirst({
+      where: { entityId: paymentId, type: 'settling_payment_failed' },
+    })
+    expect(task?.status).toBe('open')
+    expect(task?.detail).toContain('$50.00')
+
+    // Both `returnPayment` calls are guarded: losing it reverses nothing either.
+    await applyStripeEvent(
+      disputeEvent(`evt_${dsuffix}_d9b`, 'charge.dispute.closed', intentId, 'lost', 5_000),
+    )
+    await untouched()
+
+    // A dispute for the whole amount still reverses.
+    const fullIntent = `pi_${dsuffix}_fullamount`
+    const full = await settledRent(fullIntent)
+    await applyStripeEvent(
+      disputeEvent(`evt_${dsuffix}_d9c`, 'charge.dispute.created', fullIntent, 'needs_response', 12_900),
+    )
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: full.paymentId } })).status,
+    ).toBe('returned')
   })
 
   it('raises the queue card for a dispute on a payment with no lease', async () => {

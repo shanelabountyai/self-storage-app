@@ -7,6 +7,7 @@ import { applyPayment, postPaymentLedger, type AppliedPayment } from '@/lib/bill
 import { payableLeaseFilter } from '@/lib/billing/accounts'
 import { reinstatePayment, returnPayment } from '@/lib/billing/reversals'
 import { systemActor } from '@/lib/rbac/actor'
+import { formatCents } from '@/lib/format'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
 
 /// How Stripe actually took the money.
@@ -580,11 +581,21 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       if (!intentId) return
       const payment = await prisma.payment.findUnique({
         where: { stripePaymentIntentId: intentId },
-        select: { id: true, facilityId: true },
+        select: { id: true, facilityId: true, amountCents: true },
       })
       // Same reasoning as every other handler here: an intent we have no row
       // for is a replay or another environment sharing the account, not a crash.
       if (!payment) return
+
+      // MONEY-04. `returnPayment` reverses the whole payment and has no amount
+      // to take, so a dispute for part of one would re-open every invoice it
+      // paid and start dunning for money we still hold. A partial dispute is
+      // never auto-reversed, at `created` or at `lost`; a person posts the
+      // correction from the card, which names the amount.
+      const partial = typeof dispute.amount === 'number' && dispute.amount < payment.amountCents
+      const partialDetail = partial
+        ? `The bank disputed ${formatCents(dispute.amount)} of this ${formatCents(payment.amountCents)} payment (${dispute.status}). Nothing was reversed.`
+        : undefined
 
       // Not a staff decision. The bank has already moved the money and the only
       // thing left to choose is whether our records say so — see
@@ -598,7 +609,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
         // is a card network inquiry, NOT a withdrawal: the funds are still ours.
         // Reversing on one would re-open invoices and start dunning a tenant over
         // money we still hold. It still needs a person, which is the task below.
-        const withdrawn = !dispute.status.startsWith('warning_')
+        const withdrawn = !dispute.status.startsWith('warning_') && !partial
         const result = withdrawn
           ? await returnPayment(actor, payment.id, {
               reasonCode,
@@ -611,8 +622,8 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           : null
 
         // `returnPayment` raises the queue card itself when it reverses. When it
-        // could not — an early warning, a payment posted against no lease, one
-        // already reversed — a human still has to see it, because the money is
+        // could not — an early warning, a partial dispute, a payment posted
+        // against no lease, one already reversed — a human still has to see it, because the money is
         // gone from the account either way and nothing else in the product will
         // ever mention it. `createTask` is idempotent per (type, entity, day),
         // so a redelivery does not stack cards.
@@ -623,6 +634,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
             entityType: 'Payment',
             entityId: payment.id,
             priority: 'high',
+            detail: partialDetail,
           })
         }
         return
@@ -641,8 +653,21 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       // and the escalation arrives as events this handler does not take, so
       // this is the first place the withdrawal can reach the ledger. The task
       // is already open from `created` either way. No fee, as at `created`.
-      if (dispute.status === 'lost') {
+      if (dispute.status === 'lost' && !partial) {
         await returnPayment(actor, payment.id, { reasonCode, note, waiveFee: true })
+      }
+      // A lost partial dispute is the one outcome with nothing on the ledger
+      // and no card guaranteed open: the one from `created` is per day and may
+      // have been closed while the dispute ran.
+      if (dispute.status === 'lost' && partial) {
+        await createTask({
+          facilityId: payment.facilityId,
+          type: 'settling_payment_failed',
+          entityType: 'Payment',
+          entityId: payment.id,
+          priority: 'high',
+          detail: partialDetail,
+        })
       }
       return
     }
