@@ -12364,7 +12364,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** Full `npm test`: 4,948 passed, 8 skipped, 2 failed (`unsubscribe-token`: two exact-shape assertions that did not know the new `payerId` field); fixed, one case added, and the full run repeated: 4,951 passed, 8 skipped. The new integration test (`nominated-payer-db`, 7) passed. Typecheck (tests included) and lint 0 errors; schema drift clean. e2e against a production build: the eleven specs that name `/portal/notifications`, `/unsubscribe`, `/pay/` or the tenant profile, both projects, 451 passed and 1 failed (the bug above); after the fix, `portal-bill-payer`, `portal`, `a11y-own-spec-routes` and `i18n` 326 passed and 1 failed (the new spec's own `main` locator); `portal-bill-payer` then 4 passed on desktop-chrome, which is the only project it runs on. The full sweep was not run.
 
-## B-438 — Competitor prices sit beside rate suggestions (2026-10-05, `SHA_PENDING`)
+## B-438 — Competitor prices sit beside rate suggestions (2026-10-05, `f8d02ed`)
 
 **What it built.** PRD 02 US-12 "competitor prices sit beside the suggestion". `CompetitorPrice` (migration `b438_competitor_price`): facility, unit type, competitor name, price in cents, the date seen (`@db.Date`), who entered it. `/admin/units/rates` has a "Nearby price" column with the latest line per type and an "Add a price" form in each row (`<details>`, `AdminForm`, `Field`). `recordCompetitorPrice` and the `competitor` field on each row are in `lib/pricing/rate-suggestions.ts`; `isSurveyStale` and `SURVEY_STALE_DAYS` (30) are in `packages/core/pricing/competitor-survey.ts`. A stale line is still shown, with "Stale: more than 30 days old" in words.
 
