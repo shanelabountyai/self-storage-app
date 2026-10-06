@@ -12405,3 +12405,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** Every row is open. Two questions were not settled: whether stripe-node retries a 409 on a concurrent duplicate refund, and how `/pay/[token]` creates its charge. Whether a balance on a current lease should stop an online checkout (MONEY-02) is an owner call with no D-number yet.
 
 **Verification.** None run: docs only.
+
+## MONEY-01 — A retried success no longer re-credits a refunded or returned payment (2026-10-06, `72c276c`)
+
+**What it built.** The `payment_intent.succeeded` handler in `lib/payments/reconcile.ts` now returns when the payment is `succeeded`, `refunded`, `partially_refunded` or `returned`. Before, only `succeeded` returned, so a redelivery after a refund or a return set the payment back to `succeeded`, allocated the full amount again and, for a checkout reference, ran `provisionMoveIn` on money that had gone back. Four tests in `tests/stripe-webhook-db.test.ts`: one per blocked status, and one that a `failed` payment still succeeds.
+
+**What it decided.** The row proposed "return unless `pending` or `processing`". That was not built: `payment_intent.payment_failed` sets the row to `failed`, and a payer who retries with another card succeeds on the same intent id, so excluding `failed` would drop a real payment. A later session must not tighten the guard to the row's wording. A dispute that is won reinstates the payment through the dispute handler, not through this event, so blocking `returned` here does not stop a reinstatement.
+
+**What it left behind.** The tests set the status directly and assert one `payment.succeeded` event (emitted in the same transaction as the allocation, after the guard); they do not run `refundPayment` or check an invoice's `amountPaidCents`, as the row's acceptance column asked. MONEY-02 to MONEY-10 are open.
+
+**Verification.** The three blocked-status tests fail with the guard stashed and pass with it. `npm test`: 312 files passed, 1 skipped; 4,959 tests passed, 8 skipped. `npm run typecheck` and `npm run lint` clean. No e2e run: no screen changed. No migration. The docs landed in the commit after `72c276c`, which holds the code and the tests.
