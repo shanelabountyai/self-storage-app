@@ -289,7 +289,18 @@ async function settlePayment(
 /// Only a `failed` row is adopted. A `pending` one with no intent id is a
 /// create still in flight, and its catch would overwrite whatever is written
 /// here; that case throws below and the redelivery finds it settled.
+/// MONEY-09. The first statement of a handler's transaction. Each handler
+/// reads the status and then writes on what it read, and a plain read lets two
+/// applies of one event in flight together (a dashboard "Resend", a retry
+/// landing mid-transaction) both pass the guard and both settle the payment.
+/// The second apply waits here, and what it reads next is what the first
+/// committed. Raw SQL, because Prisma has no `FOR UPDATE`.
+async function lockPayment(tx: Prisma.TransactionClient, intentId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "payment" WHERE "stripePaymentIntentId" = ${intentId} FOR UPDATE`
+}
+
 async function paymentFor(tx: Prisma.TransactionClient, intent: Stripe.PaymentIntent) {
+  await lockPayment(tx, intent.id)
   const payment = await tx.payment.findUnique({ where: { stripePaymentIntentId: intent.id } })
   if (payment) return payment
 
@@ -307,8 +318,12 @@ async function paymentFor(tx: Prisma.TransactionClient, intent: Stripe.PaymentIn
     orderBy: { createdAt: 'desc' },
   })
   if (orphan) {
-    return tx.payment.update({
-      where: { id: orphan.id },
+    // MONEY-09. There was no intent id to lock above, so the claim itself is
+    // the lock: the conditions are in the WHERE, and a second apply that waited
+    // on this row matches nothing once the first has committed. It then reads
+    // the row the first one settled, rather than setting it back to `pending`.
+    const { count } = await tx.payment.updateMany({
+      where: { id: orphan.id, status: 'failed', stripePaymentIntentId: null },
       data: {
         stripePaymentIntentId: intent.id,
         status: 'pending',
@@ -316,6 +331,8 @@ async function paymentFor(tx: Prisma.TransactionClient, intent: Stripe.PaymentIn
         failureCode: null,
       },
     })
+    if (count === 0) return paymentFor(tx, intent)
+    return tx.payment.findUniqueOrThrow({ where: { id: orphan.id } })
   }
 
   // No row to attach it to. Another environment sharing the Stripe account
@@ -530,6 +547,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       const wasSettling: { payment: { id: string; facilityId: string; tenantId: string } }[] = []
 
       await prisma.$transaction(async (tx) => {
+        await lockPayment(tx, intent.id)
         const payment = await tx.payment.findUnique({
           where: { stripePaymentIntentId: intent.id },
         })

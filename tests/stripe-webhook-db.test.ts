@@ -341,6 +341,46 @@ describeDb('reconciliation into the ledger', () => {
     await prisma.lease.deleteMany({ where: { id: lease.id } })
   })
 
+  it('MONEY-09: two applies of one success in flight together settle the payment once', async () => {
+    // A dashboard "Resend" or a retry landing mid-transaction. A prepayment:
+    // the lease has no open invoice, so the allocation has nothing to lock.
+    const unitType = await prisma.unitType.create({
+      data: { facilityId, name: `M9 ${suffix}`, widthFt: 5, lengthFt: 5 },
+    })
+    const unit = await prisma.unit.create({
+      data: { facilityId, unitTypeId: unitType.id, number: `M9-${suffix}` },
+    })
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId: unit.id,
+        status: 'active',
+        startDate: new Date(),
+        monthlyRateCents: 12_900,
+        billingDay: 1,
+      },
+    })
+
+    const intentId = `pi_${suffix}_m09`
+    const payment = await pendingPayment(intentId)
+    await Promise.all([
+      applyStripeEvent(succeededEvent(intentId)),
+      applyStripeEvent(succeededEvent(intentId)),
+    ])
+
+    expect(await prisma.ledgerEntry.count({ where: { paymentId: payment.id } })).toBe(1)
+    // Emitted after the guard, in the same transaction: one event, one settle.
+    expect(
+      await prisma.domainEvent.count({
+        where: { entityId: payment.id, name: 'payment.succeeded' },
+      }),
+    ).toBe(1)
+
+    await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
+    await prisma.lease.deleteMany({ where: { id: lease.id } })
+  })
+
   it('MONEY-02: a checkout payment does not settle the tenant\'s older invoices', async () => {
     // A move-in raises no invoice, so anything the allocation finds belongs to
     // a lease the tenant already had; the whole amount is credited to the new
@@ -561,6 +601,35 @@ describeDb('reconciliation into the ledger', () => {
     await prisma.payment.deleteMany({ where: { id: lost.id } })
     await prisma.invoice.deleteMany({ where: { id: invoice.id } })
     await prisma.lease.deleteMany({ where: { id: lease.id } })
+  })
+
+  it('MONEY-09: two applies in flight together re-attach a lost charge once', async () => {
+    // The row has no intent id yet, so there is nothing to lock by: the claim
+    // has to be what stops the second apply.
+    const lost = await prisma.payment.create({
+      data: { facilityId, tenantId, amountCents: 7_300, method: 'card', status: 'failed' },
+    })
+    const intentId = `pi_${suffix}_m09_lost`
+    const event = {
+      id: `evt_${suffix}_m09_lost`,
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: intentId,
+          amount: 7_300,
+          created: Math.floor(Date.now() / 1000),
+          metadata: { facilityId, tenantId },
+        },
+      },
+    } as unknown as Stripe.Event
+    await Promise.all([applyStripeEvent(event), applyStripeEvent(event)])
+
+    const after = await prisma.payment.findUniqueOrThrow({ where: { id: lost.id } })
+    expect(after.status).toBe('succeeded')
+    expect(after.stripePaymentIntentId).toBe(intentId)
+    expect(
+      await prisma.domainEvent.count({ where: { entityId: lost.id, name: 'payment.succeeded' } }),
+    ).toBe(1)
   })
 
   it('MONEY-06: an intent naming our tenant with no row to attach stays unprocessed', async () => {
