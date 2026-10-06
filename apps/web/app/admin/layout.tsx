@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { ForbiddenError } from '@/lib/rbac/authorize'
-import { needsMfaEnrollment } from '@/lib/auth/mfa'
+import { MfaEnrollmentRequiredError } from '@/lib/rbac/session'
 import { groupedNavItems } from '@/lib/admin/nav'
 import { navCounts } from '@/lib/admin/nav-counts'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
@@ -23,6 +23,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     // requireStaffActor() throws for "no session" and "wrong audience" alike —
     // middleware.ts already redirects those, but this is the fail-closed
     // backstop if a request ever reaches here without it (PRD 02 RBAC-1).
+    //
+    // PRD 00 §7.1 (B-079): "Staff auth requires MFA (TOTP) from Phase 2."
+    //
+    // Enforced after sign-in rather than at it, because a staff member who has
+    // not enrolled has no second factor to present and refusing the sign-in
+    // would leave a new hire with no way to ever get one. They authenticate,
+    // and then reach exactly one screen until they enrol.
+    //
+    // The check itself is in requireStaffActor() (SEC-07), so it also covers
+    // what this layout never renders. Tested before the ForbiddenError below
+    // because it IS one, and /login would only send them back here.
+    if (error instanceof MfaEnrollmentRequiredError) redirect('/mfa')
     if (error instanceof ForbiddenError) {
       // While impersonating a TENANT the actor is a tenant, so every admin
       // route correctly refuses. The destination is the portal they were on
@@ -34,21 +46,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   const { actor, userName, facilities, cookieValue, canSeeAll } = switcherData
-
-  // PRD 00 §7.1 (B-079): "Staff auth requires MFA (TOTP) from Phase 2."
-  //
-  // Enforced here rather than at sign-in, because a staff member who has not
-  // enrolled has no second factor to present and refusing the sign-in would
-  // leave a new hire with no way to ever get one. They authenticate, and then
-  // reach exactly one screen until they enrol.
-  //
-  // Read from the database on every admin request rather than from a claim on
-  // the JWT: a claim minted at sign-in would still say "enrolled" for the
-  // remaining thirty days of a session after an administrator reset somebody's
-  // second factor, which is precisely the case a reset exists to handle.
-  if (actor.kind === 'staff' && (await needsMfaEnrollment(actor.staffUserId))) {
-    redirect('/mfa')
-  }
 
   const navGroups = groupedNavItems(actor)
   // The counts follow the switcher: one site, or every site the actor can see.

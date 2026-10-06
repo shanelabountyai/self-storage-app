@@ -15,7 +15,7 @@ import { messages } from '@/lib/i18n/server'
 // would be a way to re-key somebody else's second factor.
 
 export async function beginEnrollmentAction(_prev: FormState): Promise<FormState> {
-  const actor = await requireStaffActor()
+  const actor = await requireStaffActor({ allowUnenrolled: true })
   const { t } = await messages()
   const result = await beginEnrollment(actor.staffUserId)
 
@@ -31,7 +31,7 @@ export async function confirmEnrollmentAction(
   _prev: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const actor = await requireStaffActor()
+  const actor = await requireStaffActor({ allowUnenrolled: true })
   const { t } = await messages()
   const code = String(formData.get('code') ?? '').trim()
 
@@ -50,7 +50,7 @@ export async function confirmEnrollmentAction(
 }
 
 export async function regenerateRecoveryCodesAction(_prev: FormState): Promise<FormState> {
-  const actor = await requireStaffActor()
+  const actor = await requireStaffActor({ allowUnenrolled: true })
   const { t } = await messages()
   const codes = await regenerateRecoveryCodes(actor.staffUserId)
 

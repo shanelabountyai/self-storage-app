@@ -28,7 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function MfaPage() {
   let staffUserId: string
   try {
-    staffUserId = (await requireStaffActor()).staffUserId
+    staffUserId = (await requireStaffActor({ allowUnenrolled: true })).staffUserId
   } catch (error) {
     if (error instanceof ForbiddenError) redirect('/login?from=%2Fadmin')
     throw error

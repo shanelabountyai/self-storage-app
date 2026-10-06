@@ -1,4 +1,5 @@
 import { auth } from '@/auth'
+import { needsMfaEnrollment } from '@/lib/auth/mfa'
 import { currentImpersonation } from '@/lib/impersonation/context'
 import { loadStaffActor, type Actor } from './actor'
 import { ForbiddenError } from './authorize'
@@ -35,9 +36,32 @@ export async function requireActor(): Promise<Actor> {
   return actor
 }
 
-export async function requireStaffActor(): Promise<Extract<Actor, { kind: 'staff' }>> {
+/// A ForbiddenError, so every caller that already refuses on one refuses an
+/// unenrolled staff member too. Its own class only so the admin layout can
+/// send them to /mfa rather than to a login page they are already past.
+export class MfaEnrollmentRequiredError extends ForbiddenError {
+  constructor() {
+    super('MFA enrolment required')
+    this.name = 'MfaEnrollmentRequiredError'
+  }
+}
+
+/// SEC-07. The enrolment check lives HERE, not only in the admin layout: a
+/// layout guards a render, and a server action, a `*.csv` route and
+/// `/api/facilities/*` are all reachable without one. `allowUnenrolled` is for
+/// the /mfa screen and its three actions and nothing else — it is the one
+/// place an unenrolled staff member has to be able to act.
+///
+/// Read from the database on every call rather than from a JWT claim, for the
+/// reason the layout gives: a claim would outlive an administrator's reset.
+export async function requireStaffActor(
+  options: { allowUnenrolled?: boolean } = {},
+): Promise<Extract<Actor, { kind: 'staff' }>> {
   const actor = await requireActor()
   if (actor.kind !== 'staff') throw new ForbiddenError('Staff access required')
+  if (!options.allowUnenrolled && (await needsMfaEnrollment(actor.staffUserId))) {
+    throw new MfaEnrollmentRequiredError()
+  }
   return actor
 }
 
