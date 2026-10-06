@@ -805,6 +805,33 @@ describeDb('card disputes', () => {
     expect(await prisma.ledgerEntry.count({ where: { paymentId, type: 'adjustment' } })).toBe(0)
   })
 
+  it('reverses the payment when an inquiry escalates to a lost chargeback', async () => {
+    // MONEY-05. `created` arrived as a warning and posted nothing, so `closed`
+    // with `lost` is the first event that says the bank took the money.
+    const intentId = `pi_${dsuffix}_escalated`
+    const { paymentId, invoiceId } = await settledRent(intentId)
+
+    await applyStripeEvent(
+      disputeEvent(`evt_${dsuffix}_d8a`, 'charge.dispute.created', intentId, 'warning_needs_response'),
+    )
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d8b`, 'charge.dispute.closed', intentId, 'lost'))
+
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status,
+    ).toBe('returned')
+    expect(
+      (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } })).status,
+    ).toBe('open')
+    // One reversal per posted entry, and no returned-payment fee.
+    const posted = await prisma.ledgerEntry.count({ where: { paymentId, type: 'payment' } })
+    expect(await prisma.ledgerEntry.count({ where: { paymentId, type: 'adjustment' } })).toBe(posted)
+    expect(await prisma.invoice.count({ where: { leaseId: dLeaseId, kind: { not: 'rent' } } })).toBe(0)
+
+    // Redelivering `closed` adds nothing.
+    await applyStripeEvent(disputeEvent(`evt_${dsuffix}_d8c`, 'charge.dispute.closed', intentId, 'lost'))
+    expect(await prisma.ledgerEntry.count({ where: { paymentId, type: 'adjustment' } })).toBe(posted)
+  })
+
   it('raises the queue card for a dispute on a payment with no lease', async () => {
     // A merchandise sale, or a payment posted against no lease. There is
     // nothing on a lease ledger to reverse and inventing an entry would attach

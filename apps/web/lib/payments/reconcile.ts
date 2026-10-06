@@ -628,13 +628,21 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
         return
       }
 
-      // Closed. `lost` needs nothing: the reversal posted at `created` is
-      // already the truth, and the task is already open. `won` and
-      // `warning_closed` both mean the money stayed with us — the second only
-      // ever follows a warning we did not reverse, and `reinstatePayment`
-      // returns `not_returned` for it rather than inventing a credit.
+      // Closed. `won` and `warning_closed` both mean the money stayed with us —
+      // the second only ever follows a warning we did not reverse, and
+      // `reinstatePayment` returns `not_returned` for it rather than inventing
+      // a credit.
       if (dispute.status === 'won' || dispute.status === 'warning_closed') {
         await reinstatePayment(actor, payment.id, { reasonCode, note })
+      }
+      // MONEY-05. `lost` after an ordinary dispute needs nothing: the reversal
+      // posted at `created` is already the truth and `returnPayment` answers
+      // `already_returned`. After an INQUIRY nothing was posted at `created`,
+      // and the escalation arrives as events this handler does not take, so
+      // this is the first place the withdrawal can reach the ledger. The task
+      // is already open from `created` either way. No fee, as at `created`.
+      if (dispute.status === 'lost') {
+        await returnPayment(actor, payment.id, { reasonCode, note, waiveFee: true })
       }
       return
     }
