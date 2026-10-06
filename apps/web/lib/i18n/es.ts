@@ -1986,11 +1986,14 @@ export const es: Dictionary = {
   'login.forgotPassword': '¿Olvidó su contraseña?',
   'login.magicLinkSummary': 'Enviarme un enlace para iniciar sesión',
   'login.magicLinkBody1':
-    'No necesita contraseña — le enviaremos un enlace de un solo toque que funciona durante 15 minutos.',
+    'No necesita contraseña — le enviaremos un enlace para iniciar sesión que funciona durante 15 minutos.',
   'login.magicLinkBody2':
     'Los enlaces para iniciar sesión son para cuentas de clientes. El personal siempre inicia sesión con una contraseña y un código de autenticación, así que no se puede enviar un enlace a esa cuenta.',
   'login.magicLinkFormLabel': 'Enviarme un enlace para iniciar sesión',
   'login.magicLinkButton': 'Enviarme un enlace',
+  'login.magic.title': 'Termine de iniciar sesión',
+  'login.magic.body': 'Su enlace está listo. Presione el botón para entrar a su cuenta.',
+  'login.magic.submit': 'Entrar a mi cuenta',
   'login.staffPrompt': '¿Es del personal?',
   'login.renterPrompt': '¿Renta con nosotros?',
   'login.signInHere': 'Inicie sesión aquí',

@@ -3078,6 +3078,15 @@ function reviewedOn(locale: Locale): string {
 // no demo tenant reaches a preview that settles to a refund, so it is not
 // scanned and not measured for layout, and the page still says so. No
 // sentence on this page changes. `LAST_REVIEWED` is not bumped (D-115).
+//
+// Re-read 2026-10-06, at SEC-08. A sign-in link now lands on a page,
+// `/login/magic`, with one heading, one sentence and one button, where it
+// used to sign in on arrival. It is in `PUBLIC_SCAN_ROUTES`, so the claim that
+// every sign-in page is scanned still holds, and its form is a plain server
+// action, so it posts without JavaScript like the rest. Not measured at 320px,
+// 200% zoom or forced text spacing on its own. It speaks the browser's
+// language, not the language the link was sent in, which `/reset-password`
+// does. No sentence on this page changes. `LAST_REVIEWED` is not bumped (D-115).
 
 export default async function AccessibilityPage() {
   const locale = await getLocale()

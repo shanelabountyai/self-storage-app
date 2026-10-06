@@ -2072,11 +2072,14 @@ export const en = {
   'login.forgotPassword': 'Forgot your password?',
   'login.magicLinkSummary': 'Email me a sign-in link instead',
   'login.magicLinkBody1':
-    'No password needed — we will email you a one-tap link that works for 15 minutes.',
+    'No password needed — we will email you a sign-in link that works for 15 minutes.',
   'login.magicLinkBody2':
     'Sign-in links are for customer accounts. Staff accounts always sign in with a password and an authentication code, so a link cannot be sent to one.',
   'login.magicLinkFormLabel': 'Email me a sign-in link',
   'login.magicLinkButton': 'Email me a link',
+  'login.magic.title': 'Finish signing in',
+  'login.magic.body': 'Your link is ready. Press the button to sign in to your account.',
+  'login.magic.submit': 'Sign in to my account',
   'login.staffPrompt': 'Staff?',
   'login.renterPrompt': 'Renting with us?',
   'login.signInHere': 'Sign in here',

@@ -1,6 +1,7 @@
 'use server'
 
 import { AuthError } from 'next-auth'
+import { redirect } from 'next/navigation'
 import { signIn } from '@/auth'
 import { checkLoginThrottle } from '@/lib/auth/rate-limit'
 import { resolveAudience } from '@/lib/auth/accounts'
@@ -81,4 +82,21 @@ export async function signInWithPasswordAction(
   }
 
   return success(t('login.signedIn'))
+}
+
+// SEC-08. The only place a magic link is spent, and it is a POST: the page at
+// `/login/magic` renders the button that submits here. Always the tenant
+// destination, because the provider in `auth.ts` refuses a staff token (B-079).
+export async function signInWithMagicLinkAction(formData: FormData): Promise<void> {
+  const token = String(formData.get('token') ?? '')
+  const from = String(formData.get('from') ?? '') || undefined
+
+  try {
+    await signIn('magic-link', { token, redirectTo: safeRedirectTarget(from, 'tenant') })
+  } catch (error) {
+    // Expired, already used, or never existed — consumeToken (lib/auth/tokens.ts)
+    // treats all three identically, and so does this: nothing to enumerate.
+    if (error instanceof AuthError) redirect('/login?error=magic_link_invalid')
+    throw error // includes Next's own redirect signal on success — must propagate
+  }
 }

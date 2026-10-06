@@ -108,6 +108,9 @@ export const PUBLIC_SCAN_ROUTES = [
   // token — the same posture as the four routes above.
   '/checkout/resume/not-a-real-token',
   '/confirm-email',
+  // SEC-08. The button a sign-in link now lands on. Any token renders it: the
+  // page does not look the token up, only the POST does.
+  '/login/magic?token=not-a-real-token',
   // B-435. The public not-found page, through a facility slug nobody has, and
   // the public error page, through the route the e2e server makes throw.
   '/storage/tx/austin/no-such-facility',
