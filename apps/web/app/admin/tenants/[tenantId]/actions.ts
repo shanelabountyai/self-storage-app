@@ -751,7 +751,7 @@ export async function returnPaymentAction(
       case "nothing_posted":
         return fieldError({
           reasonCode:
-            "This payment was never posted against a lease, so there is nothing to reverse.",
+            "This payment holds nothing against a lease, so there is nothing to reverse.",
         });
       default:
         return fieldError({ reasonCode: "That payment could not be found." });

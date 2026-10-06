@@ -20,6 +20,7 @@ import {
   refundablePayments,
 } from "../apps/web/lib/billing/refunds";
 import {
+  reinstatePayment,
   returnPayment,
   returnablePayments,
 } from "../apps/web/lib/billing/reversals";
@@ -569,6 +570,75 @@ describeDb("partial payments and refunds", () => {
       expect(
         (await refundablePayments(tenantId)).map((row) => row.paymentId),
       ).not.toContain(paymentId);
+    });
+
+    it("reverses only what a partly refunded payment still holds (MONEY-10)", async () => {
+      // $200 paid, $50 refunded, and the bank disputes the $150 that is left.
+      // `partially_refunded` used to answer `not_settled`: a card on the queue
+      // and $150 the books still showed as collected.
+      const invoiceId = await invoice({
+        dueDate: d("2026-08-01"),
+        lines: [{ type: "rent", amountCents: 20_000 }],
+      });
+      const paymentId = await succeededPayment(20_000);
+      await refundPayment(actorWith(), paymentId, {
+        amountCents: 5_000,
+        reasonCode: "billing_error",
+        asMethod: "cash",
+      });
+      const balance = async () =>
+        (
+          await prisma.ledgerEntry.aggregate({
+            where: { leaseId },
+            _sum: { amountCents: true },
+          })
+        )._sum.amountCents;
+      expect(await balance()).toBe(-15_000);
+
+      // A dispute for less than what is left is still MONEY-04's partial.
+      expect(
+        await returnPayment(actorWith(), paymentId, {
+          reasonCode: "dispute_fraudulent",
+          amountCents: 10_000,
+        }),
+      ).toEqual({ ok: false, reason: "amount_mismatch", heldCents: 15_000 });
+      expect(await balance()).toBe(-15_000);
+
+      const result = await returnPayment(actorWith(), paymentId, {
+        reasonCode: "dispute_fraudulent",
+        amountCents: 15_000,
+      });
+      expect(result.ok).toBe(true);
+      const reversals = await prisma.ledgerEntry.findMany({
+        where: { paymentId, type: "adjustment" },
+      });
+      expect(reversals.reduce((sum, row) => sum + row.amountCents, 0)).toBe(
+        15_000,
+      );
+      expect(await balance()).toBe(0);
+      expect(
+        (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } }))
+          .status,
+      ).toBe("returned");
+      expect(
+        (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } }))
+          .amountPaidCents,
+      ).toBe(0);
+
+      // Won: the $150 comes back, the $50 does not, and the payment is partly
+      // refunded again rather than whole.
+      await reinstatePayment(actorWith(), paymentId, {
+        reasonCode: "dispute_won",
+      });
+      expect(await balance()).toBe(-15_000);
+      const after = await prisma.payment.findUniqueOrThrow({
+        where: { id: paymentId },
+      });
+      expect(after.status).toBe("partially_refunded");
+      expect(
+        (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } }))
+          .amountPaidCents,
+      ).toBe(15_000);
     });
   });
 

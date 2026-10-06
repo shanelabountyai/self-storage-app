@@ -59,7 +59,10 @@ export type ReturnPaymentResult =
         | "not_settled"
         | "already_returned"
         | "nothing_posted";
-    };
+    }
+  /// MONEY-10. The bank took back less than this payment still holds, so a
+  /// reversal would re-open invoices for money that is still here.
+  | { ok: false; reason: "amount_mismatch"; heldCents: number };
 
 export type ReturnPaymentInput = {
   /// Why it came back, in the bank's terms — "insufficient funds", "account
@@ -72,6 +75,10 @@ export type ReturnPaymentInput = {
   /// facility's own mistake, and audited as a deliberate choice rather than
   /// achieved by deleting the fee afterwards.
   waiveFee?: boolean;
+  /// What the bank took back, when the caller knows (a dispute names it).
+  /// Compared with what the payment still holds INSIDE the transaction, so a
+  /// refund landing beside the dispute cannot slip between check and reversal.
+  amountCents?: number;
 };
 
 /// B-178. The returned-payment fee question, as one table both the form and the
@@ -148,71 +155,111 @@ export async function returnPayment(
 ): Promise<ReturnPaymentResult> {
   if (!input.reasonCode?.trim()) return { ok: false, reason: "missing_reason" };
 
-  const payment = await prisma.payment.findUnique({
-    where: { id: paymentId },
-    select: {
-      id: true,
-      facilityId: true,
-      tenantId: true,
-      amountCents: true,
-      method: true,
-      status: true,
-      receiptNumber: true,
-      ledgerEntries: {
-        where: { type: "payment" },
-        select: { id: true, leaseId: true, amountCents: true, occurredAt: true },
-      },
-      allocations: { select: { id: true, invoiceId: true } },
-    },
-  });
-  if (!payment) return { ok: false, reason: "not_found" };
-
-  requireReversalAuthority(actor, payment.facilityId);
-
-  if (payment.status === "returned")
-    return { ok: false, reason: "already_returned" };
-  // Only money that actually settled can come back. `processing` is B-103's
-  // case and needs no reversal; `failed` and `pending` never posted anything.
-  if (payment.status !== "succeeded")
-    return { ok: false, reason: "not_settled" };
-
-  // B-257. EVERY posted entry, not `[0]`. A payment settles as many leases as
-  // the allocation reached, so since that item it posts one entry per lease —
-  // and reversing only the first would leave the other units credited with
-  // money the bank has taken back.
-  const posted = payment.ledgerEntries;
-  // A `succeeded` payment with no ledger entry is a merchandise sale or a
-  // payment against no lease. There is nothing to reverse on a lease ledger,
-  // and inventing an entry would attach the money to a lease it never touched.
-  if (posted.length === 0) return { ok: false, reason: "nothing_posted" };
-
-  // A payment that was returned and later REINSTATED (B-147's won dispute) is
-  // `succeeded` again, so the status check above lets a second return through —
-  // and `reversalOfId` is unique, so creating a second reversal of the same
-  // posted entry throws inside the transaction. From a webhook that is a 500
-  // Stripe retries for days. Refuse it here instead, with the reason that is
-  // true: this entry has already been reversed once and that pair still stands.
-  const alreadyReversed = await prisma.ledgerEntry.findFirst({
-    where: { reversalOfId: { in: posted.map((entry) => entry.id) } },
-    select: { id: true },
-  });
-  if (alreadyReversed) return { ok: false, reason: "already_returned" };
-
-  const invoiceIds = payment.allocations.map(
-    (allocation) => allocation.invoiceId,
-  );
-
   const result = await prisma.$transaction(async (tx) => {
+    // MONEY-10. The lock is the first statement: everything below is read and
+    // then written on, and what a partly refunded payment still holds moves
+    // with every refund. A status read above this line is MONEY-09 again.
+    await tx.$queryRaw`SELECT "id" FROM "payment" WHERE "id" = ${paymentId} FOR UPDATE`;
+    const payment = await tx.payment.findUnique({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        facilityId: true,
+        tenantId: true,
+        amountCents: true,
+        method: true,
+        status: true,
+        receiptNumber: true,
+        ledgerEntries: {
+          where: { type: "payment" },
+          select: { id: true, leaseId: true, amountCents: true, occurredAt: true },
+          orderBy: { id: "asc" },
+        },
+        allocations: { select: { id: true, invoiceId: true } },
+      },
+    });
+    if (!payment) return { ok: false as const, reason: "not_found" as const };
+
+    requireReversalAuthority(actor, payment.facilityId);
+
+    if (payment.status === "returned")
+      return { ok: false as const, reason: "already_returned" as const };
+    // Only money that actually settled can come back. `processing` is B-103's
+    // case and needs no reversal; `failed` and `pending` never posted anything.
+    // `partially_refunded` still holds the rest (MONEY-10); `refunded` holds
+    // nothing a bank could take.
+    if (payment.status !== "succeeded" && payment.status !== "partially_refunded")
+      return { ok: false as const, reason: "not_settled" as const };
+
+    // B-257. EVERY posted entry, not `[0]`. A payment settles as many leases as
+    // the allocation reached, so since that item it posts one entry per lease —
+    // and reversing only the first would leave the other units credited with
+    // money the bank has taken back.
+    const posted = payment.ledgerEntries;
+    // A `succeeded` payment with no ledger entry is a merchandise sale or a
+    // payment against no lease. There is nothing to reverse on a lease ledger,
+    // and inventing an entry would attach the money to a lease it never touched.
+    if (posted.length === 0)
+      return { ok: false as const, reason: "nothing_posted" as const };
+
+    // A payment that was returned and later REINSTATED (B-147's won dispute) is
+    // `succeeded` again, so the status check above lets a second return through —
+    // and `reversalOfId` is unique, so creating a second reversal of the same
+    // posted entry throws inside the transaction. From a webhook that is a 500
+    // Stripe retries for days. Refuse it here instead, with the reason that is
+    // true: this entry has already been reversed once and that pair still stands.
+    const alreadyReversed = await tx.ledgerEntry.findFirst({
+      where: { reversalOfId: { in: posted.map((entry) => entry.id) } },
+      select: { id: true },
+    });
+    if (alreadyReversed)
+      return { ok: false as const, reason: "already_returned" as const };
+
+    // MONEY-10. What each lease still holds of this payment: its own entries
+    // less what refunds of it put back on that lease (MONEY-08 posts those per
+    // lease). The same sum `writeRefund` reads, so the two cannot disagree.
+    const held = new Map(
+      (
+        await tx.ledgerEntry.groupBy({
+          by: ["leaseId"],
+          where: {
+            OR: [
+              { paymentId: payment.id },
+              { payment: { refundOfPaymentId: payment.id } },
+            ],
+          },
+          _sum: { amountCents: true },
+        })
+      ).map((row) => [row.leaseId, -(row._sum.amountCents ?? 0)]),
+    );
+    const toReverse = posted.flatMap((entry) => {
+      const cents = Math.min(-entry.amountCents, held.get(entry.leaseId) ?? 0);
+      if (cents <= 0) return [];
+      held.set(entry.leaseId, (held.get(entry.leaseId) ?? 0) - cents);
+      return [{ entry, cents }];
+    });
+    const heldCents = toReverse.reduce((sum, row) => sum + row.cents, 0);
+    if (heldCents === 0)
+      return { ok: false as const, reason: "nothing_posted" as const };
+    // MONEY-04's rule, moved here from the dispute handler so it is checked
+    // against what remains rather than against the original amount.
+    if (input.amountCents !== undefined && input.amountCents < heldCents)
+      return { ok: false as const, reason: "amount_mismatch" as const, heldCents };
+
+    const invoiceIds = payment.allocations.map(
+      (allocation) => allocation.invoiceId,
+    );
+
     // FR-8: append-only. The original entry is untouched — money DID arrive on
     // that date against a receipt the tenant is holding — and the correction is
     // a new entry pointing back at it through the column that has been waiting
     // since B-002.
-    // One counter-entry per posted entry, each for the amount that entry
-    // credited, so every lease the payment touched is put back exactly where it
-    // was. The entries sum to the payment, which is what keeps the tenant's
-    // total right whichever units the money had reached.
+    // One counter-entry per posted entry, each for what that lease still holds
+    // of it, so every lease the payment touched is put back exactly where it
+    // was. The entries sum to the payment less its refunds, which is what keeps
+    // the tenant's total right whichever units the money had reached.
     const reversals = [];
-    for (const entry of posted) {
+    for (const { entry, cents } of toReverse) {
       reversals.push(
         await tx.ledgerEntry.create({
           data: {
@@ -222,7 +269,7 @@ export async function returnPayment(
             // nothing left the building. The sign is positive because the tenant
             // owes it again.
             type: "adjustment",
-            amountCents: -entry.amountCents,
+            amountCents: cents,
             description: `Returned ${payment.method.replace("_", " ")} payment${
               payment.receiptNumber !== null
                 ? `, receipt #${payment.receiptNumber}`
@@ -262,6 +309,8 @@ export async function returnPayment(
         reasonCode: input.reasonCode,
         context: {
           amountCents: payment.amountCents,
+          // MONEY-10. Less than `amountCents` when part had been refunded.
+          reversedCents: heldCents,
           method: payment.method,
           receiptNumber: payment.receiptNumber,
           // B-257. Plural, because a payment that settled two leases is
@@ -296,8 +345,17 @@ export async function returnPayment(
       tx,
     );
 
-    return { reversalEntryId: reversal.id, fee };
+    return {
+      ok: true as const,
+      payment,
+      posted: toReverse.map((row) => row.entry),
+      invoiceIds,
+      reversalEntryId: reversal.id,
+      fee,
+    };
   });
+  if (!result.ok) return result;
+  const { payment, posted, invoiceIds } = result;
 
   // Outside the transaction, on the same reasoning `reconcile.ts` gives for the
   // ACH bounce it already raises: a task-store failure must not roll back the
@@ -429,6 +487,7 @@ export async function reinstatePayment(
         where: { type: "payment" },
         select: { id: true, leaseId: true, amountCents: true },
       },
+      refunds: { select: { status: true } },
     },
   });
   if (!payment) return { ok: false, reason: "not_found" };
@@ -486,7 +545,15 @@ export async function reinstatePayment(
     // SETTLING statuses, and this update is what makes this payment count.
     await tx.payment.update({
       where: { id: payment.id },
-      data: { status: "succeeded", failureReason: null },
+      data: {
+        // MONEY-10. A payment that was partly refunded before the bank took
+        // the rest comes back as what it was, or the refund form would offer
+        // the refunded part a second time.
+        status: payment.refunds.some((refund) => refund.status !== "failed")
+          ? "partially_refunded"
+          : "succeeded",
+        failureReason: null,
+      },
     });
 
     // Re-allocated, not restored. The invoices this settled originally may have
@@ -495,7 +562,13 @@ export async function reinstatePayment(
     // settles what is open in the facility's configured order, which is the
     // same rule every other payment follows; pinning it back to the old
     // invoices would leave a paid invoice sitting behind an unpaid older one.
-    const applied = await applyPayment(tx, payment);
+    //
+    // For what the return reversed, not the payment's face amount: the part
+    // refunded before the return is not coming back with it (MONEY-10).
+    const applied = await applyPayment(tx, {
+      ...payment,
+      amountCents: reversals.reduce((sum, row) => sum + row.amountCents, 0),
+    });
 
     await recordAudit(
       {
