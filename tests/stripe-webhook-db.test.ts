@@ -484,6 +484,128 @@ describeDb('reconciliation into the ledger', () => {
     await expect(applyStripeEvent(succeededEvent(`pi_${suffix}_unknown`))).resolves.toBeUndefined()
   })
 
+  it('MONEY-06: a charge whose response was lost is re-attached and settles its invoice', async () => {
+    // `createChargeIntent` wrote the row and its allocation, Stripe took the
+    // money, the response never came back, and the catch marked it failed.
+    const unitType = await prisma.unitType.create({
+      data: { facilityId, name: `M6 ${suffix}`, widthFt: 5, lengthFt: 5 },
+    })
+    const unit = await prisma.unit.create({
+      data: { facilityId, unitTypeId: unitType.id, number: `M6-${suffix}` },
+    })
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId: unit.id,
+        status: 'active',
+        startDate: new Date(),
+        monthlyRateCents: 10_000,
+        billingDay: 1,
+      },
+    })
+    const invoice = await prisma.invoice.create({
+      data: {
+        facilityId,
+        leaseId: lease.id,
+        number: `M6${suffix}`,
+        status: 'open',
+        issueDate: new Date('2026-08-26'),
+        dueDate: new Date('2026-09-01'),
+        periodStart: new Date('2026-09-01'),
+        periodEnd: new Date('2026-10-01'),
+        subtotalCents: 10_000,
+        totalCents: 10_000,
+      },
+    })
+    const lost = await prisma.payment.create({
+      data: {
+        facilityId,
+        tenantId,
+        amountCents: 10_000,
+        method: 'card',
+        status: 'failed',
+        failureReason: 'socket hang up',
+        allocations: { create: { invoiceId: invoice.id, amountCents: 10_000 } },
+      },
+    })
+
+    const intentId = `pi_${suffix}_m06`
+    const event = {
+      id: `evt_${suffix}_m06`,
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: intentId,
+          amount: 10_000,
+          created: Math.floor(Date.now() / 1000),
+          metadata: {
+            facilityId,
+            tenantId,
+            leaseId: lease.id,
+            invoiceId: invoice.id,
+            reference: `autopay:${invoice.id}:2026-09-01`,
+          },
+        },
+      },
+    } as unknown as Stripe.Event
+    await applyStripeEvent(event)
+    await applyStripeEvent(event)
+
+    const after = await prisma.payment.findUniqueOrThrow({ where: { id: lost.id } })
+    expect(after.status).toBe('succeeded')
+    expect(after.stripePaymentIntentId).toBe(intentId)
+    expect(after.failureReason).toBeNull()
+    // Paid, so the next autopay run has nothing outstanding to charge.
+    const paid = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })
+    expect(paid.status).toBe('paid')
+    expect(paid.amountPaidCents).toBe(10_000)
+    expect(await prisma.ledgerEntry.count({ where: { paymentId: lost.id } })).toBe(1)
+
+    await prisma.ledgerEntry.deleteMany({ where: { facilityId } })
+    await prisma.payment.deleteMany({ where: { id: lost.id } })
+    await prisma.invoice.deleteMany({ where: { id: invoice.id } })
+    await prisma.lease.deleteMany({ where: { id: lease.id } })
+  })
+
+  it('MONEY-06: an intent naming our tenant with no row to attach stays unprocessed', async () => {
+    const { POST } = await import('../apps/web/app/api/stripe/webhook/route')
+    const before = { key: process.env.STRIPE_SECRET_KEY, hook: process.env.STRIPE_WEBHOOK_SECRET }
+    process.env.STRIPE_SECRET_KEY = 'sk_test_x'
+    process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET
+    const { payload, header } = signedRequest({
+      id: `evt_${suffix}_m06_none`,
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: `pi_${suffix}_m06_none`,
+          amount: 4_200,
+          created: Math.floor(Date.now() / 1000),
+          metadata: { facilityId, tenantId, reference: 'autopay:none:2026-09-01' },
+        },
+      },
+    })
+    const response = await POST(
+      new Request('http://localhost/api/stripe/webhook', {
+        method: 'POST',
+        headers: { 'stripe-signature': header },
+        body: payload,
+      }),
+    )
+    if (before.key === undefined) delete process.env.STRIPE_SECRET_KEY
+    else process.env.STRIPE_SECRET_KEY = before.key
+    if (before.hook === undefined) delete process.env.STRIPE_WEBHOOK_SECRET
+    else process.env.STRIPE_WEBHOOK_SECRET = before.hook
+
+    expect(response.status).toBe(500)
+    const row = await prisma.stripeEvent.findUniqueOrThrow({
+      where: { id: `evt_${suffix}_m06_none` },
+    })
+    expect(row.processedAt).toBeNull()
+    expect(row.error).toContain('has no payment row')
+    expect((await unreconciledEvents()).map((e) => e.id)).toContain(`evt_${suffix}_m06_none`)
+  })
+
   it('surfaces accepted-but-unprocessed events as the reconciliation gap', async () => {
     await prisma.stripeEvent.create({
       data: { id: `evt_${suffix}_stuck`, type: 'payment_intent.succeeded', payload: {} },

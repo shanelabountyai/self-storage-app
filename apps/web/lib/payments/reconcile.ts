@@ -276,6 +276,59 @@ async function settlePayment(
   return applied
 }
 
+/// MONEY-06. The local row for a PaymentIntent, re-attaching one that lost it.
+///
+/// An off-session charge is created with `confirm: true`. When the response is
+/// lost after Stripe took the money, `createChargeIntent`'s catch marks the row
+/// `failed` with no intent id, so the lookup by id finds nothing. Before this
+/// the event was acknowledged and marked processed: charged, credited nowhere,
+/// and autopay read the row as a decline and charged the card again.
+///
+/// Only a `failed` row is adopted. A `pending` one with no intent id is a
+/// create still in flight, and its catch would overwrite whatever is written
+/// here; that case throws below and the redelivery finds it settled.
+async function paymentFor(tx: Prisma.TransactionClient, intent: Stripe.PaymentIntent) {
+  const payment = await tx.payment.findUnique({ where: { stripePaymentIntentId: intent.id } })
+  if (payment) return payment
+
+  const { tenantId, facilityId, invoiceId } = intent.metadata ?? {}
+  if (!tenantId || !facilityId) return null
+  const orphan = await tx.payment.findFirst({
+    where: {
+      tenantId,
+      facilityId,
+      amountCents: intent.amount,
+      status: 'failed',
+      stripePaymentIntentId: null,
+      ...(invoiceId ? { allocations: { some: { invoiceId } } } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (orphan) {
+    return tx.payment.update({
+      where: { id: orphan.id },
+      data: {
+        stripePaymentIntentId: intent.id,
+        status: 'pending',
+        failureReason: null,
+        failureCode: null,
+      },
+    })
+  }
+
+  // No row to attach it to. Another environment sharing the Stripe account
+  // names a tenant this database does not have, and that is still ignored. A
+  // tenant of ours means money was taken that nothing here records: throw, so
+  // the event stays unprocessed and `unreconciledEvents` lists it.
+  const ours = await tx.tenant.findUnique({ where: { id: tenantId }, select: { id: true } })
+  if (ours) {
+    throw new Error(
+      `PaymentIntent ${intent.id} (${intent.metadata?.reference ?? 'no reference'}) names tenant ${tenantId} and has no payment row`,
+    )
+  }
+  return null
+}
+
 /// Applies one Stripe event to our records. Assumes the caller has already
 /// verified the signature and claimed the event id.
 export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
@@ -290,13 +343,9 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
         []
 
       await prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.findUnique({
-          where: { stripePaymentIntentId: intent.id },
-        })
-        // A PaymentIntent we have no row for is not a crash: it may have been
-        // created by a replay or by another environment sharing the account.
-        // Recording nothing and acknowledging is right; the event row keeps it
-        // visible.
+        const payment = await paymentFor(tx, intent)
+        // A PaymentIntent from another environment sharing the account is not
+        // a crash. Recording nothing and acknowledging is right.
         if (!payment) return
         // MONEY-01. Not only `succeeded`: a retry that lands after the money
         // went back (SEC-01 re-applies an event whose first apply threw) must
@@ -412,9 +461,7 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       let checkoutSessionId: string | null = null
 
       await prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.findUnique({
-          where: { stripePaymentIntentId: intent.id },
-        })
+        const payment = await paymentFor(tx, intent)
         if (!payment) return
         // A late redelivery must not walk a settled payment backwards. Stripe
         // retries for days, and `processing` arriving after `succeeded` is an
