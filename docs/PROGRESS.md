@@ -12396,7 +12396,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** `python3 .claude/hooks/test-guard-bash.py`: 30 of 30 pass. `settings.json` and `ci.yml` parse (json, yaml). No test, lint or typecheck run: nothing under `apps/`, `packages/`, `tests/` or `e2e/` changed. Not run: a live `git push` through the hook (see left behind (b)).
 
-## Adversarial money review of the Stripe path (2026-10-06)
+## Adversarial money review of the Stripe path (2026-10-06, `56b4656`)
 
 **What it built.** No code changed. Ten findings, MONEY-01 to MONEY-10, are recorded at the end of `06-backlog.md`: three HIGH (a retried `payment_intent.succeeded` re-credits a refunded or returned payment; a returning tenant's checkout payment is allocated to arrears and also credited in full to the new lease; two equal partial card refunds within 24 hours refund once at Stripe and twice in the ledger), four MED (partial dispute reverses everything; an escalated inquiry is never reversed; a charge whose response was lost is invisible and autopay charges again; a refund made at Stripe never reaches the books) and three LOW.
 
