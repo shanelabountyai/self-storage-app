@@ -12374,7 +12374,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** Full `npm test`: 4,952 passed, 8 skipped, 1 failed, which is the unowned `reserve-db` failure that `main` shows between 7pm and midnight Central (run at 9:50pm). `rate-suggestions-db` (8, two new) and `schema-invariants` passed. Typecheck (tests included) and lint 0 errors; schema drift clean. e2e against a production build: `admin.spec.ts` filtered to `/admin/units/rates` (WCAG scan, 320px reflow, 200% zoom, forced text spacing), both projects, 10 passed. The full sweep was not run.
 
-## B-441 — Test gaps review block 13 leaves (2026-10-05, `PENDING`)
+## B-441 — Test gaps review block 13 leaves (2026-10-05, `ac27257`)
 
 **What it built.** Tests only; no product code changed. (a) `tests/customer-control-border.test.ts` walks every `.tsx` under `app/(public)`, `app/portal`, `app/pay` and `components/{site,portal,checkout}` and fails on an `<input>`, `<select>` or `<textarea>` whose own `className` draws a border (`border`, `border-b`, `border-2`, with or without a variant prefix) without `border-input`. (b) `/storage/size-guide?zip=78704` is in `PUBLIC_SCAN_ROUTES`, so axe, 320px reflow, 200% zoom and forced text spacing all run on the ZIP state. (c) `expectFocusNotLost(page)` in `e2e/a11y-helpers.ts` polls that `document.activeElement` is not `<body>`; it is called after the Stripe.js timeout and after "Check again" (`e2e/checkout-stripe-load.spec.ts`) and after the "See sizes" jump (`e2e/smoke.spec.ts`). (d) was done in B-416.
 
