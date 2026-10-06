@@ -1852,6 +1852,10 @@ model Payment {
   failureCode              String?
   /// Set on a refund payment, pointing at the payment being refunded.
   refundOfPaymentId        String?
+  /// MONEY-03. Stripe's id for the refund (`re_...`), on a card refund row.
+  /// Unique, so a repeated idempotency key, which makes Stripe hand back the
+  /// refund it already made, cannot be written to the books a second time.
+  stripeRefundId           String?       @unique
   /// US-32 attribution. The staff member who physically took the money, read
   /// from the session actor and never from a form field. Required for cash,
   /// check and money order (enforced in `lib/admin/pos.ts`, not by the column,

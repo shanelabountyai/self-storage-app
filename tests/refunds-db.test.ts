@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { prisma } from "../packages/db";
 import { applyPayment } from "../apps/web/lib/billing/allocation";
 import {
@@ -16,6 +24,33 @@ import type { Actor } from "../apps/web/lib/rbac/actor";
 import type { PermissionKey } from "@storage/db/rbac-catalog";
 
 // B-048 / PRD 02 US-22, US-23. Allocation and refunds against real rows.
+
+// MONEY-03. Stripe's refund call, stubbed: each call records its idempotency
+// key and answers with the next id queued here. Every other test in this file
+// refunds in cash and never reaches it.
+const stripeRefunds = vi.hoisted(() => ({
+  ids: [] as string[],
+  keys: [] as string[],
+}));
+vi.mock("../apps/web/lib/payments/stripe", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../apps/web/lib/payments/stripe")>();
+  return {
+    ...actual,
+    stripeClient: () =>
+      ({
+        refunds: {
+          create: async (
+            _params: unknown,
+            options: { idempotencyKey: string },
+          ) => {
+            stripeRefunds.keys.push(options.idempotencyKey);
+            return { id: stripeRefunds.ids.shift() };
+          },
+        },
+      }) as never,
+  };
+});
 
 const hasDatabase = Boolean(process.env.DATABASE_URL);
 const describeDb = hasDatabase ? describe : describe.skip;
@@ -863,6 +898,84 @@ describeDb("partial payments and refunds", () => {
         (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } }))
           .status,
       ).toBe("refunded");
+    });
+
+    // MONEY-03. Stripe answers a repeated idempotency key with the refund it
+    // already made. Recording that answer again put two refunds in the books
+    // for one at the bank, and the tenant was dunned for money never received.
+    describe("card refunds", () => {
+      async function cardPayment(): Promise<{
+        paymentId: string;
+        invoiceId: string;
+      }> {
+        const invoiceId = await invoice({
+          dueDate: d("2026-09-01"),
+          lines: [{ type: "rent", amountCents: 20_000 }],
+        });
+        const paymentId = await succeededPayment(20_000);
+        await prisma.payment.update({
+          where: { id: paymentId },
+          data: { stripePaymentIntentId: `pi_${randomUUID().slice(0, 12)}` },
+        });
+        return { paymentId, invoiceId };
+      }
+      const refundFifty = (paymentId: string) =>
+        refundPayment(actorWith(), paymentId, {
+          amountCents: 5_000,
+          reasonCode: "billing_error",
+        });
+      const refundRows = (paymentId: string) =>
+        prisma.payment.findMany({ where: { refundOfPaymentId: paymentId } });
+      const ledgerRefunded = async (paymentId: string) =>
+        (
+          await prisma.ledgerEntry.aggregate({
+            where: { type: "refund", payment: { refundOfPaymentId: paymentId } },
+            _sum: { amountCents: true },
+          })
+        )._sum.amountCents;
+
+      it("records one refund when Stripe returns the same refund twice", async () => {
+        const { paymentId, invoiceId } = await cardPayment();
+        const id = `re_${randomUUID().slice(0, 12)}`;
+        stripeRefunds.ids = [id, id];
+
+        const first = await refundFifty(paymentId);
+        const second = await refundFifty(paymentId);
+
+        expect(first).toMatchObject({ ok: true, method: "card" });
+        // The second answer is the refund that exists, not a new one.
+        expect(second).toEqual(first);
+        const rows = await refundRows(paymentId);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].stripeRefundId).toBe(id);
+        expect(await ledgerRefunded(paymentId)).toBe(5_000);
+        const after = await prisma.invoice.findUniqueOrThrow({
+          where: { id: invoiceId },
+        });
+        expect(after.status).not.toBe("paid");
+        expect(after.amountPaidCents).toBe(15_000);
+      });
+
+      it("makes a second equal refund a new one at Stripe", async () => {
+        const { paymentId, invoiceId } = await cardPayment();
+        stripeRefunds.ids = [
+          `re_${randomUUID().slice(0, 12)}`,
+          `re_${randomUUID().slice(0, 12)}`,
+        ];
+        stripeRefunds.keys = [];
+
+        await refundFifty(paymentId);
+        await refundFifty(paymentId);
+
+        // Different keys, or Stripe would have answered with the first refund.
+        expect(new Set(stripeRefunds.keys).size).toBe(2);
+        expect(await refundRows(paymentId)).toHaveLength(2);
+        expect(await ledgerRefunded(paymentId)).toBe(10_000);
+        expect(
+          (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } }))
+            .amountPaidCents,
+        ).toBe(10_000);
+      });
     });
 
     it("lists what is still refundable, and never a refund itself", async () => {

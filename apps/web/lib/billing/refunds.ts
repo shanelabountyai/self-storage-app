@@ -125,9 +125,12 @@ export async function refundPayment(
     try {
       const refund = await stripe.refunds.create(
         { payment_intent: payment.stripePaymentIntentId, amount: input.amountCents },
-        // Keyed on the payment and the amount so a double-submit returns the
-        // original refund rather than making a second one.
-        { idempotencyKey: `refund:${payment.id}:${input.amountCents}` },
+        // Keyed on the payment, what has already gone back and the amount. A
+        // double-submit reads the same total and gets the original refund; a
+        // second, deliberate refund of the same amount reads a higher total
+        // and is a new one (MONEY-03: keyed on the amount alone, Stripe
+        // answered it with the first refund and the books recorded two).
+        { idempotencyKey: `refund:${payment.id}:${alreadyRefunded}:${input.amountCents}` },
       )
       providerRefundId = refund.id
     } catch (error) {
@@ -147,7 +150,7 @@ export async function refundPayment(
   // session is what finally settles the payable B-048 left `pending`.
   const drawerSession = method === 'card' ? null : await openSessionFor(payment.facilityId)
 
-  const refundPaymentId = await prisma.$transaction(async (tx) => {
+  const write = prisma.$transaction(async (tx) => {
     const refund = await tx.payment.create({
       data: {
         facilityId: payment.facilityId,
@@ -164,6 +167,7 @@ export async function refundPayment(
         receivedByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
         drawerSessionId: drawerSession?.id ?? null,
         stripePaymentIntentId: null,
+        stripeRefundId: providerRefundId,
         failureReason: null,
       },
     })
@@ -287,6 +291,18 @@ export async function refundPayment(
     )
 
     return refund.id
+  })
+
+  // MONEY-03. Stripe returned a refund that is already in the books: the same
+  // submit sent twice, both reading the same refunded total. The unique
+  // `stripeRefundId` refused the second row and rolled the whole write back, so
+  // the answer is the refund that exists. Anything else is a real failure.
+  const refundPaymentId = await write.catch(async (error: unknown) => {
+    const existing = providerRefundId
+      ? await prisma.payment.findUnique({ where: { stripeRefundId: providerRefundId }, select: { id: true } })
+      : null
+    if (!existing) throw error
+    return existing.id
   })
 
   return { ok: true, refundPaymentId, amountCents: input.amountCents, method }
