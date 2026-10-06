@@ -10,7 +10,10 @@ import {
 } from "vitest";
 import { prisma } from "../packages/db";
 import type Stripe from "stripe";
-import { applyPayment } from "../apps/web/lib/billing/allocation";
+import {
+  applyPayment,
+  postPaymentLedger,
+} from "../apps/web/lib/billing/allocation";
 import { applyStripeEvent } from "../apps/web/lib/payments/reconcile";
 import {
   refundPayment,
@@ -779,6 +782,87 @@ describeDb("partial payments and refunds", () => {
       });
       expect(after.status).toBe("open");
       expect(after.amountPaidCents).toBe(0);
+    });
+
+    it("debits each lease for what came off its own invoices (MONEY-08)", async () => {
+      // One payment over two units: $100 to each unit's invoice and $50 left
+      // as a credit on the unit the payer named.
+      const unit = await prisma.unit.create({
+        data: { facilityId, unitTypeId, number: `R-2-${randomUUID().slice(0, 6)}` },
+      });
+      const second = await prisma.lease.create({
+        data: {
+          facilityId,
+          tenantId,
+          unitId: unit.id,
+          status: "active",
+          startDate: d("2026-08-01"),
+          billingDay: 1,
+          monthlyRateCents: 10_000,
+        },
+      });
+      const firstInvoice = await invoice({
+        dueDate: d("2026-09-01"),
+        lines: [{ type: "rent", amountCents: 10_000 }],
+      });
+      const secondInvoice = await invoice({
+        dueDate: d("2026-10-01"),
+        lines: [{ type: "rent", amountCents: 10_000 }],
+      });
+      await prisma.invoice.update({
+        where: { id: secondInvoice },
+        data: { leaseId: second.id },
+      });
+      const payment = await prisma.payment.create({
+        data: {
+          facilityId,
+          tenantId,
+          amountCents: 25_000,
+          method: "cash",
+          status: "succeeded",
+        },
+      });
+      await prisma.$transaction(async (tx) => {
+        const applied = await applyPayment(tx, {
+          id: payment.id,
+          tenantId,
+          facilityId,
+          amountCents: 25_000,
+        });
+        await postPaymentLedger(tx, payment, applied, leaseId, "Payment");
+      });
+      const refundEntries = () =>
+        prisma.ledgerEntry.findMany({
+          where: { facilityId, type: "refund" },
+          select: { leaseId: true, amountCents: true },
+          orderBy: { createdAt: "asc" },
+        });
+      const status = async (id: string) =>
+        (await prisma.invoice.findUniqueOrThrow({ where: { id } })).status;
+
+      // The newest invoice re-opens, and its lease is the one that owes again.
+      await refundPayment(actorWith(), payment.id, {
+        amountCents: 10_000,
+        reasonCode: "billing_error",
+        asMethod: "cash",
+      });
+      expect(await refundEntries()).toEqual([
+        { leaseId: second.id, amountCents: 10_000 },
+      ]);
+      expect(await status(secondInvoice)).toBe("open");
+      expect(await status(firstInvoice)).toBe("paid");
+
+      // The rest: the first unit's invoice, and the credit that sat beside it.
+      await refundPayment(actorWith(), payment.id, {
+        amountCents: 15_000,
+        reasonCode: "billing_error",
+        asMethod: "cash",
+      });
+      expect(await refundEntries()).toEqual([
+        { leaseId: second.id, amountCents: 10_000 },
+        { leaseId, amountCents: 15_000 },
+      ]);
+      expect(await status(firstInvoice)).toBe("open");
     });
 
     it("partially unwinds a partial refund", async () => {

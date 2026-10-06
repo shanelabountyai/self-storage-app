@@ -198,10 +198,8 @@ function writeRefund(actor: Actor, paymentId: string, input: RefundWrite): Promi
         amountCents: true,
         method: true,
         refunds: { select: { amountCents: true, status: true } },
-        ledgerEntries: { select: { leaseId: true }, take: 1 },
       },
     })
-    const leaseId = payment.ledgerEntries[0]?.leaseId ?? null
     const alreadyRefunded = payment.refunds
       .filter((refund) => refund.status !== 'failed')
       .reduce((sum, refund) => sum + refund.amountCents, 0)
@@ -227,14 +225,75 @@ function writeRefund(actor: Actor, paymentId: string, input: RefundWrite): Promi
       },
     })
 
-    if (leaseId) {
+    // The refunded money is no longer settling anything. Trimming the
+    // allocations and recomputing is what keeps an invoice from reading `paid`
+    // on money that went back — which would leave it uncollected forever and
+    // invisible to every ageing report.
+    //
+    // MONEY-08. It runs BEFORE the ledger post, and newest invoice first,
+    // because where the allocations come off is what decides which lease owes
+    // the money again. The post used to go whole to whichever ledger entry the
+    // database returned first, so a payment that settled two units could
+    // re-open unit B's invoice and debit unit A (B-257's defect on the way out).
+    const allocations = await tx.paymentAllocation.findMany({
+      where: { paymentId: payment.id },
+      select: { id: true, invoiceId: true, amountCents: true, invoice: { select: { leaseId: true } } },
+      orderBy: [{ invoice: { dueDate: 'desc' } }, { id: 'desc' }],
+    })
+    const byLease = new Map<string, number>()
+    const post = (leaseId: string, cents: number) => byLease.set(leaseId, (byLease.get(leaseId) ?? 0) + cents)
+    let toUnwind = input.amountCents
+    for (const allocation of allocations) {
+      if (toUnwind <= 0) break
+      const reduction = Math.min(toUnwind, allocation.amountCents)
+      toUnwind -= reduction
+      post(allocation.invoice.leaseId, reduction)
+      const remaining = allocation.amountCents - reduction
+      if (remaining > 0) {
+        await tx.paymentAllocation.update({ where: { id: allocation.id }, data: { amountCents: remaining } })
+      } else {
+        await tx.paymentAllocation.delete({ where: { id: allocation.id } })
+      }
+    }
+    await recomputeInvoices(tx, allocations.map((allocation) => allocation.invoiceId))
+
+    // What no allocation accounts for is money the payment left as a credit (a
+    // prepayment, on the anchor lease) or already-unwound money. It comes off
+    // the leases this payment still holds a credit on, largest first: the
+    // payment's own entries, less what earlier refunds of it put back.
+    if (toUnwind > 0) {
+      const held = await tx.ledgerEntry.groupBy({
+        by: ['leaseId'],
+        where: { OR: [{ paymentId: payment.id }, { payment: { refundOfPaymentId: payment.id } }] },
+        _sum: { amountCents: true },
+      })
+      const room = held
+        .map((row) => ({
+          leaseId: row.leaseId,
+          cents: -(row._sum.amountCents ?? 0) - (byLease.get(row.leaseId) ?? 0),
+        }))
+        .sort((a, b) => b.cents - a.cents || a.leaseId.localeCompare(b.leaseId))
+      for (const { leaseId, cents } of room) {
+        const take = Math.min(toUnwind, cents)
+        if (take <= 0) continue
+        post(leaseId, take)
+        toUnwind -= take
+      }
+      // Books that already disagree (a payment posted before B-257, or refunded
+      // before this item) still get the whole refund on a lease the payment
+      // touched. A payment that touched none posts nothing, as before.
+      const fallback = room[0]?.leaseId ?? byLease.keys().next().value
+      if (toUnwind > 0 && fallback) post(fallback, toUnwind)
+    }
+
+    for (const [leaseId, amountCents] of byLease) {
       await tx.ledgerEntry.create({
         data: {
           facilityId: payment.facilityId,
           leaseId,
           type: 'refund',
           // Signed: the money went back, so the tenant owes it again.
-          amountCents: input.amountCents,
+          amountCents,
           description: `Refund of ${method} payment${providerRefundId ? '' : ' (payable)'}`,
           paymentId: refund.id,
         },
@@ -283,28 +342,6 @@ function writeRefund(actor: Actor, paymentId: string, input: RefundWrite): Promi
       where: { id: payment.id },
       data: { status: totalRefunded >= payment.amountCents ? 'refunded' : 'partially_refunded' },
     })
-
-    // The refunded money is no longer settling anything. Trimming the
-    // allocations and recomputing is what keeps an invoice from reading `paid`
-    // on money that went back — which would leave it uncollected forever and
-    // invisible to every ageing report.
-    const allocations = await tx.paymentAllocation.findMany({
-      where: { paymentId: payment.id },
-      select: { id: true, invoiceId: true, amountCents: true },
-    })
-    let toUnwind = input.amountCents
-    for (const allocation of allocations) {
-      if (toUnwind <= 0) break
-      const reduction = Math.min(toUnwind, allocation.amountCents)
-      toUnwind -= reduction
-      const remaining = allocation.amountCents - reduction
-      if (remaining > 0) {
-        await tx.paymentAllocation.update({ where: { id: allocation.id }, data: { amountCents: remaining } })
-      } else {
-        await tx.paymentAllocation.delete({ where: { id: allocation.id } })
-      }
-    }
-    await recomputeInvoices(tx, allocations.map((allocation) => allocation.invoiceId))
 
     await recordAudit(
       {
