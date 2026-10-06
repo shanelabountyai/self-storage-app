@@ -976,6 +976,7 @@ model Facility {
   lateFeeRules           LateFeeRule[]
   feeSchedules           FeeSchedule[]
   unitTypeRates          UnitTypeRate[]
+  competitorPrices       CompetitorPrice[]
   messageTemplates       MessageTemplate[]
   noticeTemplates        NoticeTemplate[]
   auctionCases           AuctionCase[]
@@ -1106,6 +1107,7 @@ model UnitType {
   checkoutSessionUnits CheckoutSessionUnit[]
   leads                Lead[]
   rates                UnitTypeRate[]
+  competitorPrices     CompetitorPrice[]
 
   @@unique([facilityId, name])
   @@index([facilityId])
@@ -1144,6 +1146,29 @@ model UnitTypeRate {
   @@index([facilityId, effectiveFrom])
   @@index([unitTypeId, effectiveFrom])
   @@map("unit_type_rate")
+}
+
+/// PRD 02 US-12 (B-438). One line of a manual competitor price survey: what a
+/// named store nearby was charging for this size on the day somebody looked.
+/// Append-only like UnitTypeRate, so the survey's history is this table. It is
+/// shown beside a street-rate suggestion and never feeds the rule (D-74).
+model CompetitorPrice {
+  id               String   @id @default(cuid())
+  facilityId       String
+  unitTypeId       String
+  competitorName   String
+  priceCents       Int
+  /// A facility-local calendar day: "we looked on the 14th".
+  observedOn       DateTime @db.Date
+  enteredByStaffId String
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+
+  facility  Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  unitType  UnitType  @relation(fields: [unitTypeId], references: [id], onDelete: Cascade)
+  enteredBy StaffUser @relation(fields: [enteredByStaffId], references: [id], onDelete: Restrict)
+
+  @@index([facilityId, unitTypeId, observedOn])
+  @@map("competitor_price")
 }
 
 model Unit {
@@ -4774,6 +4799,7 @@ model StaffUser {
   paymentsTaken              Payment[]
   holdsPlaced                LeaseHold[]                      @relation("HoldPlacedBy")
   incidentsRecorded          Incident[]                       @relation("IncidentRecordedBy")
+  competitorPricesEntered    CompetitorPrice[]
   gateGrants                 AccessGrant[]                    @relation("AccessGrantStaffHolder")
   holdsLifted                LeaseHold[]                      @relation("HoldLiftedBy")
   paymentPlansCreated        PaymentPlan[]                    @relation("PaymentPlanCreatedBy")

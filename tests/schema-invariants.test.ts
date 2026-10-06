@@ -87,6 +87,8 @@ const NO_FACILITY_ID: Record<string, string> = {
 /// not have. Anything added here must genuinely be a date rather than a moment.
 const CALENDAR_DATE_FIELDS = new Set([
   'JobRun.businessDate',
+  // B-438. The day somebody looked at a competitor's price.
+  'CompetitorPrice.observedOn',
   // B-040. A move-out is a facility-local calendar day, not an instant: the
   // tenant vacated "on the 14th", and a timestamp would imply a precision
   // (and a timezone) the fact does not have.

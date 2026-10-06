@@ -117,6 +117,11 @@ export const AUDIT_ACTIONS = [
     requiresReason: false,
   },
   {
+    action: "rate.competitor_price_recorded",
+    label: "Competitor price recorded",
+    requiresReason: false,
+  },
+  {
     action: "rate.tenant_increased",
     label: "Tenant rate increased",
     requiresReason: true,

@@ -5,6 +5,7 @@ import { requireStaffActor } from '@/lib/rbac/session'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
 import { parseScaled } from '@/lib/admin/form-state'
 import { publishUnitTypeRate } from '@/lib/pricing/unit-type-rates'
+import { recordCompetitorPrice } from '@/lib/pricing/rate-suggestions'
 
 // PRD 02 US-12's "one-click apply" (B-088 part 1).
 //
@@ -54,4 +55,49 @@ export async function applySuggestedRateAction(
   revalidatePath('/admin/units/rates')
   revalidatePath('/admin/units/types')
   return success(`${unitTypeName} street rate is now $${(street.value / 100).toFixed(2)}.`)
+}
+
+// B-438. One line of the competitor survey, beside the suggestion.
+export async function recordCompetitorPriceAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const actor = await requireStaffActor()
+
+  const facilityId = String(formData.get('facilityId') ?? '')
+  const unitTypeId = String(formData.get('unitTypeId') ?? '')
+  const unitTypeName = String(formData.get('unitTypeName') ?? 'this type')
+
+  const competitorName = String(formData.get('competitorName') ?? '').trim()
+  if (competitorName.length === 0 || competitorName.length > 80) {
+    return fieldError({ competitorName: 'Enter the competitor\'s name, up to 80 characters.' })
+  }
+
+  const price = parseScaled(formData.get('priceDollars'), {
+    scale: 100,
+    min: 1,
+    max: 10_000,
+    unit: 'dollars',
+  })
+  if ('error' in price) return fieldError({ priceDollars: price.error })
+
+  const day = String(formData.get('observedOn') ?? '')
+  const observedOn = new Date(`${day}T00:00:00Z`)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(observedOn.getTime())) {
+    return fieldError({ observedOn: 'Enter the date you saw this price, e.g. 2026-10-05.' })
+  }
+
+  const result = await recordCompetitorPrice(actor, facilityId, unitTypeId, {
+    competitorName,
+    priceCents: price.value,
+    observedOn,
+  })
+  if (!result.ok) {
+    return fieldError({ observedOn: 'That date is in the future. Enter the day you saw the price.' })
+  }
+
+  revalidatePath('/admin/units/rates')
+  return success(
+    `${competitorName} at $${(price.value / 100).toFixed(2)} recorded for ${unitTypeName}.`,
+  )
 }

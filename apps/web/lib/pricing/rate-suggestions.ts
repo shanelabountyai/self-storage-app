@@ -1,11 +1,15 @@
 import { prisma } from '@storage/db'
 import { occupancy } from '@storage/core/metrics'
+import { businessDateFor } from '@storage/core/jobs'
+import { recordAudit } from '@storage/core/audit'
 import {
+  isSurveyStale,
   projectedMonthlyUpliftCents,
   suggestStreetRate,
   type Suggestion,
 } from '@storage/core/pricing'
-import { requirePermission } from '@/lib/rbac/authorize'
+import { ForbiddenError, requirePermission } from '@/lib/rbac/authorize'
+import { toAuditActor } from '@/lib/rbac/audit-actor'
 import type { Actor } from '@/lib/rbac/actor'
 import { currentRatesForFacility } from './unit-type-rates'
 
@@ -26,6 +30,14 @@ export type RateSuggestionRow = {
   rateEffectiveFrom: Date | null
   daysSinceRateChange: number | null
   suggestion: Suggestion
+  /// B-438. The latest survey line for this size, or null when nobody has
+  /// looked. Beside the suggestion, never inside it: D-74's rule does not read it.
+  competitor: {
+    competitorName: string
+    priceCents: number
+    observedOn: Date
+    stale: boolean
+  } | null
 }
 
 export type RateSuggestionReport = {
@@ -51,7 +63,7 @@ export async function rateSuggestionsForFacility(
 ): Promise<RateSuggestionReport> {
   requirePermission(actor, 'rates:street:propose', facilityId)
 
-  const [unitTypes, units, rates, scheduled] = await Promise.all([
+  const [unitTypes, units, rates, scheduled, facility, surveyed] = await Promise.all([
     prisma.unitType.findMany({
       where: { facilityId },
       select: { id: true, name: true },
@@ -72,7 +84,16 @@ export async function rateSuggestionsForFacility(
       where: { facilityId, effectiveFrom: { gt: asOf } },
       select: { unitTypeId: true },
     }),
+    prisma.facility.findUniqueOrThrow({ where: { id: facilityId }, select: { timezone: true } }),
+    prisma.competitorPrice.findMany({
+      where: { facilityId },
+      orderBy: [{ observedOn: 'desc' }, { createdAt: 'desc' }],
+      distinct: ['unitTypeId'],
+    }),
   ])
+
+  const today = businessDateFor(asOf, facility.timezone)
+  const latestSurvey = new Map(surveyed.map((row) => [row.unitTypeId, row]))
 
   const scheduledTypes = new Set(scheduled.map((row) => row.unitTypeId))
 
@@ -93,6 +114,7 @@ export async function rateSuggestionsForFacility(
     // report about the same unit type is exactly the failure D-25 names.
     const result = occupancy(unitsByType.get(unitType.id) ?? [])
     const rate = rates.get(unitType.id)
+    const survey = latestSurvey.get(unitType.id)
     const rateEffectiveFrom = rate?.effectiveFrom ?? null
     const daysSinceRateChange = rateEffectiveFrom
       ? Math.floor((asOf.getTime() - rateEffectiveFrom.getTime()) / DAY_MS)
@@ -118,8 +140,64 @@ export async function rateSuggestionsForFacility(
         daysSinceRateChange,
         hasScheduledChange: scheduledTypes.has(unitType.id),
       }),
+      competitor: survey
+        ? {
+            competitorName: survey.competitorName,
+            priceCents: survey.priceCents,
+            observedOn: survey.observedOn,
+            stale: isSurveyStale(survey.observedOn, today),
+          }
+        : null,
     }
   })
 
   return { rows, upliftCents: projectedMonthlyUpliftCents(rows) }
+}
+
+/// B-438. One line of the competitor survey. Whoever may see a suggestion may
+/// record what the store down the road charges, so this is `propose`, not
+/// `change`: it moves no price.
+export async function recordCompetitorPrice(
+  actor: Actor,
+  facilityId: string,
+  unitTypeId: string,
+  input: { competitorName: string; priceCents: number; observedOn: Date },
+  asOf: Date = new Date(),
+) {
+  requirePermission(actor, 'rates:street:propose', facilityId)
+  if (actor.kind !== 'staff') throw new ForbiddenError('Only staff record a competitor price')
+
+  const unitType = await prisma.unitType.findUniqueOrThrow({
+    where: { id: unitTypeId },
+    select: { facilityId: true, name: true, facility: { select: { timezone: true } } },
+  })
+  if (unitType.facilityId !== facilityId) {
+    throw new ForbiddenError(`Unit type ${unitTypeId} belongs to another facility`)
+  }
+  // A price nobody has seen yet is a typo, and it would sit at the top of the
+  // survey as "latest" until its date arrived.
+  if (input.observedOn > businessDateFor(asOf, unitType.facility.timezone)) {
+    return { ok: false as const, reason: 'future_date' as const }
+  }
+
+  const created = await prisma.competitorPrice.create({
+    data: { facilityId, unitTypeId, enteredByStaffId: actor.staffUserId, ...input },
+  })
+
+  await recordAudit({
+    actor: toAuditActor(actor),
+    action: 'rate.competitor_price_recorded',
+    entityType: 'UnitType',
+    entityId: unitTypeId,
+    facilityId,
+    before: null,
+    after: {
+      competitorName: created.competitorName,
+      priceCents: created.priceCents,
+      observedOn: created.observedOn,
+    },
+    context: { unitTypeName: unitType.name },
+  })
+
+  return { ok: true as const, created }
 }

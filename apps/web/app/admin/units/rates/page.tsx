@@ -2,17 +2,18 @@ import Link from 'next/link'
 import { getSwitcherData } from '@/lib/admin/context'
 import { resolveSelectedFacility } from '@/lib/admin/facility-selection-logic'
 import { hasPermissionAnywhere } from '@/lib/rbac/authorize'
-import { formatCents } from '@/lib/format'
+import { formatCalendarDate, formatCents } from '@/lib/format'
 import { UnitsSubnav } from '@/components/admin/units-subnav'
-import { AdminForm } from '@/components/admin/form'
+import { AdminForm, Field } from '@/components/admin/form'
 import { Button } from '@/components/ui/button'
 import {
   COOLDOWN_DAYS,
   MIN_UNITS_FOR_SUGGESTION,
+  SURVEY_STALE_DAYS,
   type SuggestionReason,
 } from '@storage/core/pricing'
 import { rateSuggestionsForFacility, type RateSuggestionRow } from '@/lib/pricing/rate-suggestions'
-import { applySuggestedRateAction } from './actions'
+import { applySuggestedRateAction, recordCompetitorPriceAction } from './actions'
 import { ScrollRegion } from '@/components/ui/scroll-region'
 
 export const metadata = { title: 'Street rates' }
@@ -99,6 +100,61 @@ function SuggestionCell({ row, facilityId }: { row: RateSuggestionRow; facilityI
   )
 }
 
+/// B-438. What the store down the road charges, beside the suggestion and never
+/// inside it: the rule does not read this (D-74), the person does.
+function CompetitorCell({ row, facilityId }: { row: RateSuggestionRow; facilityId: string }) {
+  const { competitor } = row
+
+  return (
+    <div className="flex flex-col gap-2">
+      {competitor ? (
+        <p>
+          {formatCents(competitor.priceCents)} at {competitor.competitorName}
+          <span className="text-muted-foreground block text-xs">
+            Seen {formatCalendarDate(competitor.observedOn)}
+          </span>
+          {/* Words, not a colour: "stale" has to survive greyscale and a
+              screen reader. */}
+          {competitor.stale && (
+            <strong className="block text-xs">
+              Stale: more than {SURVEY_STALE_DAYS} days old
+            </strong>
+          )}
+        </p>
+      ) : (
+        <p className="text-muted-foreground">No price recorded</p>
+      )}
+      <details>
+        <summary className="cursor-pointer underline underline-offset-2">
+          Add a price<span className="sr-only"> for {row.unitTypeName}</span>
+        </summary>
+        <AdminForm
+          action={recordCompetitorPriceAction}
+          label={`Record a competitor price for ${row.unitTypeName}`}
+          className="mt-2 flex w-56 flex-col gap-2"
+        >
+          <input type="hidden" name="facilityId" value={facilityId} />
+          <input type="hidden" name="unitTypeId" value={row.unitTypeId} />
+          <input type="hidden" name="unitTypeName" value={row.unitTypeName} />
+          <Field name="competitorName" label="Competitor" required maxLength={80} />
+          <Field
+            name="priceDollars"
+            label="Monthly price $"
+            type="number"
+            step="0.01"
+            min="0"
+            required
+          />
+          <Field name="observedOn" label="Date seen" type="date" required />
+          <Button type="submit" variant="outline">
+            Record
+          </Button>
+        </AdminForm>
+      </details>
+    </div>
+  )
+}
+
 export default async function AdminStreetRatesPage() {
   const { actor, facilities, cookieValue, canSeeAll } = await getSwitcherData()
   const selected = resolveSelectedFacility(cookieValue, facilities, canSeeAll)
@@ -160,14 +216,15 @@ export default async function AdminStreetRatesPage() {
       <ScrollRegion aria-label="Street rates by unit type">
         <table className="w-full min-w-3xl text-left text-sm">
           <caption className="sr-only">
-            Every unit type at {selected.facility.name}, its occupancy, its current street rate and
-            what the rule suggests
+            Every unit type at {selected.facility.name}, its occupancy, its current street rate, the
+            latest competitor price and what the rule suggests
           </caption>
           <thead>
             <tr className="border-input border-b">
               <th scope="col" className="py-2 pr-4 font-medium">Type</th>
               <th scope="col" className="py-2 pr-4 font-medium">Occupancy</th>
               <th scope="col" className="py-2 pr-4 font-medium">Street / online</th>
+              <th scope="col" className="py-2 pr-4 font-medium">Nearby price</th>
               <th scope="col" className="py-2 pr-4 font-medium">Suggestion</th>
             </tr>
           </thead>
@@ -196,13 +253,16 @@ export default async function AdminStreetRatesPage() {
                   )}
                 </td>
                 <td className="py-2 pr-4">
+                  <CompetitorCell row={row} facilityId={facilityId} />
+                </td>
+                <td className="py-2 pr-4">
                   <SuggestionCell row={row} facilityId={facilityId} />
                 </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="text-muted-foreground py-3">
+                <td colSpan={5} className="text-muted-foreground py-3">
                   This facility has no unit types yet.
                 </td>
               </tr>

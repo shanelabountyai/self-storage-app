@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../packages/db'
 import { loadStaffActor, type Actor } from '../apps/web/lib/rbac/actor'
-import { rateSuggestionsForFacility } from '../apps/web/lib/pricing/rate-suggestions'
+import { rateSuggestionsForFacility, recordCompetitorPrice } from '../apps/web/lib/pricing/rate-suggestions'
 
 // PRD 02 US-12 (B-088 part 1). The rule itself is tested against plain values
 // in street-rate-suggestion.test.ts; this is about the wiring — that occupancy
@@ -133,6 +133,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!hasDatabase) return
+  await prisma.competitorPrice.deleteMany({ where: { facilityId } })
   await prisma.unitTypeRate.deleteMany({ where: { facilityId } })
   await prisma.unit.deleteMany({ where: { facilityId } })
   await prisma.unitType.deleteMany({ where: { facilityId } })
@@ -202,6 +203,49 @@ describe.skipIf(!hasDatabase)('rateSuggestionsForFacility', () => {
   it('refuses an actor without the pricing permission', async () => {
     await expect(
       rateSuggestionsForFacility({ kind: 'tenant', tenantId: 'nobody' }, facilityId),
+    ).rejects.toThrow()
+  })
+})
+
+// B-438. The survey sits beside the suggestion and does not move it (D-74).
+describe.skipIf(!hasDatabase)('competitor price survey', () => {
+  // Noon Central, so the facility-local day is the UTC day.
+  const asOf = new Date('2026-10-05T17:00:00Z')
+  const day = (iso: string) => new Date(`${iso}T00:00:00Z`)
+
+  it('shows the latest line per size, flags it stale after 30 days, and leaves the rule alone', async () => {
+    const actor = (await loadStaffActor(staffId)) as Actor
+    const before = (await rateSuggestionsForFacility(actor, facilityId, asOf)).rows
+
+    const record = (type: string, competitorName: string, priceCents: number, observedOn: string) =>
+      recordCompetitorPrice(actor, facilityId, typeIds[type], { competitorName, priceCents, observedOn: day(observedOn) }, asOf)
+
+    await record('tight', 'Old Store', 9_500, '2026-08-01')
+    await record('tight', 'Road Store', 12_000, '2026-09-05') // exactly 30 days: current
+    await record('soft', 'Road Store', 8_000, '2026-09-04') // 31 days: stale
+    expect((await record('soft', 'Tomorrow Store', 1, '2026-10-06')).ok).toBe(false)
+
+    const { rows } = await rateSuggestionsForFacility(actor, facilityId, asOf)
+    const of = (type: string) => rows.find((r) => r.unitTypeId === typeIds[type])!
+
+    expect(of('tight').competitor).toMatchObject({ competitorName: 'Road Store', priceCents: 12_000, stale: false })
+    expect(of('soft').competitor).toMatchObject({ competitorName: 'Road Store', stale: true })
+    expect(of('recent').competitor).toBeNull()
+    expect(rows.map((r) => r.suggestion)).toEqual(before.map((r) => r.suggestion))
+
+    const audit = await prisma.auditLog.findMany({
+      where: { action: 'rate.competitor_price_recorded', entityId: typeIds.tight },
+    })
+    expect(audit).toHaveLength(2)
+  })
+
+  it('refuses an actor without the permission at this facility', async () => {
+    await expect(
+      recordCompetitorPrice({ kind: 'staff', staffUserId: staffId, assignments: [] }, facilityId, typeIds.tight, {
+        competitorName: 'X',
+        priceCents: 1,
+        observedOn: day('2026-10-01'),
+      }),
     ).rejects.toThrow()
   })
 })
