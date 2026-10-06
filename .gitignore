@@ -49,3 +49,4 @@ yarn-error.log*
 # a fresh clone knows what to set.
 .env*
 !.env.example
+__pycache__/
