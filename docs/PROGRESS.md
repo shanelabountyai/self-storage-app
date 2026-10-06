@@ -12496,7 +12496,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** Both tests fail with the fix stashed (2 events where 1 is expected) and pass with it. The ten suites that call `applyStripeEvent` ran twice: 188 passed each time. Full `npm test`: 312 files passed, 1 skipped; 4,971 passed, 8 skipped (MONEY-08's 4,969 plus these two), at load average 57 with no pool timeouts. `npm run typecheck` clean; `npm run lint` clean; `npm run db:drift` clean. No e2e run.
 
-## MONEY-10 — A dispute on a partly refunded payment reverses what the payment still holds (2026-10-06, `SHA_PENDING`)
+## MONEY-10 — A dispute on a partly refunded payment reverses what the payment still holds (2026-10-06, `1f1d40c`)
 
 **What it built.** `returnPayment` (`lib/billing/reversals.ts`) accepts `partially_refunded` and posts one reversal per posted entry for what that lease still holds: the payment's own entries less the `refund` entries MONEY-08 posts per lease, the same ledger sum `writeRefund` reads. $200 paid, $50 refunded, $150 disputed: reversals sum to 150, the payment goes `returned`, the invoice re-opens. A new optional input `amountCents` (what the bank took) is compared with that figure and answers `amount_mismatch` with `heldCents` when the bank took less. The dispute handler in `reconcile.ts` passes `dispute.amount` and no longer computes "partial" itself, so MONEY-04's rule is now measured against what remains, not the original amount. `reinstatePayment` (a won dispute) puts the payment back to `partially_refunded` when it has a refund, and re-allocates the reversed amount, not the face amount. One test in `tests/refunds-db.test.ts`.
 
