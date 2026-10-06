@@ -335,8 +335,11 @@ describeDb('reservation service', () => {
   })
 
   describe('changeMoveInDate (B-427)', () => {
+    // Counted from the FACILITY's today (America/Chicago), not UTC's: from 7pm
+    // Central the two differ, and UTC's "yesterday" is a date the window allows.
     const dayOffset = (days: number) => {
-      const date = new Date()
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+      const date = new Date(`${today}T12:00:00.000Z`)
       date.setUTCDate(date.getUTCDate() + days)
       return date.toISOString().slice(0, 10)
     }
