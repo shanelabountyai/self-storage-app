@@ -4768,6 +4768,21 @@ model LoginAttempt {
   @@map("login_attempt")
 }
 
+/// SEC-04. One row per attempt at something an anonymous caller can repeat for
+/// free: starting a checkout (which takes a unit off the market for 30 minutes)
+/// and checking a promo code. `bucket` names the limit, `key` the thing being
+/// counted (an IP, a unit type). Counted in a time window by
+/// `lib/http/rate-limit.ts`, pruned by the hourly cron.
+model RateLimitEvent {
+  id     String   @id @default(cuid())
+  bucket String
+  key    String
+  at     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([bucket, key, at])
+  @@map("rate_limit_event")
+}
+
 /// Staff identity. Role assignments and facility scoping are B-004; MFA is B-079.
 model StaffUser {
   id              String          @id @default(cuid())

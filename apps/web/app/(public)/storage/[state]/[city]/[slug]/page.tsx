@@ -50,6 +50,8 @@ import {
 import { getLocale } from '@/lib/i18n/server'
 import { costLineLabel, costLineNote } from '@/lib/pricing/cost-line-copy'
 import { offerFor } from '@/lib/promotions/service'
+import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayCheckPromo } from '@/lib/http/rate-limit'
 import { MessageSegments } from '@/components/message-segments'
 import { OfferTermsText, offerTermsSegments, offerTermsText } from '@/lib/promotions/terms'
 import { PromoCodeEntry } from '@/components/promo-code-entry'
@@ -894,6 +896,7 @@ export default async function FacilityPage({
     from?: string
     unavailable?: string
     soldout?: string
+    throttled?: string
     /// B-122. What the renter typed into the code box. Re-evaluated server-side
     /// on this render; nothing about the discount travels in the URL except the
     /// string they typed.
@@ -975,7 +978,13 @@ export default async function FacilityPage({
   // B-122: the typed code goes in here too, so a code-gated promo produces a
   // real badge and a real figure on the card it applies to — the same evaluator
   // and the same numbers the "Rent now" POST will re-derive a moment later.
-  const typedCode = query.promo?.trim() || null
+  //
+  // SEC-04: one count per page view, not per unit type. Past the limit the code
+  // is not judged at all and the page says so, with its automatic offers intact.
+  const requestedCode = query.promo?.trim() || null
+  const promoThrottled =
+    requestedCode !== null && !(await mayCheckPromo((await requestMetadata()).ipAddress))
+  const typedCode = promoThrottled ? null : requestedCode
   const promos = new Map<string, { terms: OfferTerms; firstPeriodCents: number; fromCode: boolean }>()
   const outcomes: CodeOutcome[] = []
   for (const unitType of unitTypes ?? []) {
@@ -1070,6 +1079,18 @@ export default async function FacilityPage({
       {query.soldout && (
         <p role="status" className="border-input mb-4 rounded-md border p-3 text-sm text-pretty">
           {t('facility.soldOutNotice')}
+        </p>
+      )}
+
+      {query.throttled && (
+        <p role="status" className="border-input mb-4 rounded-md border p-3 text-sm text-pretty">
+          {t('facility.throttledNotice')}
+        </p>
+      )}
+
+      {promoThrottled && (
+        <p role="status" className="border-input mb-4 rounded-md border p-3 text-sm text-pretty">
+          {t('promo.tooManyTries')}
         </p>
       )}
 
@@ -1192,13 +1213,13 @@ export default async function FacilityPage({
             replaces the whole query string, so without them applying a code
             would silently clear the choices the renter had already made. */}
         {unitTypes !== null && unitTypes.length > 0 && (
-          <details className="mt-4" open={typedCode !== null}>
+          <details className="mt-4" open={requestedCode !== null}>
             <summary className="min-h-11 cursor-pointer py-2 text-base font-medium">
               {t('promo.haveACode')}
             </summary>
             <PromoCodeEntry
               outcome={codeOutcome}
-              value={typedCode ?? ''}
+              value={requestedCode ?? ''}
               carry={carriedQuery(query)}
               dict={dict}
             />

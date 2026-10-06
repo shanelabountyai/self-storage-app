@@ -275,6 +275,8 @@ export const en = {
   'facility.backToSearch': '← Back to storage near {query}',
   'facility.soldOutNotice':
     'Someone took the last one of that size just before you. Nothing has been charged — here is what we still have.',
+  'facility.throttledNotice':
+    'Too many checkouts were started from your connection in a short time, so we did not hold a unit. Nothing has been charged — wait a few minutes and try again, or call us.',
   'facility.unavailableNotice':
     "That size isn't available here any more. Here is everything we do have.",
   'facility.monthToMonth': 'Month-to-month · no long-term commitment',
@@ -536,6 +538,7 @@ export const en = {
     'Nothing has been charged yet. Your unit stays held while you go back.',
 
   // --- Promo code box in checkout (US-11 AC3) ---------------------------
+  'promo.tooManyTries': 'Too many codes tried. Wait a few minutes and try again.',
   'promo.haveACode': 'Have a promo code?',
   'promo.currentlyApplied':
     'Currently applied: {terms}. Only one promotion applies at a time — if the code you enter is worth less, we will keep this one.',

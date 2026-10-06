@@ -53,6 +53,7 @@ import { businessDateFor } from '@storage/core/jobs'
 import { existingLeaseDocuments } from '@/lib/lease/build'
 import { signDocument, validateSignature } from '@/lib/lease/sign'
 import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayCheckPromo } from '@/lib/http/rate-limit'
 
 // B-020. The transitions a step's form can trigger. The individual steps'
 // validation lands with B-021..B-025; this item owns the machine they run on.
@@ -546,6 +547,11 @@ export async function applyPromoCodeAction(
   const code = String(formData.get('promo') ?? '').trim()
   if (!code) {
     return { status: 'error', message: t('act.enterACode'), fieldErrors: { promo: t('act.enterACode') } }
+  }
+  // SEC-04. A checkout token is free to obtain, so without this the box is an
+  // oracle for guessing codes.
+  if (!(await mayCheckPromo((await requestMetadata()).ipAddress))) {
+    return keyedFieldError({ promo: { key: 'promo.tooManyTries' } }, t)
   }
 
   const lookup = await offerFor({

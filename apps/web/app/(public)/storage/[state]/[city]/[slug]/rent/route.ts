@@ -5,6 +5,8 @@ import { startCheckout } from '@/lib/checkout/session'
 import { offerFor } from '@/lib/promotions/service'
 import { cookies } from 'next/headers'
 import { REFERRAL_COOKIE } from '@storage/core/marketing'
+import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayStartCheckout } from '@/lib/http/rate-limit'
 
 // B-020. "Rent now" — starts a checkout session and redirects into the stepper.
 //
@@ -26,6 +28,14 @@ export async function POST(
   const inventory = await publicInventoryForFacility(slug)
   const unitType = inventory?.unitTypes.find((type) => type.unitTypeId === unitTypeId)
   if (!unitType) redirect(`${facilityPath(facility)}?unavailable=1`)
+
+  // SEC-04. This POST needs no account and holds a real unit for 30 minutes, so
+  // unthrottled it is a way to empty a facility's website from a shell loop.
+  // Checked before the promo is judged: the code in the form is a guess at a
+  // promo code too, and this limit is the tighter of the two.
+  if (!(await mayStartCheckout((await requestMetadata()).ipAddress, unitTypeId))) {
+    redirect(`${facilityPath(facility)}?throttled=1`)
+  }
 
   // The promotion the facility page just advertised, re-evaluated here from the
   // server's own view rather than accepted from the form. Without this the card

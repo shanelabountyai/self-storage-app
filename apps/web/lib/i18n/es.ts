@@ -278,6 +278,8 @@ export const es: Dictionary = {
   'facility.backToSearch': '← Volver a bodegas cerca de {query}',
   'facility.soldOutNotice':
     'Alguien tomó la última de ese tamaño justo antes que usted. No se ha cobrado nada — esto es lo que todavía tenemos.',
+  'facility.throttledNotice':
+    'Se iniciaron demasiados pagos desde su conexión en poco tiempo, así que no apartamos una unidad. No se ha cobrado nada — espere unos minutos e intente de nuevo, o llámenos.',
   'facility.unavailableNotice':
     'Ese tamaño ya no está disponible aquí. Esto es todo lo que sí tenemos.',
   'facility.monthToMonth': 'Mes a mes · sin compromiso a largo plazo',
@@ -498,6 +500,7 @@ export const es: Dictionary = {
     'Todavía no se ha cobrado nada. Su unidad sigue apartada mientras regresa.',
 
   // --- Promo code box in checkout (US-11 AC3) ---------------------------
+  'promo.tooManyTries': 'Se probaron demasiados códigos. Espere unos minutos e intente de nuevo.',
   'promo.haveACode': '¿Tiene un código de promoción?',
   'promo.currentlyApplied':
     'Aplicado ahora: {terms}. Solo se aplica una promoción a la vez — si el código que escriba vale menos, conservamos esta.',

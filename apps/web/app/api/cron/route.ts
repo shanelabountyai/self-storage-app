@@ -9,6 +9,7 @@ import { CONSUMERS } from '@/lib/jobs/registry'
 import { dueRunQueue, inParallel } from '@/lib/jobs/queue'
 import { raiseStaleMoneyJobTasks, runScheduledJob } from '@/lib/jobs/run'
 import { sweepWaitlists } from '@/lib/waitlist/service'
+import { pruneRateLimitEvents } from '@/lib/http/rate-limit'
 import { raiseLedgerExceptionTasks } from '@/lib/admin/ledger'
 
 // Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
@@ -83,6 +84,9 @@ export async function GET(request: Request) {
   // above. A once-per-business-date job would leave a free unit unadvertised
   // overnight, which is the revenue this feature exists to stop losing.
   const waitlist = await sweepWaitlists(now)
+
+  // SEC-04. Rate-limit rows are dead weight an hour after they are written.
+  await pruneRateLimitEvents()
 
   // PRD 05 FR-19 (B-075). "Alert if the event consumer lags >15 minutes" —
   // elapsed time again, not a business date, so this runs every tick like
