@@ -9,6 +9,7 @@ import type { OfferTerms } from '@storage/core/promotions'
 import { proseFor } from '@/lib/comms/prose'
 import { DEFAULT_LOCALE, LOCALE_TAG, translate, type Dictionary, type Locale } from '@/lib/i18n'
 import { en } from '@/lib/i18n/en'
+import { LOCK_MINUTES } from './lock'
 
 // PRD 01 FR-4.1. The server-side checkout state machine.
 //
@@ -16,8 +17,7 @@ import { en } from '@/lib/i18n/en'
 // current step lives in client state is a stepper a renter can skip. The
 // session row is the truth, and the page renders whatever step it says.
 
-/// FR-4.1's "30-min unit lock".
-export const LOCK_MINUTES = 30
+export { LOCK_MINUTES }
 
 /// §6.8 / 2.2.1: the renter is warned before the lock lapses, with a
 /// one-activation extension. Five minutes is enough to finish a step or press

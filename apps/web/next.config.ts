@@ -28,6 +28,27 @@ const nextConfig: NextConfig = {
   // copy into each serverless function, and in a workspace the files it needs
   // live above the app directory.
   outputFileTracingRoot: path.join(import.meta.dirname, '../..'),
+
+  // SEC-06. Every response, pages and handlers alike. `frame-ancestors` is the
+  // whole Content-Security-Policy on purpose: a script or style policy would
+  // have to enumerate Stripe and the map embed and is a separate item.
+  // X-Frame-Options repeats it for the document downloads, whose own CSP
+  // (`lib/documents/storage.ts`) replaces this one. HSTS carries no `preload`:
+  // that is a submission to a browser list and cannot be withdrawn quickly.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+        ],
+      },
+    ]
+  },
 }
 
 // PRD 04 US-4 AC2 (B-082 part 3). The guides content hub.

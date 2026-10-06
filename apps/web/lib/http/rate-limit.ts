@@ -1,5 +1,5 @@
 import { prisma } from '@storage/db'
-import { LOCK_MINUTES } from '@/lib/checkout/session'
+import { LOCK_MINUTES } from '@/lib/checkout/lock'
 
 // SEC-04. Limits on what an anonymous caller can repeat for free. The knobs
 // live here so there is one place to tune them, as `lib/auth/rate-limit.ts`
