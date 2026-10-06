@@ -623,7 +623,7 @@ Source: `~/Projects/saas foundation/FOUNDATION_SPEC.md` §3 (read-only audit). L
 | SEC-05 ✅ | LOW | Magic-link and password-reset requests are unthrottled (`lib/auth/flows.ts:42-100`, `app/(auth)/forgot-password/actions.ts:21`). | Reuse the `loginAttempt` limiter per IP and per email. | N+1 requests refused; response identical for unknown emails. |
 | SEC-06 ✅ | LOW | No security headers anywhere except document downloads (`apps/web/next.config.ts`). | Global `headers()`: Referrer-Policy, nosniff, frame-ancestors 'none', HSTS. | Header asserted on a public, an admin and a `/pay/<token>` route. |
 | SEC-07 ✅ | LOW | MFA enrolment enforced only by the admin layout (`app/admin/layout.tsx:48`); server actions, `*.csv` routes and `/api/facilities/*` are reachable before enrolment. | Enforce in `requireStaffActor`. | Unenrolled staff calling a server action directly is refused. |
-| SEC-08 | LOW | Magic link is spent on GET (`app/(auth)/login/magic/route.ts:13-35`); mail scanners burn it. | GET renders a button; POST spends. | GET twice, then click → signs in. |
+| SEC-08 ✅ | LOW | Magic link is spent on GET (`app/(auth)/login/magic/route.ts:13-35`); mail scanners burn it. | GET renders a button; POST spends. | GET twice, then click → signs in. |
 | SEC-09 | LOW | The demo gate is skipped for dotted paths because of the proxy matcher (`proxy.ts:267-271`). | Include `*.csv` and `/pay` in the gate's matcher. | With `DEMO_ACCESS_PASSWORD` set, a `.csv` route challenges. |
 | OPS-01 | ops | ✔ No `ignoreCommand` in `vercel.json` (builds are the bill). | Copy rental's from `apps/web/vercel.json`. | Docs-only push skips the build. |
 
