@@ -9,7 +9,9 @@ import {
   vi,
 } from "vitest";
 import { prisma } from "../packages/db";
+import type Stripe from "stripe";
 import { applyPayment } from "../apps/web/lib/billing/allocation";
+import { applyStripeEvent } from "../apps/web/lib/payments/reconcile";
 import {
   refundPayment,
   refundablePayments,
@@ -31,6 +33,9 @@ import type { PermissionKey } from "@storage/db/rbac-catalog";
 const stripeRefunds = vi.hoisted(() => ({
   ids: [] as string[],
   keys: [] as string[],
+  // MONEY-07. What Stripe lists for a payment intent, and how often it was asked.
+  listed: [] as { id: string; amount: number; status: string; reason: null }[],
+  lists: 0,
 }));
 vi.mock("../apps/web/lib/payments/stripe", async (importOriginal) => {
   const actual =
@@ -46,6 +51,10 @@ vi.mock("../apps/web/lib/payments/stripe", async (importOriginal) => {
           ) => {
             stripeRefunds.keys.push(options.idempotencyKey);
             return { id: stripeRefunds.ids.shift() };
+          },
+          list: async function* () {
+            stripeRefunds.lists += 1;
+            yield* stripeRefunds.listed;
           },
         },
       }) as never,
@@ -975,6 +984,114 @@ describeDb("partial payments and refunds", () => {
           (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } }))
             .amountPaidCents,
         ).toBe(10_000);
+      });
+    });
+
+    // MONEY-07. `charge.refunded` only flipped the payment's status, so a
+    // refund made in the Stripe dashboard left the invoice paid on money the
+    // tenant had back.
+    describe("a refund made at Stripe", () => {
+      const refundedEvent = (intentId: string, amountRefunded: number) =>
+        ({
+          id: `evt_${randomUUID().slice(0, 12)}`,
+          type: "charge.refunded",
+          data: {
+            object: {
+              payment_intent: intentId,
+              amount: 20_000,
+              amount_refunded: amountRefunded,
+            },
+          },
+        }) as unknown as Stripe.Event;
+      async function paidByCard() {
+        const invoiceId = await invoice({
+          dueDate: d("2026-09-01"),
+          lines: [{ type: "rent", amountCents: 20_000 }],
+        });
+        const paymentId = await succeededPayment(20_000);
+        const intentId = `pi_${randomUUID().slice(0, 12)}`;
+        await prisma.payment.update({
+          where: { id: paymentId },
+          data: { stripePaymentIntentId: intentId },
+        });
+        return { paymentId, invoiceId, intentId };
+      }
+
+      it("reaches the books, once, however often the event arrives", async () => {
+        const { paymentId, invoiceId, intentId } = await paidByCard();
+        expect(
+          (await prisma.invoice.findUniqueOrThrow({ where: { id: invoiceId } }))
+            .status,
+        ).toBe("paid");
+        const id = `re_${randomUUID().slice(0, 12)}`;
+        stripeRefunds.listed = [
+          { id, amount: 20_000, status: "succeeded", reason: null },
+        ];
+
+        await applyStripeEvent(refundedEvent(intentId, 20_000));
+        await applyStripeEvent(refundedEvent(intentId, 20_000));
+
+        const rows = await prisma.payment.findMany({
+          where: { refundOfPaymentId: paymentId },
+        });
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          stripeRefundId: id,
+          amountCents: 20_000,
+          status: "succeeded",
+        });
+        const ledger = await prisma.ledgerEntry.aggregate({
+          where: { type: "refund", paymentId: rows[0].id },
+          _sum: { amountCents: true },
+        });
+        expect(ledger._sum.amountCents).toBe(20_000);
+        const after = await prisma.invoice.findUniqueOrThrow({
+          where: { id: invoiceId },
+        });
+        expect(after.status).not.toBe("paid");
+        expect(after.amountPaidCents).toBe(0);
+        expect(
+          (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } }))
+            .status,
+        ).toBe("refunded");
+      });
+
+      it("records nothing for a refund made here, and only the rest for one that was not", async () => {
+        const { paymentId, intentId } = await paidByCard();
+        const ours = `re_${randomUUID().slice(0, 12)}`;
+        const theirs = `re_${randomUUID().slice(0, 12)}`;
+        stripeRefunds.ids = [ours];
+        await refundPayment(actorWith(), paymentId, {
+          amountCents: 5_000,
+          reasonCode: "billing_error",
+        });
+
+        // Our own refund coming back as an event: Stripe is not even asked.
+        stripeRefunds.lists = 0;
+        await applyStripeEvent(refundedEvent(intentId, 5_000));
+        expect(stripeRefunds.lists).toBe(0);
+
+        // Then one from the dashboard. Stripe lists both; one is new.
+        stripeRefunds.listed = [
+          { id: theirs, amount: 3_000, status: "succeeded", reason: null },
+          { id: ours, amount: 5_000, status: "succeeded", reason: null },
+        ];
+        await applyStripeEvent(refundedEvent(intentId, 8_000));
+
+        const rows = await prisma.payment.findMany({
+          where: { refundOfPaymentId: paymentId },
+          orderBy: { amountCents: "asc" },
+        });
+        expect(rows.map((row) => [row.stripeRefundId, row.amountCents])).toEqual(
+          [
+            [theirs, 3_000],
+            [ours, 5_000],
+          ],
+        );
+        expect(
+          (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } }))
+            .status,
+        ).toBe("partially_refunded");
       });
     });
 

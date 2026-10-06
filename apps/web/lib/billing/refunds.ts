@@ -3,7 +3,7 @@ import { recordAudit } from '@storage/core/audit'
 import { emitEvent } from '@storage/core/events'
 import { checkMonetaryAuthority } from '@/lib/rbac/authorize'
 import { toAuditActor } from '@/lib/rbac/audit-actor'
-import type { Actor } from '@/lib/rbac/actor'
+import { systemActor, type Actor } from '@/lib/rbac/actor'
 import { stripeClient } from '@/lib/payments/stripe'
 import { recomputeInvoices } from '@/lib/billing/allocation'
 import { openSessionFor } from '@/lib/admin/drawer'
@@ -81,7 +81,6 @@ export async function refundPayment(
       status: true,
       stripePaymentIntentId: true,
       refunds: { select: { amountCents: true, status: true } },
-      ledgerEntries: { select: { leaseId: true }, take: 1 },
     },
   })
   if (!payment) return { ok: false, reason: 'not_found' }
@@ -142,15 +141,71 @@ export async function refundPayment(
     }
   }
 
-  const leaseId = payment.ledgerEntries[0]?.leaseId ?? null
-
   // B-078 / US-33. A cash or cheque refund comes out of the open drawer, so
   // it belongs to that session: the close-out's expected-cash figure has to
   // account for money that went back over the counter, and closing the
   // session is what finally settles the payable B-048 left `pending`.
   const drawerSession = method === 'card' ? null : await openSessionFor(payment.facilityId)
 
-  const write = prisma.$transaction(async (tx) => {
+  const write = writeRefund(actor, payment.id, {
+    amountCents: input.amountCents,
+    method,
+    providerRefundId,
+    reasonCode: input.reasonCode,
+    note: input.note,
+    checkNumber: input.checkNumber,
+    drawerSessionId: drawerSession?.id ?? null,
+  })
+
+  // MONEY-03. Stripe returned a refund that is already in the books: the same
+  // submit sent twice, both reading the same refunded total. The unique
+  // `stripeRefundId` refused the second row and rolled the whole write back, so
+  // the answer is the refund that exists. Anything else is a real failure.
+  const refundPaymentId = await write.catch(async (error: unknown) => {
+    const existing = providerRefundId
+      ? await prisma.payment.findUnique({ where: { stripeRefundId: providerRefundId }, select: { id: true } })
+      : null
+    if (!existing) throw error
+    return existing.id
+  })
+
+  return { ok: true, refundPaymentId, amountCents: input.amountCents, method }
+}
+
+type RefundWrite = {
+  amountCents: number
+  method: RefundMethod
+  providerRefundId: string | null
+  reasonCode: string
+  note?: string
+  checkNumber?: string | null
+  drawerSessionId?: string | null
+}
+
+/// Puts one refund in the books: the refund row, the ledger entry, the trimmed
+/// allocations and the audit row, in one transaction. Shared by a refund made
+/// here and one Stripe reports that was made somewhere else (MONEY-07), so the
+/// two cannot come to mean different things.
+function writeRefund(actor: Actor, paymentId: string, input: RefundWrite): Promise<string> {
+  const { method, providerRefundId } = input
+  return prisma.$transaction(async (tx) => {
+    const payment = await tx.payment.findUniqueOrThrow({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        facilityId: true,
+        tenantId: true,
+        amountCents: true,
+        method: true,
+        refunds: { select: { amountCents: true, status: true } },
+        ledgerEntries: { select: { leaseId: true }, take: 1 },
+      },
+    })
+    const leaseId = payment.ledgerEntries[0]?.leaseId ?? null
+    const alreadyRefunded = payment.refunds
+      .filter((refund) => refund.status !== 'failed')
+      .reduce((sum, refund) => sum + refund.amountCents, 0)
+
     const refund = await tx.payment.create({
       data: {
         facilityId: payment.facilityId,
@@ -165,7 +220,7 @@ export async function refundPayment(
         refundOfPaymentId: payment.id,
         checkNumber: input.checkNumber?.trim() || null,
         receivedByStaffId: actor.kind === 'staff' ? actor.staffUserId : null,
-        drawerSessionId: drawerSession?.id ?? null,
+        drawerSessionId: input.drawerSessionId ?? null,
         stripePaymentIntentId: null,
         stripeRefundId: providerRefundId,
         failureReason: null,
@@ -292,20 +347,26 @@ export async function refundPayment(
 
     return refund.id
   })
+}
 
-  // MONEY-03. Stripe returned a refund that is already in the books: the same
-  // submit sent twice, both reading the same refunded total. The unique
-  // `stripeRefundId` refused the second row and rolled the whole write back, so
-  // the answer is the refund that exists. Anything else is a real failure.
-  const refundPaymentId = await write.catch(async (error: unknown) => {
-    const existing = providerRefundId
-      ? await prisma.payment.findUnique({ where: { stripeRefundId: providerRefundId }, select: { id: true } })
-      : null
-    if (!existing) throw error
-    return existing.id
+/// MONEY-07. A refund Stripe made that the books do not have: one made in the
+/// Stripe dashboard, or our own call that died after Stripe accepted it.
+///
+/// Not a staff decision, so no permission and no limit: the money has already
+/// gone back and the only choice left is whether the records say so. The
+/// unique `stripeRefundId` is what makes it safe beside `refundPayment`: when
+/// both write the same refund, the second is refused.
+export async function recordStripeRefund(
+  paymentId: string,
+  refund: { id: string; amount: number; reason: string | null },
+): Promise<void> {
+  await writeRefund(systemActor('stripe:refund'), paymentId, {
+    amountCents: refund.amount,
+    method: 'card',
+    providerRefundId: refund.id,
+    reasonCode: `stripe_${refund.reason ?? 'refund'}`,
+    note: `Stripe refund ${refund.id}, not made through this system`,
   })
-
-  return { ok: true, refundPaymentId, amountCents: input.amountCents, method }
 }
 
 export type RefundableRow = {

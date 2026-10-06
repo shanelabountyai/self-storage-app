@@ -6,6 +6,8 @@ import { cancelOpenTask, createTask } from '@/lib/admin/tasks'
 import { applyPayment, postPaymentLedger, type AppliedPayment } from '@/lib/billing/allocation'
 import { payableLeaseFilter } from '@/lib/billing/accounts'
 import { reinstatePayment, returnPayment } from '@/lib/billing/reversals'
+import { recordStripeRefund } from '@/lib/billing/refunds'
+import { stripeClient } from '@/lib/payments/stripe'
 import { systemActor } from '@/lib/rbac/actor'
 import { formatCents } from '@/lib/format'
 import { restoreAccessIfSettled } from '@/lib/access/delinquency-gate'
@@ -592,29 +594,49 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
       const intentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : null
       if (!intentId) return
 
-      await prisma.$transaction(async (tx) => {
-        const payment = await tx.payment.findUnique({ where: { stripePaymentIntentId: intentId } })
-        if (!payment) return
-
-        // Stripe reports the running total refunded, not this refund's amount,
-        // so partial and full are the same comparison rather than a sum we keep
-        // ourselves.
-        const fullyRefunded = charge.amount_refunded >= charge.amount
-        await tx.payment.update({
-          where: { id: payment.id },
-          data: { status: fullyRefunded ? 'refunded' : 'partially_refunded' },
-        })
-        await emitEvent(
-          {
-            name: 'payment.refunded',
-            facilityId: payment.facilityId,
-            entityType: 'Payment',
-            entityId: payment.id,
-            payload: { amountRefundedCents: charge.amount_refunded, full: fullyRefunded },
-          },
-          tx,
-        )
+      const payment = await prisma.payment.findUnique({
+        where: { stripePaymentIntentId: intentId },
+        select: {
+          id: true,
+          status: true,
+          refunds: { select: { amountCents: true, method: true, status: true, stripeRefundId: true } },
+        },
       })
+      if (!payment) return
+
+      // MONEY-07. This used to flip `payment.status` and nothing else, so a
+      // refund made in the Stripe dashboard (or by our own call that died
+      // after Stripe accepted it) left the invoice `paid` on money the tenant
+      // had back. A refund made here is already in the books when this
+      // arrives, and Stripe's running total matches ours: nothing to do.
+      const viaStripe = payment.refunds.filter(
+        (refund) => refund.method === 'card' && refund.status !== 'failed',
+      )
+      let missing =
+        charge.amount_refunded - viaStripe.reduce((sum, refund) => sum + refund.amountCents, 0)
+      if (missing <= 0) return
+
+      // A refund of money the books do not show as received. Recording it
+      // would post the refund and then lose the payment to MONEY-01's guard,
+      // so it waits: the redelivery finds the payment settled.
+      if (!['succeeded', 'partially_refunded', 'refunded'].includes(payment.status)) {
+        throw new Error(
+          `charge.refunded for PaymentIntent ${intentId}: payment ${payment.id} is ${payment.status}`,
+        )
+      }
+      // The event carries the total, not the refunds. Their ids are what keep
+      // one refund from being recorded twice, so they are read from Stripe.
+      const stripe = stripeClient()
+      if (!stripe) throw new Error(`charge.refunded for PaymentIntent ${intentId}: Stripe is not configured`)
+      const known = new Set(viaStripe.map((refund) => refund.stripeRefundId))
+      for await (const refund of stripe.refunds.list({ payment_intent: intentId, limit: 100 })) {
+        // Newest first, and never more than the shortfall: a card refund from
+        // before MONEY-03 has no id to match and must not be recorded again.
+        if (missing <= 0) break
+        if (known.has(refund.id) || refund.status === 'failed' || refund.status === 'canceled') continue
+        await recordStripeRefund(payment.id, refund)
+        missing -= refund.amount
+      }
       return
     }
 

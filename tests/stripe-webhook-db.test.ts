@@ -444,28 +444,23 @@ describeDb('reconciliation into the ledger', () => {
     ).toBe('succeeded')
   })
 
-  it('distinguishes a partial refund from a full one', async () => {
+  it('leaves a refund of a payment not yet received unprocessed', async () => {
+    // MONEY-07. This used to flip the status and nothing else. Recording the
+    // refund before `payment_intent.succeeded` has landed would lose the
+    // payment to MONEY-01's guard, so it throws and the redelivery records it.
     const intentId = `pi_${suffix}_7`
     const payment = await pendingPayment(intentId, 10_000)
 
-    await applyStripeEvent({
-      id: `evt_${suffix}_refund_part`,
-      type: 'charge.refunded',
-      data: { object: { payment_intent: intentId, amount: 10_000, amount_refunded: 2_500 } },
-    } as unknown as Stripe.Event)
+    await expect(
+      applyStripeEvent({
+        id: `evt_${suffix}_refund_early`,
+        type: 'charge.refunded',
+        data: { object: { payment_intent: intentId, amount: 10_000, amount_refunded: 2_500 } },
+      } as unknown as Stripe.Event),
+    ).rejects.toThrow(/is pending/)
     expect(
       (await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status,
-    ).toBe('partially_refunded')
-
-    // Stripe reports the running total, so the second refund carries the sum.
-    await applyStripeEvent({
-      id: `evt_${suffix}_refund_full`,
-      type: 'charge.refunded',
-      data: { object: { payment_intent: intentId, amount: 10_000, amount_refunded: 10_000 } },
-    } as unknown as Stripe.Event)
-    expect(
-      (await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status,
-    ).toBe('refunded')
+    ).toBe('pending')
   })
 
   it('saves the default payment method from a setup intent', async () => {
