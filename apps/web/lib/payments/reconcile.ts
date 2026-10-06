@@ -314,25 +314,29 @@ export async function applyStripeEvent(event: Stripe.Event): Promise<void> {
           where: { id: payment.id },
           data: { status: 'succeeded', receivedAt: new Date(intent.created * 1000) },
         })
-        // Order matters: the allocation sums only SUCCEEDED payments, and the
-        // status update above is what makes this one count.
-        const applied = await settlePayment(
-          tx,
-          payment,
-          referenceInvoiceId(intent),
-          referencePlanId(intent),
-          referenceAccountId(intent),
-        )
-        // B-257. AFTER the allocation, not before it, because the entries are
-        // split by what the allocation settled — one per lease this payment
-        // actually reached. Previously this ran first and wrote one entry for
-        // the whole amount, which is why a payment spanning two leases left one
-        // of them still reading as owed.
+        // MONEY-02. A checkout payment is neither allocated nor posted here.
+        // A move-in raises no invoice, so the only invoices `claimsFor` could
+        // hand it are a returning tenant's older ones at this facility: they
+        // were marked paid, and `postMoveInPaymentToLedger` then credited the
+        // same money in full to the new lease.
         //
-        // B-255. A checkout payment is posted AFTER provisioning instead — the
-        // lease it belongs to does not exist yet, so posting here can only find
-        // nothing and return.
+        // B-255. It is posted AFTER provisioning instead — the lease it
+        // belongs to does not exist yet.
         if (!referenceSessionId(intent)) {
+          // Order matters: the allocation sums only SUCCEEDED payments, and the
+          // status update above is what makes this one count.
+          const applied = await settlePayment(
+            tx,
+            payment,
+            referenceInvoiceId(intent),
+            referencePlanId(intent),
+            referenceAccountId(intent),
+          )
+          // B-257. AFTER the allocation, not before it, because the entries are
+          // split by what the allocation settled — one per lease this payment
+          // actually reached. Previously this ran first and wrote one entry for
+          // the whole amount, which is why a payment spanning two leases left
+          // one of them still reading as owed.
           await postPaymentLedger(
             tx,
             payment,

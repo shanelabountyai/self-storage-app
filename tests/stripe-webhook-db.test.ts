@@ -341,6 +341,71 @@ describeDb('reconciliation into the ledger', () => {
     await prisma.lease.deleteMany({ where: { id: lease.id } })
   })
 
+  it('MONEY-02: a checkout payment does not settle the tenant\'s older invoices', async () => {
+    // A move-in raises no invoice, so anything the allocation finds belongs to
+    // a lease the tenant already had; the whole amount is credited to the new
+    // lease after provisioning, and paying arrears as well spends it twice.
+    const unitType = await prisma.unitType.create({
+      data: { facilityId, name: `5x5 ${suffix}`, widthFt: 5, lengthFt: 5 },
+    })
+    const unit = await prisma.unit.create({
+      data: { facilityId, unitTypeId: unitType.id, number: `M2-${suffix}` },
+    })
+    const lease = await prisma.lease.create({
+      data: {
+        facilityId,
+        tenantId,
+        unitId: unit.id,
+        status: 'active',
+        startDate: new Date(),
+        monthlyRateCents: 10_000,
+        billingDay: 1,
+      },
+    })
+    const invoice = await prisma.invoice.create({
+      data: {
+        facilityId,
+        leaseId: lease.id,
+        number: `M2${suffix}`,
+        status: 'open',
+        issueDate: new Date('2026-08-26'),
+        dueDate: new Date('2026-09-01'),
+        periodStart: new Date('2026-09-01'),
+        periodEnd: new Date('2026-10-01'),
+        subtotalCents: 10_000,
+        totalCents: 10_000,
+      },
+    })
+
+    const intentId = `pi_${suffix}_m02`
+    const payment = await pendingPayment(intentId, 15_000)
+    // The session does not exist, so provisioning returns `session_not_found`
+    // and this reads the payment transaction alone.
+    await applyStripeEvent({
+      id: `evt_${suffix}_m02`,
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: intentId,
+          created: Math.floor(Date.now() / 1000),
+          metadata: { reference: `checkout:${randomUUID()}` },
+        },
+      },
+    } as unknown as Stripe.Event)
+
+    expect(
+      (await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).status,
+    ).toBe('succeeded')
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })
+    expect(after.status).toBe('open')
+    expect(after.amountPaidCents).toBe(0)
+    expect(await prisma.paymentAllocation.count({ where: { paymentId: payment.id } })).toBe(0)
+    expect(await prisma.ledgerEntry.count({ where: { paymentId: payment.id } })).toBe(0)
+
+    await prisma.invoice.deleteMany({ where: { id: invoice.id } })
+    await prisma.lease.deleteMany({ where: { id: lease.id } })
+  })
+
   it('records a decline with the reason a manager will need', async () => {
     const intentId = `pi_${suffix}_5`
     const payment = await pendingPayment(intentId)
