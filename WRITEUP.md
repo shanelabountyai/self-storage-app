@@ -5,7 +5,7 @@
 **Repo:** https://github.com/shanelabountyai/self-storage-app (private)
 **Live demo:** https://storage.labintelligence.co (shared password, demo data only, seeded with no logins). The full demo runs locally from [`docs/DEMO.md`](docs/DEMO.md)
 **Built with:** Claude Code + Next.js (App Router), TypeScript, Postgres + Prisma, Stripe, Tailwind CSS, Vercel
-**Status:** Shipped 2026-09-21 · Last synced: 2026-09-23
+**Status:** Shipped 2026-09-21 · Last synced: 2026-10-07
 **Exec brief (non-technical):** https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf
 
 ---
@@ -24,17 +24,17 @@ A self-storage operator is holding a customer's belongings, and state lien law l
 - **Tenants get a portal in English and Spanish:** balance, autopay, payment, documents and messages.
 - **One design language across the public site, the tenant portal and the staff screens**, built from a design kit and checked against WCAG 2.1 AA with automated scans, plus layout checks at 320px, 200% zoom and forced text spacing.
 
-![The last step of online checkout: "You are moved in", with the gate code, the next payment date and autopay on.](docs/images/move-in-done.jpg)
+![The last step of online checkout: "Your unit is yours", with the unit, the gate code, the next payment date and autopay on.](docs/images/move-in-done.jpg)
 
 ![An unconfigured facility's admin dashboard: an amber notice listing the missing late-fee ladder and delinquency timeline, and what each one costs.](docs/images/unconfigured-facility.jpg)
 
-*Both screens were captured on 2026-09-23 from a production build, after the visual redesign (B-363 to B-370).*
+*Both screens were captured on 2026-10-07 from a production build.*
 
 ## How It's Built
 
-It is an npm-workspaces monorepo. `apps/web` holds the Next.js app, `packages/core` holds the domain rules, and `packages/db` holds the Prisma schema and seeds. The schema has 97 models across 123 migrations, using the entity names from the master PRD (Facility, Unit, UnitType, Tenant, Lease, Invoice, Payment, AccessCredential, Lead and supporting entities). The ledger is the source of truth. Invoices and payments are the app's own rows, Stripe only moves money, and an hourly job flags any lease where the ledger and the open invoices disagree. Side effects (emails, gate changes, tasks) go through an event outbox with one catalog of events and one dispatcher. Gate hardware sits behind an adapter, and the only implementation is a simulator with a software keypad.
+It is an npm-workspaces monorepo. `apps/web` holds the Next.js app, `packages/core` holds the domain rules, and `packages/db` holds the Prisma schema and seeds. The schema has 103 models across 138 migrations, using the entity names from the master PRD (Facility, Unit, UnitType, Tenant, Lease, Invoice, Payment, AccessCredential, Lead and supporting entities). The ledger is the source of truth. Invoices and payments are the app's own rows, Stripe only moves money, and an hourly job flags any lease where the ledger and the open invoices disagree. Side effects (emails, gate changes, tasks) go through an event outbox with one catalog of events and one dispatcher. Gate hardware sits behind an adapter, and the only implementation is a simulator with a software keypad.
 
-**Key design decisions** (the full log is [`docs/prds/07-decisions.md`](docs/prds/07-decisions.md): 151 entries, each settled once)
+**Key design decisions** (the full log is [`docs/prds/07-decisions.md`](docs/prds/07-decisions.md): 170 entries, each settled once)
 
 | Decision | Alternative considered | Why I chose it |
 |---|---|---|
@@ -76,6 +76,9 @@ Each of these cost a debugging pass. The lesson from each is written into the re
 - **Some tests failed only at night.** Marketing messages are refused during quiet hours, judged by the facility's local wall clock. Three suites passed between 8am and 9pm Central and failed outside that window, which looked exactly like a broken message sender. They now pin the clock with `vi.setSystemTime`.
 - **The append-only audit log blocked test cleanup permanently.** Its trigger refuses `TRUNCATE`, and it holds a RESTRICT foreign key to `facility`. No test suite could reclaim a facility it had audit-logged against, and the test schema quietly grew to 13,106 facilities. The remedy is a one-command schema rebuild (`db:reset-test`).
 - **Found in the final demo walk, then fixed (B-347 to B-349):** the lease quoted a $20 late fee from a table the fee engine never reads, `--font-sans` referred to itself so every page fell back to the browser's serif, and a bare `/portal/pay` told a one-unit tenant that their unit was not found. The lease now reads the same ladder the fee engine does, and says so when no late fee is charged.
+- **An adversarial review of the Stripe path found ten ways the books could disagree with the bank (MONEY-01 to MONEY-10), with every test green.** Three were serious. A retried `payment_intent.succeeded` re-credited a payment that had since been refunded. A returning tenant's move-in payment settled their old arrears and was also credited in full to the new lease, so $150 settled $250. Two equal partial refunds inside 24 hours refunded once at Stripe and twice in the ledger. Each fix is one commit with a test that fails without it.
+- **A sign-in link was spent by whatever opened it first.** `/login/magic` signed the visitor in on GET, so a mail scanner that follows every link in a message burned the single-use token before the renter clicked. The link now opens a page with a button, and only the button press spends the token (SEC-08).
+- **The step meant to skip docs-only builds could never skip.** Vercel clones at depth 1, so the previous deployment's commit was never in the fetched history, the guard failed, and every push built. It read as working because building is also what a correct step does most of the time. The command now deepens the clone before it diffs (OPS-01).
 
 ## What I'd Do Differently
 
@@ -85,11 +88,12 @@ Each of these cost a debugging pass. The lesson from each is written into the re
 
 ## By the Numbers
 
-- **Built in 56 calendar days** (2026-07-30 to 2026-09-23): 950 commits, 390 backlog rows marked done, and one `docs/PROGRESS.md` entry per item recording what it built, what it decided and what it left behind.
-- **4,729 unit and database tests** (4,721 passed and 8 skipped on 2026-09-23) across 291 test files. **1,698 end-to-end tests** across 27 Playwright spec files, run at phone and desktop widths against a production build.
-- About 143,000 lines of application TypeScript and 88,000 lines of tests.
-- 97 data models, 123 migrations, and 151 recorded product decisions.
-- Eleven review rounds by operator, UX and accessibility agents. Round nine's findings became backlog items B-329 to B-346 and 31 were declined; round eleven's became B-371 to B-382. Every refusal is on record with its reason.
+- **Built in 70 calendar days** (2026-07-30 to 2026-10-07): 1,140 commits, 461 backlog rows marked done, and one `docs/PROGRESS.md` entry per item recording what it built, what it decided and what it left behind.
+- **5,003 unit and database tests** (4,995 passed and 8 skipped on 2026-10-07) across 316 test files. **1,872 end-to-end tests** across 41 Playwright files, run at phone and desktop widths against a production build.
+- About 154,000 lines of application TypeScript and 95,000 lines of tests.
+- 103 data models, 138 migrations, and 170 recorded product decisions.
+- Thirteen review rounds by operator, UX, accessibility and tenant agents. Round nine's findings became backlog items B-329 to B-346 and 31 were declined; round eleven's became B-371 to B-382. Every refusal is on record with its reason.
+- After the feature work, an adversarial money review (ten findings) and a security review (nine), both by AI agents and both fixed row by row. No outside firm has tested it.
 - **What is not real:** the facilities and tenants are seeded, cards run in Stripe test mode, the gate is simulated, and SMS was never switched on because carrier registration was never approved.
 
 ---

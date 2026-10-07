@@ -3,7 +3,8 @@
 A 20–25 minute walkthrough of the platform: a renter moves in online, a tenant
 who is behind pays, and the operator's side shows what the system did about
 each. It runs **locally**, against the seeded demo data. Every command and
-every stop below was run on 2026-09-23 against a production build, after the visual redesign.
+every stop below was run on 2026-10-07 against a production build, after the
+money and security review rows (MONEY-01 to MONEY-10, SEC-03 to SEC-09).
 
 The deployed site (`storage.labintelligence.co`) is behind a shared password
 and seeded **without** the demo logins, so it is not the demo path. See
@@ -112,7 +113,8 @@ today's office hours.)
    *Payment* a few seconds after paying, it shows *Confirming your payment*
    while it waits for the webhook, then moves on by itself. If the webhook
    never lands it offers *Check again* and the phone number.
-6. **Done.** *"You are moved in"*, **a gate code**, and the next payment date.
+6. **Done.** *"Your unit is yours"*, the unit and where it is in the building,
+   **a gate code**, the next payment date, and *Paid today $99.93*.
 
 > "Card details go straight to Stripe and never touch our servers. The move-in
 > completes from Stripe's webhook, not from the browser, so a renter who
@@ -135,8 +137,11 @@ gate turns back on. Pay with 4242 and land on the receipt. If pressing *Pay $161
 does nothing (Stripe's optional "save my information" box can shift the layout on
 the first click), press Enter in the ZIP field or click again.
 
-**Do this before running the cron below.** The scheduler also raises October's
-invoice, and a Dana who has not paid yet would then owe $334.29, not $161.
+**Do this before running the cron below, and wait for the receipt page.** The
+scheduler also raises this month's invoice, and a Dana who has not paid yet
+would then owe $334.29, not $161. (That happened on the 2026-10-07 walk: the
+first click on *Pay $161* did not land, the cron ran, and the stop needed a
+reseed.)
 
 **Then** make the "usually within a couple of minutes" happen now. Locally,
 nothing runs the hourly scheduler, so trigger it yourself:
@@ -146,11 +151,14 @@ curl -s -H "Authorization: Bearer $(grep -E '^CRON_SECRET=' .env.local | cut -d=
   localhost:3000/api/cron | head -c 300
 ```
 
-The same tick also raises next month's invoices, so Dana's portal then shows
-October's rent ($173.29) as a normal balance. That is the product working. Her
+The same tick also raises this month's invoice, so Dana's portal then shows
+*"$173.29 due"* today as a normal balance, not a past-due one. That is the
+product working. Her
 portal's gate-code card says *"isn't ready yet"*, because the seed never stored a
 code for her. To show the gate really came back, open her record in the admin
-(stop 4): *Gate access active … Access restored, balance paid*.
+(stop 4): *Gate access active … Access restored, balance paid*. Her lease row
+there still reads *Past Due* beside *Days past due: None* until the new
+invoice is paid; say so if anyone looks.
 
 **Optional:** sign in as `business@demo.example.com` to show *Acme Contracting*:
 one payer, two units, one balance, and one payment applied oldest-first across
@@ -206,7 +214,7 @@ kept, because a stranger working through numbers is a pattern worth seeing.
 
 ### 6. Close (1 min)
 
-> "About 390 backlog items over eight weeks, each with its tests, a written
+> "About 460 backlog items over ten weeks, each with its tests, a written
 > record of what it decided, and automated accessibility scans on the
 > customer-facing pages. Texas lien rules by default, configurable per state, and every legal
 > text marked as an unreviewed draft."
@@ -247,8 +255,19 @@ server's console, and the tenant's communication history still records them.
   at phone and desktop widths, and they report failures rather than blocking a
   deploy. No screen-reader pass has been recorded, and the public
   accessibility statement says automated testing is "a floor, not a ceiling".
-- **Some things are blocked, not skipped.** Six backlog items need credentials
-  or partner agreements that do not exist (listed in `NEXT.md`).
+- **Some things are parked, not skipped.** Six backlog rows are not built
+  (B-085, B-129, B-133, B-134, B-243, B-254): a gate vendor, an auction
+  platform and Google's review API each need an agreement or credentials
+  nobody has. Three more were declined with a decision number (D-159 to D-161).
+- **The money and security reviews were done by AI agents, not by an outside
+  firm.** An adversarial review of the Stripe path found ten defects
+  (MONEY-01 to MONEY-10) and a security review nine (SEC-01 to SEC-09); all are
+  fixed and each entry in `docs/PROGRESS.md` lists what it left open. Nobody
+  has penetration-tested it.
+- **Known and left open:** the free-reservation, lead and waitlist forms have
+  no rate limit; there is no script Content-Security-Policy; the email-change
+  link is still spent by a GET; a refund and a reinstatement do not take the
+  payment row lock.
 - **The demo database is the e2e database.** It carries test fixtures such as
   *E2E — Ledger corrections* and *Demo — E2E Sandbox*, which appear in the
   facility switcher and on the Austin city page. They cannot be deleted
@@ -262,7 +281,9 @@ server's console, and the tenant's communication history still records them.
 `https://storage.labintelligence.co` answers `401` until you supply the shared
 password (`DEMO_ACCESS_PASSWORD`, set in the Vercel project's environment
 variables). It was seeded with `--no-logins`, so none of the passwords above
-work there. Signing in means minting a reset link from a laptop with
+work there. Production is fifteen migrations behind `main` (applied by hand,
+D-143) and auto-deploy is off (D-155), so it does not show the last two weeks
+of work. Signing in means minting a reset link from a laptop with
 `.env.prod-ops`, as described in
 [DEPLOYMENT.md → Running a command against production](DEPLOYMENT.md#running-a-command-against-production).
 That path was not re-run for this script. Use the local build to present.
