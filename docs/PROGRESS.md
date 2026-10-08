@@ -12601,3 +12601,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** The brief still says the post-payment page can sit on the payment step for a second; `docs/DEMO.md` still warns of it, and the 7 October walk measured 3.4 seconds. LinkedIn posts, the cost review and the build-log entry are the rest of closure.
 
 **Verification.** A scan of the published file for every replaced figure found none. No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
+
+## Closure: LinkedIn posts 102 to 104 drafted into the Ledger (2026-10-08, `PENDING`)
+
+**What it did.** Added three unposted drafts to the Lab Intelligence Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i), each tagged Storage Business and sourced to the exec brief and `WRITEUP.md` *Defects Found*: **102, MarTech**, the sign-in link anything could spend (SEC-08); **103, Impact**, the money review's three serious findings (MONEY-01 to MONEY-03); **104, Scale**, the ignore step that could not skip (OPS-01). They sit at the end of the queue after 101 (Scale), so no two neighbours share a pillar. The owner approved all three before they were written.
+
+**What it decided.** (a) 102 says a scanner "would have" spent the link: SEC-08 was found by review and nothing records a real one doing it. (b) 104 concedes the step has not been seen skipping in a Vercel build log, as OPS-01 does. (c) "Tests were green" is in none of the three hooks; seventeen queued posts already use it.
+
+**What it left behind.** (a) 102's line "the first thing to open a link is often a machine" is not from the owner's verified record; they were told and kept it. (b) 104 shares its tool with rental's post 43 (the opposite failure), about 40 slots earlier. (c) None of the three has an image. The cost review and the build-log entry are the rest of closure.
+
+**Verification.** The batch committed atomically (three posts, queue at version 4, 105 documents). No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
