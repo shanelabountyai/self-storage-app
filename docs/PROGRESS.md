@@ -12631,3 +12631,15 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** Closure's four deliverables and the build-log entry all exist. Still open, all owner actions and none of them closure items: production migrations (D-143), the production deploy that makes the daily cron live (D-166), reseeding roles in production (B-443), Stripe test secrets for CI, and images for posts 102 to 104.
 
 **Verification.** `https://storage.labintelligence.co` answers 401, which is the demo password gate and not an outage. No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
+
+## Owner actions after closure: production migrated, reseeded and deployed (2026-10-08, `PENDING`)
+
+**What it did.** The owner ran D-143 by hand: a Neon backup branch `pre-migrate-2026-10-08`, then `prisma migrate deploy` against production, which applied all 15 pending migrations (`20260926120000_b399_move_out_cause` to `20261006195153_sec04_rate_limit_event`). `db:migrate:cloud` brought the Neon dev branch level, and `db:status` now exits 0 with all three databases up to date. The owner then ran `db:seed` against production (B-443: the system role now holds `refunds:approve` there) and triggered the `main-manual` Deploy Hook. The deployment created 16:46 UTC is `Ready` and holds the `storage.labintelligence.co` alias.
+
+**What it decided.** Nothing new. The assistant's own attempt to run these was refused by the permission classifier as a production deploy, so the owner ran every command; the assistant only read state.
+
+**What it found.** A second hook call at 17:09 UTC, on the same commit (`b588063`), was canceled in 3 seconds: "The deployment was canceled because the Ignored Build Step command returned exit code 0." That is the first time the ignore step has been seen skipping in a real Vercel build log, which OPS-01 had left open. It has still not been seen *building* on a code change through the step, only skipping on none.
+
+**What it left behind.** (a) The dynamic smoke test (`/storage/search?q=78704` behind the demo password) is the owner's and was not yet confirmed when this was written. (b) Whether the 16:46 build ran before or after the migrations landed is not known; it built, and production is on the current schema now. (c) The daily cron (`0 18 * * *`, D-166) is in the deployed commit's `vercel.json`; the dashboard was not read. The check stays as D-166 has it: about 300 `active_time_seconds` a day on production Neon. (d) Two backup branches now exist on production Neon (`pre-migrate-2026-09-19`, `pre-migrate-2026-10-08`). (e) Stripe test secrets for CI are still unset; images for posts 102 to 104 are the owner's.
+
+**Verification.** `db:status` exit 0, three "up to date". `neonctl branches list` shows the backup. `vercel inspect` shows the alias on the 16:46 deployment. No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
