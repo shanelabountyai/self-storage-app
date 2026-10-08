@@ -12592,7 +12592,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** `npm test`: 4,995 passed, 8 skipped, exit 0. No lint, typecheck or e2e run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
 
-## Closure refresh 3: exec brief resynced (2026-10-08, `PENDING`)
+## Closure refresh 3: exec brief resynced (2026-10-08, `a29c61f`)
 
 **What it did.** Republished *Storage Business in Brief* (https://claude.ai/artifact/AeGQeP4BE4Ljye66GfrJAf, version 3) over the same URL with the figures from `WRITEUP.md` *By the Numbers* as of 2026-10-07: ten weeks and about 460 pieces of work (was eight and 390), 5,003 unit and database checks (4,729), 1,872 end-to-end (1,698), 170 decisions (151), thirteen review rounds with the renter agent named (eleven, three agents), footer October 2026. Both embedded screenshots replaced with the 7 October captures in `docs/images/`, and the first one's alt text rewritten for the new last step (*Done*, *Your unit is yours*, unit 5x5-002, next payment November 7). Added: a *What this is not* line saying no outside firm has tested it, a paragraph in *What holds it up* on the money review (ten findings) and the security review (nine), and a sentence in *How I work* conceding the first press of *Pay* in the tenant account that does not always land. The edit was scripted against the saved page with each replacement asserted to match exactly once; the HTML never entered context.
 
