@@ -374,10 +374,16 @@ await recordAudit({
 
 ## Events and background jobs
 
-Vercel Cron hits `/api/cron` **hourly** ([vercel.json](vercel.json)), guarded by a
+Vercel Cron hits `/api/cron` ([vercel.json](vercel.json)), guarded by a
 `CRON_SECRET` bearer token — the route rejects everything when that is unset.
 Master §5 offers Vercel Cron as the MVP option; there is no Inngest or
 Trigger.dev account to manage and nothing extra to run locally.
+
+**The deployed demo is hit once a day, at 18:00 UTC (D-166, a cost decision);
+the route is built for an hourly tick and `0 * * * *` is the value to restore.**
+On a daily tick the catch-up below runs the whole day's jobs at once, and the
+work that is hourly by nature (event dispatch, hold expiry, waitlist offers,
+deferred SMS) lags up to a day.
 
 Hourly, not nightly, because nightly jobs run in **facility-local** time
 (PRD 02 FR-4). Each tick asks which facilities have just reached their target

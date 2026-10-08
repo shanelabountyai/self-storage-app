@@ -12,12 +12,15 @@ import { sweepWaitlists } from '@/lib/waitlist/service'
 import { pruneRateLimitEvents } from '@/lib/http/rate-limit'
 import { raiseLedgerExceptionTasks } from '@/lib/admin/ledger'
 
-// Vercel Cron hits this hourly (see vercel.json). Master PRD §5 lists Vercel
+// Vercel Cron hits this (see vercel.json). Master PRD §5 lists Vercel
 // Cron as the MVP option; there is no Inngest/Trigger.dev account to manage and
 // nothing extra to run locally.
 //
-// Hourly rather than nightly because nightly jobs run in *facility-local* time
-// (PRD 02 FR-4) — each tick asks which facilities have just reached their hour.
+// Built to be hit hourly rather than nightly because nightly jobs run in
+// *facility-local* time (PRD 02 FR-4) — each tick asks which facilities have
+// just reached their hour. The deployed demo is hit once a day instead (D-166,
+// a cost decision): B-236's catch-up runs the day's jobs in that one tick, and
+// everything below that says "every tick" then means "once a day" there.
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
