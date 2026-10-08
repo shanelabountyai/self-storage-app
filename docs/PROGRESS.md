@@ -12622,7 +12622,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** `vercel.json` parses and carries the new schedule. No test run: the only change under `apps/` is a comment.
 
-## Closure: build-log entry checked, closure complete (2026-10-08, `PENDING`)
+## Closure: build-log entry checked, closure complete (2026-10-08, `1c4feea`)
 
 **What it did.** Read the build log (https://claude.ai/artifact/28KeGV3xfBwcBuoMEQjFMj) and checked the Storage Business row against the repo. It already read `shipped` with all six links filled (PRD, repo, live, write-up, exec brief, demo), so nothing was republished.
 
