@@ -12632,7 +12632,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** `https://storage.labintelligence.co` answers 401, which is the demo password gate and not an outage. No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
 
-## Owner actions after closure: production migrated, reseeded and deployed (2026-10-08, `PENDING`)
+## Owner actions after closure: production migrated, reseeded and deployed (2026-10-08, `51f570f`)
 
 **What it did.** The owner ran D-143 by hand: a Neon backup branch `pre-migrate-2026-10-08`, then `prisma migrate deploy` against production, which applied all 15 pending migrations (`20260926120000_b399_move_out_cause` to `20261006195153_sec04_rate_limit_event`). `db:migrate:cloud` brought the Neon dev branch level, and `db:status` now exits 0 with all three databases up to date. The owner then ran `db:seed` against production (B-443: the system role now holds `refunds:approve` there) and triggered the `main-manual` Deploy Hook. The deployment created 16:46 UTC is `Ready` and holds the `storage.labintelligence.co` alias.
 
