@@ -12621,3 +12621,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** (a) **The new schedule is not live.** Auto-deploy is off, and a production deploy has to follow the pending production migrations (D-143; `db:status` exited 1 today with production still behind). Until then production runs hourly. (b) On a daily tick the consumer-lag detector will raise its task whenever an event has waited more than 15 minutes, and a whole day's jobs share one 240-second budget. Neither was measured against production. (c) The Neon dollar figure is not recorded: the CU-hours are measured, the plan's rate was not checked against an invoice. (d) The check on the fix is in D-166: about 300 active seconds a day after the deploy, against about 7,700 now. (e) The build-log entry is the rest of closure.
 
 **Verification.** `vercel.json` parses and carries the new schedule. No test run: the only change under `apps/` is a comment.
+
+## Closure: build-log entry checked, closure complete (2026-10-08, `PENDING`)
+
+**What it did.** Read the build log (https://claude.ai/artifact/28KeGV3xfBwcBuoMEQjFMj) and checked the Storage Business row against the repo. It already read `shipped` with all six links filled (PRD, repo, live, write-up, exec brief, demo), so nothing was republished.
+
+**What it decided.** (a) No edit to the artifact: every link matched (`origin` is `shanelabountyai/self-storage-app`; the three GitHub file links answer 200; the exec brief link is the one refreshed in *Closure refresh 3*). (b) The status stays `shipped` although the daily cron and the pending production migrations are not deployed (D-143, D-166): the log tracks the build, not the last deploy.
+
+**What it left behind.** Closure's four deliverables and the build-log entry all exist. Still open, all owner actions and none of them closure items: production migrations (D-143), the production deploy that makes the daily cron live (D-166), reseeding roles in production (B-443), Stripe test secrets for CI, and images for posts 102 to 104.
+
+**Verification.** `https://storage.labintelligence.co` answers 401, which is the demo password gate and not an outage. No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
