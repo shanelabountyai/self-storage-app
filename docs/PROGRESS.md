@@ -12611,3 +12611,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** (a) 102's line "the first thing to open a link is often a machine" is not from the owner's verified record; they were told and kept it. (b) 104 shares its tool with rental's post 43 (the opposite failure), about 40 slots earlier. (c) None of the three has an image. The cost review and the build-log entry are the rest of closure.
 
 **Verification.** The batch committed atomically (three posts, queue at version 4, 105 documents). No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
+
+## Closure: cost review, cron hourly to daily (2026-10-08, `d2ab7b3`)
+
+**What it did.** Listed everything the project leaves running that can bill, measured the two that do, and recorded keep / slow down / off for each as **D-166**. One thing changed: `vercel.json`'s cron went from `0 * * * *` to `0 18 * * *`. `README.md` and the comment at the top of `apps/web/app/api/cron/route.ts` now say the route is built for an hourly tick and the deployed demo gets a daily one.
+
+**What it decided.** (a) **Daily, the owner's pick of three** (daily, hourly, off). The cron was the only regular waker of production Neon: 58,452 active seconds and 17,591 compute seconds between 1 October and 8 October 15:00 UTC, about 319 seconds a tick. (b) **18:00 UTC**, because the scheduled jobs sit at local hours 0 to 11 and 23, and noon or 1pm Central is after all but one. (c) Everything else is kept as it is, each with its reason in D-166: both Neon projects, auto-deploy off (D-155), Actions (the repo is public, so unbilled), the two Claude review workflows, Stripe (no key in production), Resend. (d) No code path changed. The catch-up from B-236 is what makes one tick a day enough, and it was not touched.
+
+**What it left behind.** (a) **The new schedule is not live.** Auto-deploy is off, and a production deploy has to follow the pending production migrations (D-143; `db:status` exited 1 today with production still behind). Until then production runs hourly. (b) On a daily tick the consumer-lag detector will raise its task whenever an event has waited more than 15 minutes, and a whole day's jobs share one 240-second budget. Neither was measured against production. (c) The Neon dollar figure is not recorded: the CU-hours are measured, the plan's rate was not checked against an invoice. (d) The check on the fix is in D-166: about 300 active seconds a day after the deploy, against about 7,700 now. (e) The build-log entry is the rest of closure.
+
+**Verification.** `vercel.json` parses and carries the new schedule. No test run: the only change under `apps/` is a comment.
