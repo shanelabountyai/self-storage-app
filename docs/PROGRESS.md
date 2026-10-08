@@ -12602,7 +12602,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** A scan of the published file for every replaced figure found none. No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
 
-## Closure: LinkedIn posts 102 to 104 drafted into the Ledger (2026-10-08, `PENDING`)
+## Closure: LinkedIn posts 102 to 104 drafted into the Ledger (2026-10-08, `74e8669`)
 
 **What it did.** Added three unposted drafts to the Lab Intelligence Ledger (https://claude.ai/artifact/Ai5xKScgT2sWtqXRQ1ZA8i), each tagged Storage Business and sourced to the exec brief and `WRITEUP.md` *Defects Found*: **102, MarTech**, the sign-in link anything could spend (SEC-08); **103, Impact**, the money review's three serious findings (MONEY-01 to MONEY-03); **104, Scale**, the ignore step that could not skip (OPS-01). They sit at the end of the queue after 101 (Scale), so no two neighbours share a pillar. The owner approved all three before they were written.
 
