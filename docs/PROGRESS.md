@@ -12643,3 +12643,13 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 **What it left behind.** (a) The dynamic smoke test (`/storage/search?q=78704` behind the demo password) is the owner's and was not yet confirmed when this was written. (b) Whether the 16:46 build ran before or after the migrations landed is not known; it built, and production is on the current schema now. (c) The daily cron (`0 18 * * *`, D-166) is in the deployed commit's `vercel.json`; the dashboard was not read. The check stays as D-166 has it: about 300 `active_time_seconds` a day on production Neon. (d) Two backup branches now exist on production Neon (`pre-migrate-2026-09-19`, `pre-migrate-2026-10-08`). (e) Stripe test secrets for CI are still unset; images for posts 102 to 104 are the owner's.
 
 **Verification.** `db:status` exit 0, three "up to date". `neonctl branches list` shows the backup. `vercel inspect` shows the alias on the 16:46 deployment. No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
+
+## Post-closure: five more CLAUDE.md rules enforced by the Bash hook (2026-10-20, SHA_PENDING)
+
+**What it built.** `.claude/hooks/guard-bash.py` denies five more commands, each with the remedy from its `CLAUDE.md` paragraph: a non-draft `gh pr create`, `git commit --amend`, `prettier --write`, `npm install <pkg>` without `npm rebuild esbuild` in the same command, and a force push to `main`. Fifteen new fixtures in `test-guard-bash.py`.
+
+**What it decided.** D-167. The force-push check reads the current branch with `git rev-parse`; a force push to a feature branch passes. D-165's file names corrected (it named `.sh` files that never existed).
+
+**What it left behind.** Judgment rules stay prose (D-167 lists them). `npm install --workspace web` with no package trips the dependency rule; appending the rebuild is harmless. The guard also trips on a command line that only mentions a banned command (it caught this item's own record-keeping script); write such text to a file.
+
+**Verification.** `python3 .claude/hooks/test-guard-bash.py`: 0 failures. A live `git commit --amend` was denied by the hook in this session. No app code changed, so no test sweep.

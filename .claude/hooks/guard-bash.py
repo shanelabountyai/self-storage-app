@@ -44,11 +44,20 @@ def run_drift_check(project_dir: str) -> tuple[int, str]:
     return p.returncode, "\n".join(out[-8:])
 
 
+def current_branch(project_dir: str) -> str:
+    try:
+        return subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=project_dir,
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
 def _has(pattern: str, command: str) -> bool:
     return re.search(pattern, command) is not None
 
 
-def decide(command: str, project_dir: str, drift=run_drift_check) -> str | None:
+def decide(command: str, project_dir: str, drift=run_drift_check,
+           branch=current_branch) -> str | None:
     """Returns a denial reason, or None to allow."""
     c = command
 
@@ -104,7 +113,44 @@ def decide(command: str, project_dir: str, drift=run_drift_check) -> str | None:
                 "so e2e/global-setup.ts returns at its first line and stale locks, holds and "
                 "lien notices are never cleared. Everything still passes, which is the trap.")
 
-    # 7. git push: run the schema-drift check CI fails on (six red runs).
+    # 7. gh pr create without --draft (a ready PR starts the ~30-minute e2e +
+    #    Lighthouse lane).
+    if _has(r"\bgh\s+pr\s+create\b", c) and not _has(r"(^|\s)(--draft|-d)(\s|$)", c):
+        return ("CLAUDE.md \"Pull requests\": always open a PR as a draft (`gh pr create "
+                "--draft`). A ready PR runs the ~30-minute e2e + Lighthouse lane; mark it "
+                "ready with `gh pr ready` once the local suites are green.")
+
+    # 8. git commit --amend (changes the SHA PROGRESS.md just recorded).
+    if _has(r"\bgit\s+commit\b", c) and _has(r"(^|\s)--amend(\s|$)", c):
+        return ("CLAUDE.md: record the SHA in a small follow-up commit, never by amending. "
+                "Amending changes the SHA you just wrote down, leaving PROGRESS.md pointing "
+                "at a commit that no longer exists.")
+
+    # 9. npx prettier --write (memory: reformats whole files; lint and typecheck
+    #    do not notice).
+    if _has(r"\bprettier\b", c) and _has(r"(^|\s)(--write|-w)(\s|$)", c):
+        return ("This repo does not use prettier: `prettier --write` reformats whole files "
+                "and neither lint nor typecheck notices. Edit by hand; use `--check` if you "
+                "only want to look.")
+
+    # 10. npm install <pkg> without `npm rebuild esbuild` (gated postinstall;
+    #     every `npm test` then dies in bundleConfigFile; cost B-106 ten minutes).
+    if _has(r"\bnpm\s+(install|i|add)\s+([^;&|\n]*\s)?[^-\s;&|]", c) and not _has(
+        r"\bnpm\s+rebuild\s+esbuild\b", c
+    ):
+        return ("CLAUDE.md: adding a dependency re-links node_modules without esbuild's gated "
+                "postinstall, and every `npm test` then dies in bundleConfigFile claiming the "
+                "wrong platform. Append `&& npm rebuild esbuild` to the same command.")
+
+    # 11. force push to main (rewrites the SHAs PROGRESS.md records; the remedy
+    #     for a bad merge is a correcting commit, never a rewrite).
+    if _has(r"\bgit\s+push\b", c) and _has(r"(^|\s)(--force(-with-lease)?(=\S*)?|-f)(\s|$)", c) and (
+        _has(r"(^|[\s:+])main(\s|$)", c) or branch(project_dir) == "main"
+    ):
+        return ("CLAUDE.md: do not rewrite `main`. A force push orphans every SHA PROGRESS.md "
+                "records. Correct the affected entries in a new commit and push normally.")
+
+    # 12. git push: run the schema-drift check CI fails on (six red runs).
     if _has(r"\bgit\s+push\b", c):
         code, tail = drift(project_dir)
         if code == 0:

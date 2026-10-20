@@ -44,12 +44,27 @@ CASES = [
     ("git push", broken, True, "push, check cannot run"),
     ("git pull --rebase", clean, False, "pull untouched"),
     ("npm test", clean, False, "ordinary command"),
+    ("gh pr create --title x --body y", clean, True, "ready PR"),
+    ("gh pr create --draft --title x", clean, False, "draft PR"),
+    ("git commit --amend --no-edit", clean, True, "amend"),
+    ("git commit -m 'B-1: x' && git push", clean, False, "plain commit"),
+    ("npx prettier --write apps/web/app/page.tsx", clean, True, "prettier write"),
+    ("npx prettier --check apps/web", clean, False, "prettier check"),
+    ("npm install zod --workspace web", clean, True, "add dep without rebuild"),
+    ("npm i -D vitest", clean, True, "short install with flag first"),
+    ("npm install zod --workspace web && npm rebuild esbuild", clean, False, "add dep with rebuild"),
+    ("npm install", clean, False, "bare install"),
+    ("npm ci", clean, False, "npm ci"),
+    ("git push --force origin main", clean, True, "force push main"),
+    ("git push -f", clean, True, "force push while on main (stub)"),
+    ("git push --force-with-lease origin b-500-x", clean, False, "force push feature branch"),
+    ("git push origin main", clean, False, "plain push main"),
     ("echo 'gh pr merge --squash is banned'", clean, True, "string mention still trips (documented, acceptable)"),
 ]
 
 failures = 0
 for cmd, stub, expect_denied, label in CASES:
-    reason = guard.decide(cmd, HERE, drift=stub)
+    reason = guard.decide(cmd, HERE, drift=stub, branch=lambda _d: "main" if "-f" in cmd.split() else "b-500-x")
     denied = reason is not None
     ok = denied == expect_denied
     failures += 0 if ok else 1
