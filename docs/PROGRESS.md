@@ -12644,7 +12644,7 @@ The first unit run was the whole suite by accident (a zsh glob emptied the file 
 
 **Verification.** `db:status` exit 0, three "up to date". `neonctl branches list` shows the backup. `vercel inspect` shows the alias on the 16:46 deployment. No test run: no file under `apps/`, `packages/`, `tests/` or `e2e/` changed.
 
-## Post-closure: five more CLAUDE.md rules enforced by the Bash hook (2026-10-20, SHA_PENDING)
+## Post-closure: five more CLAUDE.md rules enforced by the Bash hook (2026-10-20, `1541b44`)
 
 **What it built.** `.claude/hooks/guard-bash.py` denies five more commands, each with the remedy from its `CLAUDE.md` paragraph: a non-draft `gh pr create`, `git commit --amend`, `prettier --write`, `npm install <pkg>` without `npm rebuild esbuild` in the same command, and a force push to `main`. Fifteen new fixtures in `test-guard-bash.py`.
 
