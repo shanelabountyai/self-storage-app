@@ -1,6 +1,11 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import { testDatabaseUrl, TEST_SCHEMA } from './scripts/test-db.mts'
+import { assertLocalTestDatabase } from './scripts/local-db-guard.mts'
+
+// K12. Before anything else reads a connection string: the suite never runs on
+// a cloud database unless ALLOW_CLOUD_DB=1 says so.
+assertLocalTestDatabase()
 
 // The suite runs against its own Postgres SCHEMA, not against dev's.
 //
