@@ -5,7 +5,9 @@ import { requestMagicLink, requestPasswordReset } from '../apps/web/lib/auth/flo
 import {
   PUBLIC_LIMITS,
   mayCheckPromo,
+  mayReadToken,
   mayRequestAuthLink,
+  mayReserve,
   mayStartCheckout,
   pruneRateLimitEvents,
 } from '../apps/web/lib/http/rate-limit'
@@ -77,6 +79,24 @@ describe('public rate limits', () => {
     expect(await mayRequestAuthLink(victim, address)).toBe(false)
     expect(await prisma.rateLimitEvent.count({ where: { bucket: 'auth-link:email', key: victim } })).toBe(0)
     expect(await mayRequestAuthLink(victim, ip())).toBe(true)
+  })
+
+  // K5 (scorecard 2026-11-13). Free reservation holds and URL-token lookups.
+  it('refuses reservation holds and token lookups from one IP after the limit', async () => {
+    const address = ip()
+    for (let i = 0; i < PUBLIC_LIMITS.reservationsPerIp; i++) expect(await mayReserve(address)).toBe(true)
+    expect(await mayReserve(address)).toBe(false)
+    expect(await mayReserve(ip())).toBe(true)
+
+    const reader = ip()
+    for (let i = 0; i < PUBLIC_LIMITS.tokenReadsPerIp; i++) expect(await mayReadToken(reader)).toBe(true)
+    expect(await mayReadToken(reader)).toBe(false)
+    expect(await mayReadToken(ip())).toBe(true)
+  })
+
+  it.each([null, '::1'])('does not limit holds or token lookups with no remote address (%s)', async (local) => {
+    for (let i = 0; i < PUBLIC_LIMITS.tokenReadsPerIp + 2; i++) expect(await mayReadToken(local)).toBe(true)
+    for (let i = 0; i < PUBLIC_LIMITS.reservationsPerIp + 2; i++) expect(await mayReserve(local)).toBe(true)
   })
 
   // Under `next start` with no proxy every caller is `::1`, never null — which

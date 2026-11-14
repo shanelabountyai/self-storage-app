@@ -660,6 +660,8 @@ export const es: Dictionary = {
   'err.reserveMoveInTooFar':
     'Podemos apartar una unidad hasta con {days} días de anticipación. Elija una fecha dentro de ese plazo.',
   'err.reserveUnlisted': 'Esa unidad ya no está publicada.',
+  'err.reserveRateLimited':
+    'Son muchas reservas desde un mismo lugar en poco tiempo. Espere un rato, o llámenos.',
   'err.reserveSoldOut':
     'Alguien tomó la última de ese tamaño mientras usted llenaba este formulario. No se le ha cobrado nada: elija otro tamaño, o llámenos y lo resolvemos.',
   // B-268. Los rechazos de `/reservations`. Ver los comentarios en `en.ts`.

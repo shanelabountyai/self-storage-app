@@ -725,6 +725,7 @@ export const en = {
   // page has to offer them something else. Under `err.` all the same, so the
   // "identical in both locales is an untranslated paste" guard covers them.
   'err.reserveUnlisted': 'That unit is no longer listed.',
+  'err.reserveRateLimited': 'That is a lot of reservations from one place in a short time. Give it a while, or call us.',
   'err.reserveSoldOut':
     'Someone took the last one of that size while you were filling this in. Nothing has been charged — pick another size, or call us and we will sort it out.',
 
