@@ -55,6 +55,12 @@ export async function sendAuthEmail({
   recipientTenantId,
   idempotencyKey,
 }: SendArgs): Promise<void> {
+  // K10. A deployed production with no email provider would fall back to the
+  // log-only provider, record the send as made, and print the link (a live
+  // credential) to the function log below. Refuse loudly instead.
+  if (process.env.VERCEL_ENV === 'production' && !process.env.RESEND_API_KEY) {
+    throw new Error(`Cannot send ${purpose} email: RESEND_API_KEY is not set in production`)
+  }
   const minutes = Math.round((expiresAt.getTime() - Date.now()) / 60_000)
   const say = proseFor(locale).direct
   const forgotUrl = new URL('/forgot-password', url).href
@@ -114,7 +120,9 @@ export async function sendAuthEmail({
     throw new Error(`Could not send ${purpose} email to ${to}`)
   }
 
-  if (!process.env.RESEND_API_KEY) {
+  // Local development's way to sign in without a mail provider. Never in a
+  // deployed production, where the URL in a log line is a usable credential.
+  if (!process.env.RESEND_API_KEY && process.env.VERCEL_ENV !== 'production') {
     console.info(`\n[auth] ${purpose} link for ${to} (expires in ${minutes} min):\n  ${url}\n`)
   }
 }
