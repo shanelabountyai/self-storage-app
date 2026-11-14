@@ -1,4 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
+import { assertLocalTestDatabase } from './scripts/local-db-guard.mts'
+
+// K12. The specs, global setup and the server under test all read this
+// environment's database; refuse a cloud one unless ALLOW_CLOUD_DB=1.
+assertLocalTestDatabase()
 
 const baseURL = 'http://localhost:3000'
 
