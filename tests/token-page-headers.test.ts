@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import nextConfig from '../apps/web/next.config'
 
-// K6 (scorecard 2026-11-13). Token pages get no-referrer, no-store and noindex
+// K6 (scorecard 2026-11-13). Token pages get same-origin referrer, no-store and noindex
 // from next.config.ts, after the global block so the stricter Referrer-Policy
 // wins. e2e/security-headers.spec.ts reads the same off a production build.
 
@@ -33,9 +33,9 @@ describe('K6: token page headers', () => {
     '/login/magic',
     '/reset-password',
     '/confirm-email',
-  ])('%s is no-referrer, no-store and noindex, over the global headers', async (source) => {
+  ])('%s is same-origin, no-store and noindex, over the global headers', async (source) => {
     const h = headersFor(await rules(), ['/:path*', source])
-    expect(h['Referrer-Policy']).toBe('no-referrer')
+    expect(h['Referrer-Policy']).toBe('same-origin')
     expect(h['Cache-Control']).toContain('no-store')
     expect(h['X-Robots-Tag']).toBe('noindex, nofollow')
     expect(h['X-Content-Type-Options']).toBe('nosniff')

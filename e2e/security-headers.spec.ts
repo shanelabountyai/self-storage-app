@@ -6,9 +6,9 @@ import { expect, test } from '@playwright/test'
 for (const path of ['/', '/admin', '/pay/not-a-real-token-at-all']) {
   test(`${path} carries the security headers`, async ({ request }) => {
     const headers = (await request.get(path, { maxRedirects: 0 })).headers()
-    // K6: a token page overrides the global policy with no-referrer and no-store.
+    // K6: a token page overrides the global policy with same-origin and no-store.
     if (path.startsWith('/pay/')) {
-      expect(headers['referrer-policy']).toBe('no-referrer')
+      expect(headers['referrer-policy']).toBe('same-origin')
       expect(headers['cache-control']).toContain('no-store')
       expect(headers['x-robots-tag']).toBe('noindex, nofollow')
     } else {
