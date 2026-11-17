@@ -74,7 +74,9 @@ const nextConfig: NextConfig = {
       ...TOKEN_PAGE_SOURCES.map((source) => ({
         source,
         headers: [
-          { key: 'Referrer-Policy', value: 'no-referrer' },
+          // same-origin, not no-referrer: no-referrer makes Chrome send Origin: null on a
+          // form POST, and Next then refuses the no-JS checkout's server action.
+          { key: 'Referrer-Policy', value: 'same-origin' },
           { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
           { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
         ],
