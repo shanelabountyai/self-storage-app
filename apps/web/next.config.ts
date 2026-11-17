@@ -1,6 +1,11 @@
 import path from 'node:path'
 import createMDX from '@next/mdx'
 import type { NextConfig } from 'next'
+import { parseEnv } from './lib/env'
+
+// K11. On Vercel, validate at build too, so a bad value fails the deploy
+// instead of the live site's boot (instrumentation.ts still checks at boot).
+if (process.env.VERCEL_ENV) parseEnv(process.env)
 
 /// Every route whose URL is a credential: a token or code in the path, or a
 /// single-use sign-in, reset or confirm token in the query string.
