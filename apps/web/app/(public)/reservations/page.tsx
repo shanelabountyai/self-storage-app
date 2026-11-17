@@ -18,6 +18,8 @@ import {
 } from '@/lib/facility/public-facility'
 import { dictionaryFor, translate, LOCALE_TAG, type Locale, type MessageKey } from '@/lib/i18n'
 import { getLocale } from '@/lib/i18n/server'
+import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayReadToken } from '@/lib/http/rate-limit'
 
 export async function generateMetadata() {
   return {
@@ -79,7 +81,9 @@ export default async function ReservationPage({
   searchParams: Promise<{ token?: string; new?: string }>
 }) {
   const { token, new: isNew } = await searchParams
-  const reservation = token ? await reservationByToken(token) : null
+  // K5: a limited caller sees the same dead-link page as an unknown token.
+  const reservation =
+    token && (await mayReadToken((await requestMetadata()).ipAddress)) ? await reservationByToken(token) : null
 
   const locale = await getLocale()
   const dict = dictionaryFor(locale)

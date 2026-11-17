@@ -20,6 +20,15 @@ export const PUBLIC_LIMITS = {
   authLinksPerEmail: 5,
   authLinksPerIp: 20,
   authLinkWindowMs: 15 * 60_000,
+  /// K5 (scorecard 2026-11-13). Free reservation holds one IP may place. Each
+  /// takes a unit off the market and mails a confirmation, with no account.
+  reservationsPerIp: 5,
+  reservationWindowMs: 60 * 60_000,
+  /// K5. Pages that look up a bearer token from the URL (pay links, waitlist
+  /// cancel, reservation links, referral codes), per IP. Generous for a person
+  /// following their own links; a ceiling on guessing at a database lookup.
+  tokenReadsPerIp: 30,
+  tokenReadWindowMs: 15 * 60_000,
 }
 
 /// Records one attempt and answers whether it is within the limit.
@@ -88,6 +97,22 @@ export async function mayRequestAuthLink(email: string, ipAddress: string | null
   const ip = remote(ipAddress ?? null)
   if (ip && !(await withinLimit('auth-link:ip', ip, authLinksPerIp, authLinkWindowMs))) return false
   return withinLimit('auth-link:email', email.trim().toLowerCase(), authLinksPerEmail, authLinkWindowMs)
+}
+
+/// K5. Whether this caller may place another free reservation hold.
+export async function mayReserve(ipAddress: string | null): Promise<boolean> {
+  const ip = remote(ipAddress)
+  if (!ip) return true
+  return withinLimit('reservation:ip', ip, PUBLIC_LIMITS.reservationsPerIp, PUBLIC_LIMITS.reservationWindowMs)
+}
+
+/// K5. Whether this caller may have another URL token looked up. A refused
+/// caller is answered exactly as an unknown token is, so the limit is not an
+/// oracle either.
+export async function mayReadToken(ipAddress: string | null): Promise<boolean> {
+  const ip = remote(ipAddress)
+  if (!ip) return true
+  return withinLimit('token-read:ip', ip, PUBLIC_LIMITS.tokenReadsPerIp, PUBLIC_LIMITS.tokenReadWindowMs)
 }
 
 /// Nothing here is read past its window. Called from the hourly cron.

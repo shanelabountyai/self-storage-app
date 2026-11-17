@@ -6,6 +6,8 @@ import { publicFacilityBySlug } from '@/lib/facility/public-facility'
 import { publicInventoryForFacility } from '@/lib/inventory/public-inventory'
 import { keyedFieldError, type KeyedFieldErrors, type FormState } from '@/lib/admin/form-state'
 import { getLocale, messages } from '@/lib/i18n/server'
+import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayReserve } from '@/lib/http/rate-limit'
 
 // B-018 / US-401. Same return-don't-throw contract as the admin actions
 // (PRD 02 FR-19): a rejected reservation is a message beside the field, never
@@ -45,6 +47,11 @@ export async function reserveAction(_prev: FormState, formData: FormData): Promi
     errors.moveInDate = { key: 'err.reserveMoveIn' }
   }
   if (Object.keys(errors).length > 0) return keyedFieldError(errors, t)
+
+  // K5. An anonymous hold takes a unit off the market and sends a mail.
+  if (!(await mayReserve((await requestMetadata()).ipAddress))) {
+    return { status: 'error', message: t('err.reserveRateLimited'), fieldErrors: {} }
+  }
 
   // The quoted rate comes from the server's current view, never from the form.
   // A rate posted by the browser is a rate the renter can choose.

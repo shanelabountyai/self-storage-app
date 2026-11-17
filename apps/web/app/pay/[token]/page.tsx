@@ -13,6 +13,8 @@ import {
   validatePaymentAmount,
 } from '@/lib/portal/payment'
 import { SITE } from '@/lib/site-config'
+import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayReadToken } from '@/lib/http/rate-limit'
 
 export async function generateMetadata({
   params,
@@ -55,7 +57,9 @@ export default async function PayLinkPage({
   const { token } = await params
   const { amount } = await searchParams
 
-  const link = await checkPayLink(token)
+  // K5: a limited caller is answered as an unknown link is.
+  const allowed = await mayReadToken((await requestMetadata()).ipAddress)
+  const link = allowed ? await checkPayLink(token) : ({ ok: false } as const)
   if (!link.ok) {
     // CN-4: "an expired link lands on the portal login with the payment screen
     // as post-login destination — never a dead end." B-336: the route below

@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { ATTRIBUTION_COOKIE_DAYS, REFERRAL_COOKIE } from '@storage/core/marketing'
 import { usableInvite } from '@/lib/referrals/service'
+import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayReadToken } from '@/lib/http/rate-limit'
 import { facilityPath, publicFacilityBySlug } from '@/lib/facility/public-facility'
 
 // PRD 10 FR-REF-3 (B-100). `/r/{code}` — a tenant's referral link.
@@ -30,7 +32,8 @@ export async function GET(
   { params }: { params: Promise<{ code: string }> },
 ): Promise<Response> {
   const { code } = await params
-  const invite = await usableInvite(code)
+  // K5: a limited caller lands where a mistyped code does.
+  const invite = (await mayReadToken((await requestMetadata()).ipAddress)) ? await usableInvite(code) : null
 
   // No usable invite: send them to search rather than 404ing. Somebody typed a
   // code off a napkin wrong, or the invite is spent — either way they are a

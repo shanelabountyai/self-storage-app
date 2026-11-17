@@ -12,6 +12,8 @@ import {
 import { projectRentRebill } from '@/lib/billing/invoices'
 import { fieldError, parseScaled, success, type FormState } from '@/lib/admin/form-state'
 import { formatCents } from '@/lib/format'
+import { facilityScope } from '@/lib/rbac/authorize'
+import type { Actor } from '@/lib/rbac/actor'
 import { requireStaffActor } from '@/lib/rbac/session'
 
 // B-303. The three repairs, from the ledger screen the exception report already
@@ -35,6 +37,7 @@ function revalidateLedger(tenantId: string, leaseId: string): void {
 /// Returns null when the press carried the echoed amount back, which is the
 /// caller's signal to post for real.
 async function confirmCorrection(
+  actor: Actor,
   formData: FormData,
   leaseId: string,
   what: {
@@ -49,13 +52,16 @@ async function confirmCorrection(
   const pressed = formData.get('confirmed')
   if (pressed === token) return null
 
-  const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
+  // Scoped to the actor's facilities as well as gated by the preview: a lease
+  // outside them reads as missing here, whatever ran first (K4).
+  const lease = await prisma.lease.findFirst({
+    where: { id: leaseId, ...facilityScope(actor) },
     select: {
       unit: { select: { number: true } },
       tenant: { select: { firstName: true, lastName: true } },
     },
   })
+  if (!lease) return { status: 'error', message: 'That lease could not be found.', fieldErrors: {} }
   const balance = await prisma.ledgerEntry.aggregate({ where: { leaseId }, _sum: { amountCents: true } })
   const balanceCents = balance._sum.amountCents ?? 0
 
@@ -69,8 +75,8 @@ async function confirmCorrection(
         ? 'The amount changed since you last checked, so nothing was posted. Check it again before it is posted.'
         : 'Check this before it is posted. It stays on this tenant\u2019s ledger permanently.',
     echo: [
-      { label: 'Tenant', value: lease ? `${lease.tenant.firstName} ${lease.tenant.lastName}` : '—' },
-      { label: 'Unit', value: lease?.unit.number ?? '—' },
+      { label: 'Tenant', value: `${lease.tenant.firstName} ${lease.tenant.lastName}` },
+      { label: 'Unit', value: lease.unit.number },
       ...(what.rows ?? []),
       { label: 'Amount', value: formatCents(Math.abs(what.amountCents)) },
       {
@@ -171,7 +177,7 @@ export async function adjustLedgerAction(
   if (amount.value !== 0) {
     const preview = await postLedgerAdjustment(actor, { ...input, preview: true })
     if (!preview.ok) return refused(preview)
-    const confirm = await confirmCorrection(formData, leaseId, {
+    const confirm = await confirmCorrection(actor, formData, leaseId, {
       amountCents: amount.value,
       confirmLabel: 'Yes, post this correction',
     })
@@ -208,7 +214,7 @@ export async function writeOffLedgerAction(
   if (!preview.ok) return refusalState(preview, { nothingToDo })
   // The echoed amount is the whole balance, so a payment landing between the
   // echo and the press changes the token and asks again.
-  const confirm = await confirmCorrection(formData, leaseId, {
+  const confirm = await confirmCorrection(actor, formData, leaseId, {
     amountCents: -preview.amountCents,
     confirmLabel: 'Yes, write off the balance',
   })
@@ -250,7 +256,7 @@ export async function voidInvoiceAction(
   if (preview.ok) {
     // The invoice's own lease, not the form's hidden one: the echo names whose
     // ledger this lands on.
-    const confirm = await confirmCorrection(formData, preview.leaseId, {
+    const confirm = await confirmCorrection(actor, formData, preview.leaseId, {
       amountCents: -preview.amountCents,
       confirmLabel: `Yes, void invoice ${preview.number}`,
       rows: [{ label: 'Invoice', value: preview.number }],

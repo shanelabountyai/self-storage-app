@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@storage/db'
 import { acknowledgeLedgerException } from '@/lib/admin/ledger'
 import { fieldError, success, type FormState } from '@/lib/admin/form-state'
+import { facilityScope } from '@/lib/rbac/authorize'
 import { requireStaffActor } from '@/lib/rbac/session'
 
 // B-304. "Reviewed, known" — the acknowledgement that stops the daily sweep
@@ -59,8 +60,10 @@ export async function acknowledgeExceptionAction(
   // form could supply the label it already renders, but then the success
   // message would be whatever the client posted, and the one guarantee worth
   // having about a confirmation is that it describes what the SERVER did.
-  const subject = await prisma.lease.findUnique({
-    where: { id: leaseId },
+  // Scoped like every other by-id read (K4): acknowledgeLedgerException has
+  // already refused a lease outside the actor's facilities, and this keeps it so.
+  const subject = await prisma.lease.findFirst({
+    where: { id: leaseId, ...facilityScope(actor) },
     select: { unit: { select: { number: true } }, tenant: { select: { firstName: true, lastName: true } } },
   })
   const named = subject

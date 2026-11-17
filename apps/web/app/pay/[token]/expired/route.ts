@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { LOCALE_COOKIE, LOCALE_COOKIE_DAYS } from '@/lib/i18n'
 import { expiredPayLink } from '@/lib/portal/pay-links'
+import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayReadToken } from '@/lib/http/rate-limit'
 
 // B-336. Where `/pay/<token>` and its done screen send a link they refuse.
 //
@@ -17,7 +19,8 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const expired = await expiredPayLink(token)
+  // K5: a limited caller gets the same landing as an unknown link.
+  const expired = (await mayReadToken((await requestMetadata()).ipAddress)) ? await expiredPayLink(token) : null
 
   // Revoked, ended or never existed: today's landing, with nothing that tells
   // one from another.

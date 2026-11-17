@@ -4,6 +4,8 @@ import { ProsePage } from '@/components/site/prose-page'
 import { dictionaryFor, translate } from '@/lib/i18n'
 import { requestLinkLocale } from '@/lib/i18n/link-locale'
 import { cancelWaitlist } from '@/lib/waitlist/service'
+import { requestMetadata } from '@/lib/http/request-metadata'
+import { mayReadToken } from '@/lib/http/rate-limit'
 
 // PRD 01 §9 Phase 3 (B-090 part 1). Taking yourself off a waitlist.
 //
@@ -35,7 +37,10 @@ export default async function WaitlistCancelPage({
   // Resolved before the cancel, though the order does not matter: cancelling
   // changes the entry's status, never its `preferredLocale`.
   const dict = dictionaryFor(await requestLinkLocale())
-  const result = await cancelWaitlist(token)
+  // K5: a limited caller is answered as an unknown token is.
+  const result = (await mayReadToken((await requestMetadata()).ipAddress))
+    ? await cancelWaitlist(token)
+    : { ok: false, alreadyClosed: false }
 
   return (
     <ProsePage

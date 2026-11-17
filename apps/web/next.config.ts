@@ -1,6 +1,26 @@
 import path from 'node:path'
 import createMDX from '@next/mdx'
 import type { NextConfig } from 'next'
+import { parseEnv } from './lib/env'
+
+// K11. On Vercel, validate at build too, so a bad value fails the deploy
+// instead of the live site's boot (instrumentation.ts still checks at boot).
+if (process.env.VERCEL_ENV) parseEnv(process.env)
+
+/// Every route whose URL is a credential: a token or code in the path, or a
+/// single-use sign-in, reset or confirm token in the query string.
+const TOKEN_PAGE_SOURCES = [
+  '/pay/:path*',
+  '/checkout/resume/:path*',
+  '/unsubscribe/:path*',
+  '/waitlist/cancel/:path*',
+  '/r/:path*',
+  '/reservations',
+  '/checkout',
+  '/login/magic',
+  '/reset-password',
+  '/confirm-email',
+]
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source, not a build step.
@@ -47,6 +67,20 @@ const nextConfig: NextConfig = {
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
         ],
       },
+      // K6 (INV-07/08). Pages that carry a bearer token in the URL. Listed after
+      // the global block so this Referrer-Policy overrides it: the token must
+      // never leave in a Referer header, a copy must never sit in a cache, and
+      // the proxy's X-Robots-Tag is repeated here so it holds without the proxy.
+      ...TOKEN_PAGE_SOURCES.map((source) => ({
+        source,
+        headers: [
+          // same-origin, not no-referrer: no-referrer makes Chrome send Origin: null on a
+          // form POST, and Next then refuses the no-JS checkout's server action.
+          { key: 'Referrer-Policy', value: 'same-origin' },
+          { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        ],
+      })),
     ]
   },
 }
